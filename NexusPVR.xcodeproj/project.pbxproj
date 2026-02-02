@@ -33,22 +33,9 @@
 		6E7415A52F315369001FE083 /* NexusPVRUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NexusPVRUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		6E74160A2F315400001FE083 /* Exceptions for "NexusPVR" folder in "NexusPVR" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				LaunchScreen.storyboard,
-			);
-			target = 6E74158B2F315368001FE083 /* NexusPVR */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		6E74158E2F315368001FE083 /* NexusPVR */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				6E74160A2F315400001FE083 /* Exceptions for "NexusPVR" folder in "NexusPVR" target */,
-			);
 			path = NexusPVR;
 			sourceTree = "<group>";
 		};
@@ -433,6 +420,9 @@
 				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=appletvos*]" = LaunchScreen.storyboard;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=appletvsimulator*]" = LaunchScreen.storyboard;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=macosx*]" = LaunchScreen.storyboard;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -494,6 +484,9 @@
 				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=appletvos*]" = LaunchScreen.storyboard;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=appletvsimulator*]" = LaunchScreen.storyboard;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=macosx*]" = LaunchScreen.storyboard;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
