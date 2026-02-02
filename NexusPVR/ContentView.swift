@@ -1,66 +1,122 @@
 //
 //  ContentView.swift
-//  NexusPVR
+//  nextpvr-apple-client
 //
-//  Created by Jean-Francois Dufour on 2026-02-02.
+//  Main content view with server configuration check
 //
 
 import SwiftUI
-import SwiftData
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
+    @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var client: NextPVRClient
+    @State private var showingSetup = false
+    @State private var isCheckingCloud = true
 
     var body: some View {
-        NavigationSplitView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
-                    }
-                }
-                .onDelete(perform: deleteItems)
+        Group {
+            if isCheckingCloud {
+                ProgressView()
+            } else if client.isConfigured {
+                NavigationRouter()
+            } else {
+                setupPromptView
             }
-#if os(macOS)
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200)
-#endif
-            .toolbar {
-#if os(iOS)
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
-                }
-#endif
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
-                }
+        }
+        .sheet(isPresented: $showingSetup) {
+            ServerConfigView()
+                .environmentObject(client)
+                #if os(macOS)
+                .frame(minWidth: 500, minHeight: 450)
+                #endif
+        }
+        .task {
+            // Give iCloud a moment to sync, then check for config
+            try? await Task.sleep(for: .milliseconds(500))
+
+            // Reload config from iCloud if available
+            let cloudConfig = ServerConfig.load()
+            if cloudConfig.isConfigured && !client.isConfigured {
+                client.updateConfig(cloudConfig)
             }
-        } detail: {
-            Text("Select an item")
+
+            isCheckingCloud = false
+
+            // Try to authenticate on launch if configured
+            if client.isConfigured && !client.isAuthenticated {
+                try? await client.authenticate()
+            }
         }
     }
 
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
-        }
-    }
+    private var setupPromptView: some View {
+        VStack(spacing: Theme.spacingXL) {
+            Spacer()
 
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
+            // App icon/logo
+            VStack(spacing: Theme.spacingMD) {
+                Image(systemName: "tv.and.mediabox")
+                    .font(.system(size: 80))
+                    .foregroundStyle(Theme.accent)
+
+                Text("NextPVR")
+                    .font(.displayLarge)
+                    .foregroundStyle(Theme.textPrimary)
+
+                Text("Apple Client")
+                    .font(.title2)
+                    .foregroundStyle(Theme.textSecondary)
             }
+
+            Spacer()
+
+            // Setup prompt
+            VStack(spacing: Theme.spacingMD) {
+                Text("Welcome!")
+                    .font(.headline)
+                    .foregroundStyle(Theme.textPrimary)
+
+                Text("Connect to your NextPVR server to get started.")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.textSecondary)
+                    .multilineTextAlignment(.center)
+
+                Button {
+                    showingSetup = true
+                } label: {
+                    HStack {
+                        Image(systemName: "gear")
+                        Text("Configure Server")
+                    }
+                }
+                .buttonStyle(AccentButtonStyle())
+                .padding(.top, Theme.spacingMD)
+            }
+            .padding()
+
+            Spacer()
+
+            // Footer
+            Text("v1.0.0")
+                .font(.caption)
+                .foregroundStyle(Theme.textTertiary)
+                .padding(.bottom)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.background)
     }
 }
 
-#Preview {
+#Preview("Configured") {
     ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
+        .environmentObject(AppState())
+        .environmentObject(NextPVRClient(config: ServerConfig(host: "192.168.1.100", port: 8866, pin: "1234", useHTTPS: false)))
+        .preferredColorScheme(.dark)
+}
+
+#Preview("Not Configured") {
+    ContentView()
+        .environmentObject(AppState())
+        .environmentObject(NextPVRClient())
+        .preferredColorScheme(.dark)
 }

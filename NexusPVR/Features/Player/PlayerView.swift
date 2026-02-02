@@ -1,0 +1,1085 @@
+//
+//  PlayerView.swift
+//  nextpvr-apple-client
+//
+//  Video player view using MPV for MPEG-TS support
+//
+
+import SwiftUI
+import Libmpv
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
+
+struct PlayerView: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var client: NextPVRClient
+
+    let url: URL
+    let title: String
+    let recordingId: Int?
+    let resumePosition: Int?
+
+    @State private var showControls = true
+    @State private var hideControlsTask: Task<Void, Never>?
+    @State private var isPlaying = true
+    @State private var errorMessage: String?
+    @State private var currentPosition: Double = 0
+    @State private var duration: Double = 0
+    @State private var isSeeking = false
+    @State private var seekPosition: Double = 0
+    @State private var seekBackwardTime: Int = UserPreferences.load().seekBackwardSeconds
+    @State private var seekForwardTime: Int = UserPreferences.load().seekForwardSeconds
+    @State private var seekForward: (() -> Void)?
+    @State private var seekBackward: (() -> Void)?
+    @State private var seekToPositionFunc: ((Double) -> Void)?
+    @State private var hasResumed = false
+    @State private var isPlayerReady = false
+
+    init(url: URL, title: String, recordingId: Int? = nil, resumePosition: Int? = nil) {
+        self.url = url
+        self.title = title
+        self.recordingId = recordingId
+        self.resumePosition = resumePosition
+    }
+
+    var body: some View {
+        ZStack {
+            // MPV Video player
+            #if os(tvOS)
+            MPVContainerView(
+                url: url,
+                isPlaying: $isPlaying,
+                errorMessage: $errorMessage,
+                currentPosition: $currentPosition,
+                duration: $duration,
+                seekForward: $seekForward,
+                seekBackward: $seekBackward,
+                seekToPosition: $seekToPositionFunc,
+                seekBackwardTime: seekBackwardTime,
+                seekForwardTime: seekForwardTime,
+                onPlaybackEnded: {
+                    markAsWatched()
+                },
+                onTogglePlayPause: {
+                    isPlaying.toggle()
+                    showControls = true
+                    scheduleHideControls()
+                },
+                onToggleControls: {
+                    toggleControls()
+                },
+                onDismiss: {
+                    dismiss()
+                }
+            )
+                .ignoresSafeArea()
+            #else
+            MPVContainerView(
+                url: url,
+                isPlaying: $isPlaying,
+                errorMessage: $errorMessage,
+                currentPosition: $currentPosition,
+                duration: $duration,
+                seekForward: $seekForward,
+                seekBackward: $seekBackward,
+                seekToPosition: $seekToPositionFunc,
+                seekBackwardTime: seekBackwardTime,
+                seekForwardTime: seekForwardTime,
+                onPlaybackEnded: {
+                    markAsWatched()
+                }
+            )
+                .ignoresSafeArea()
+                .onTapGesture {
+                    toggleControls()
+                }
+            #endif
+
+            // Loading overlay - hide video until ready (prevents seeing start before resume)
+            if !isPlayerReady {
+                ZStack {
+                    Color.black
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .tint(.white)
+                }
+                .ignoresSafeArea()
+            }
+
+            // Custom controls overlay
+            if showControls && isPlayerReady {
+                controlsOverlay
+            }
+
+            // Error message
+            if let error = errorMessage {
+                VStack {
+                    Spacer()
+                    Text(error)
+                        .foregroundStyle(.white)
+                        .padding()
+                        .background(Color.red.opacity(0.8))
+                        .cornerRadius(8)
+                        .padding()
+                }
+            }
+
+            #if os(macOS)
+            // Hidden buttons for keyboard shortcuts
+            Button("") {
+                appState.stopPlayback()
+            }
+            .keyboardShortcut(.escape, modifiers: [])
+            .opacity(0)
+            .frame(width: 0, height: 0)
+
+            Button("") {
+                isPlaying.toggle()
+            }
+            .keyboardShortcut(.space, modifiers: [])
+            .opacity(0)
+            .frame(width: 0, height: 0)
+
+            Button("") {
+                seekBackward?()
+            }
+            .keyboardShortcut(.leftArrow, modifiers: [])
+            .opacity(0)
+            .frame(width: 0, height: 0)
+
+            Button("") {
+                seekForward?()
+            }
+            .keyboardShortcut(.rightArrow, modifiers: [])
+            .opacity(0)
+            .frame(width: 0, height: 0)
+            #endif
+        }
+        .background(Color.black)
+        .onAppear {
+            scheduleHideControls()
+            #if !os(macOS)
+            // Prevent screen from sleeping during video playback
+            UIApplication.shared.isIdleTimerDisabled = true
+            #endif
+        }
+        .onDisappear {
+            savePlaybackPosition()
+            appState.stopPlayback()
+            // Notify recordings list to refresh with updated progress
+            if recordingId != nil {
+                NotificationCenter.default.post(name: .recordingsDidChange, object: nil)
+            }
+            #if !os(macOS)
+            // Re-enable screen sleeping
+            UIApplication.shared.isIdleTimerDisabled = false
+            #endif
+        }
+        .onChange(of: duration) {
+            // Resume playback position once duration is known (playback has started)
+            if !hasResumed && duration > 0 {
+                hasResumed = true
+                if let resumePos = resumePosition, resumePos > 0 {
+                    // Has resume position - seek then show player
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        seekToPositionFunc?(Double(resumePos))
+                        // Show player after seek completes
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            isPlayerReady = true
+                        }
+                    }
+                } else {
+                    // No resume position - show player immediately
+                    isPlayerReady = true
+                }
+            }
+        }
+        .onChange(of: isPlaying) {
+            // Save position to NextPVR when paused
+            if !isPlaying {
+                savePlaybackPosition()
+            }
+        }
+    }
+
+    private func savePlaybackPosition() {
+        guard let recordingId = recordingId else { return }
+        let position = Int(currentPosition)
+        // Don't save if we're at the very beginning
+        guard position > 10 else { return }
+        // If near the end, mark as fully watched instead
+        if duration > 0 && currentPosition > duration - 30 {
+            markAsWatched()
+            return
+        }
+
+        Task {
+            try? await client.setRecordingPosition(recordingId: recordingId, positionSeconds: position)
+        }
+    }
+
+    private func markAsWatched() {
+        guard let recordingId = recordingId else { return }
+        // Set position to full duration to mark as watched
+        let watchedPosition = Int(duration > 0 ? duration : currentPosition)
+        Task {
+            try? await client.setRecordingPosition(recordingId: recordingId, positionSeconds: watchedPosition)
+            print("NextPVR: Marked recording \(recordingId) as watched")
+            // Notify recordings list to refresh
+            NotificationCenter.default.post(name: .recordingsDidChange, object: nil)
+        }
+    }
+
+    private var controlsOverlay: some View {
+        VStack {
+            // Top bar
+            topBar
+
+            Spacer()
+
+            // Center controls: seek backward, play/pause, seek forward
+            centerControls
+
+            Spacer()
+
+            // Bottom controls: progress bar and time
+            if duration > 0 {
+                bottomControls
+            }
+        }
+        .background(
+            LinearGradient(
+                colors: [.black.opacity(0.7), .clear, .clear, .black.opacity(0.5)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+    }
+
+    private var centerControls: some View {
+        HStack(spacing: 48) {
+            // Seek backward button
+            Button {
+                seekBackward?()
+            } label: {
+                Image(systemName: "gobackward.\(seekBackwardTime)")
+                    .font(.system(size: 40))
+                    .foregroundStyle(.white)
+            }
+            .buttonStyle(.plain)
+
+            // Play/pause button
+            Button {
+                isPlaying.toggle()
+            } label: {
+                Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                    .font(.system(size: 64))
+                    .foregroundStyle(.white)
+            }
+            .buttonStyle(.plain)
+
+            // Seek forward button
+            Button {
+                seekForward?()
+            } label: {
+                Image(systemName: "goforward.\(seekForwardTime)")
+                    .font(.system(size: 40))
+                    .foregroundStyle(.white)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var bottomControls: some View {
+        VStack(spacing: 8) {
+            // Progress bar
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    // Background track
+                    Rectangle()
+                        .fill(Color.white.opacity(0.3))
+                        .frame(height: 4)
+
+                    // Progress fill
+                    Rectangle()
+                        .fill(Color.white)
+                        .frame(width: progressWidth(for: geometry.size.width), height: 4)
+
+                    // Scrubber handle
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 14, height: 14)
+                        .offset(x: progressWidth(for: geometry.size.width) - 7)
+                }
+                .frame(height: 14)
+                .contentShape(Rectangle())
+                #if !os(tvOS)
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            isSeeking = true
+                            let progress = max(0, min(1, value.location.x / geometry.size.width))
+                            seekPosition = progress * duration
+                            scheduleHideControls()
+                        }
+                        .onEnded { value in
+                            let progress = max(0, min(1, value.location.x / geometry.size.width))
+                            let targetPosition = progress * duration
+                            seekToPosition(targetPosition)
+                            isSeeking = false
+                        }
+                )
+                #endif
+            }
+            .frame(height: 14)
+
+            // Time labels
+            HStack {
+                Text(formatTime(isSeeking ? seekPosition : currentPosition))
+                    .font(.caption)
+                    .foregroundStyle(.white)
+                    .monospacedDigit()
+
+                Spacer()
+
+                Text(formatTime(duration))
+                    .font(.caption)
+                    .foregroundStyle(.white)
+                    .monospacedDigit()
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 24)
+    }
+
+    private func progressWidth(for totalWidth: CGFloat) -> CGFloat {
+        guard duration > 0 else { return 0 }
+        let position = isSeeking ? seekPosition : currentPosition
+        let progress = position / duration
+        return max(0, min(totalWidth, CGFloat(progress) * totalWidth))
+    }
+
+    private func seekToPosition(_ position: Double) {
+        seekToPositionFunc?(position)
+        currentPosition = position
+    }
+
+    private func formatTime(_ seconds: Double) -> String {
+        guard seconds.isFinite && seconds >= 0 else { return "0:00" }
+        let totalSeconds = Int(seconds)
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        let secs = totalSeconds % 60
+
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, secs)
+        } else {
+            return String(format: "%d:%02d", minutes, secs)
+        }
+    }
+
+    private var topBar: some View {
+        HStack {
+            Button {
+                #if os(macOS)
+                appState.stopPlayback()
+                #else
+                dismiss()
+                #endif
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.title2)
+                    .foregroundStyle(.white)
+                    .padding()
+            }
+            .buttonStyle(.plain)
+
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(.white)
+                .lineLimit(1)
+
+            Spacer()
+        }
+        .padding(.horizontal)
+        .padding(.top, Theme.spacingMD)
+    }
+
+    private func toggleControls() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            showControls.toggle()
+        }
+
+        if showControls {
+            scheduleHideControls()
+        }
+    }
+
+    private func scheduleHideControls() {
+        hideControlsTask?.cancel()
+        hideControlsTask = Task {
+            try? await Task.sleep(for: .seconds(4))
+            if !Task.isCancelled {
+                await MainActor.run {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showControls = false
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - MPV Player Core
+
+class MPVPlayerCore: NSObject {
+    private var mpv: OpaquePointer?
+    private var errorBinding: Binding<String?>?
+    private var isDestroyed = false
+    private var positionTimer: Timer?
+    var onPositionUpdate: ((Double, Double) -> Void)?
+    var onPlaybackEnded: (() -> Void)?
+
+    override init() {
+        super.init()
+    }
+
+    deinit {
+        destroy()
+    }
+
+    func destroy() {
+        guard !isDestroyed else { return }
+        isDestroyed = true
+
+        stopPositionPolling()
+
+        if let mpv = mpv {
+            mpv_terminate_destroy(mpv)
+            self.mpv = nil
+        }
+    }
+
+    func startPositionPolling() {
+        stopPositionPolling()
+        positionTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            let position = self.getTimePosition()
+            let duration = self.getDuration()
+            DispatchQueue.main.async {
+                self.onPositionUpdate?(position, duration)
+            }
+        }
+    }
+
+    func stopPositionPolling() {
+        positionTimer?.invalidate()
+        positionTimer = nil
+    }
+
+    func getTimePosition() -> Double {
+        guard let mpv = mpv else { return 0 }
+        var position: Double = 0
+        mpv_get_property(mpv, "time-pos", MPV_FORMAT_DOUBLE, &position)
+        return position
+    }
+
+    func getDuration() -> Double {
+        guard let mpv = mpv else { return 0 }
+        var duration: Double = 0
+        mpv_get_property(mpv, "duration", MPV_FORMAT_DOUBLE, &duration)
+        return duration
+    }
+
+    func seek(seconds: Int) {
+        guard let mpv = mpv else { return }
+        let command = "seek \(seconds) relative"
+        let result = mpv_command_string(mpv, command)
+        if result < 0 {
+            print("MPV: seek command failed: \(result)")
+        }
+    }
+
+    func seekTo(position: Double) {
+        guard let mpv = mpv else { return }
+        let command = "seek \(position) absolute"
+        let result = mpv_command_string(mpv, command)
+        if result < 0 {
+            print("MPV: seekTo command failed: \(result)")
+        }
+    }
+
+    func setup(errorBinding: Binding<String?>?) -> Bool {
+        self.errorBinding = errorBinding
+
+        // Create MPV
+        mpv = mpv_create()
+        guard let mpv = mpv else {
+            print("MPV: Failed to create context")
+            return false
+        }
+
+        // Video output - use OpenGL (simpler than Vulkan, no MoltenVK overhead)
+        mpv_set_option_string(mpv, "vo", "gpu")
+        mpv_set_option_string(mpv, "gpu-api", "opengl")
+        #if !os(macOS)
+        mpv_set_option_string(mpv, "opengl-es", "yes")
+        #endif
+
+        // Disable youtube-dl/yt-dlp - not needed for direct streams
+        mpv_set_option_string(mpv, "ytdl", "no")
+
+        // Hardware decoding - VideoToolbox with zero-copy interop
+        mpv_set_option_string(mpv, "hwdec", "videotoolbox")
+        mpv_set_option_string(mpv, "gpu-hwdec-interop", "videotoolbox")
+
+        // Deinterlacing for TV recordings (often interlaced)
+        mpv_set_option_string(mpv, "deinterlace", "auto")
+
+        // Keep player open after playback
+        mpv_set_option_string(mpv, "keep-open", "yes")
+        mpv_set_option_string(mpv, "idle", "yes")
+
+        // Streaming/buffering options - moderate buffers for recordings
+        mpv_set_option_string(mpv, "cache", "yes")
+        mpv_set_option_string(mpv, "cache-secs", "30")
+        mpv_set_option_string(mpv, "demuxer-max-bytes", "64MiB")
+        mpv_set_option_string(mpv, "demuxer-max-back-bytes", "32MiB")
+        mpv_set_option_string(mpv, "demuxer-readahead-secs", "10")
+
+        // Network options
+        mpv_set_option_string(mpv, "network-timeout", "30")
+        mpv_set_option_string(mpv, "demuxer-lavf-o", "reconnect=1,reconnect_streamed=1")
+
+        // Audio options - use audiounit on Apple platforms
+        #if !os(macOS)
+        mpv_set_option_string(mpv, "ao", "audiounit")
+        #endif
+        mpv_set_option_string(mpv, "audio-channels", "stereo")
+        mpv_set_option_string(mpv, "volume", "100")
+        mpv_set_option_string(mpv, "audio-buffer", "1.0")
+        mpv_set_option_string(mpv, "audio-fallback-to-null", "yes")
+
+        // Fast scaling (reduce GPU load)
+        mpv_set_option_string(mpv, "scale", "bilinear")
+        mpv_set_option_string(mpv, "dscale", "bilinear")
+        mpv_set_option_string(mpv, "dither", "ordered")
+
+        // Disable expensive post-processing for streaming
+        mpv_set_option_string(mpv, "interpolation", "no")
+        mpv_set_option_string(mpv, "deband", "no")
+        mpv_set_option_string(mpv, "correct-downscaling", "no")
+
+        // Demuxer options
+        mpv_set_option_string(mpv, "demuxer", "lavf")
+        mpv_set_option_string(mpv, "demuxer-lavf-probe-info", "yes")
+        mpv_set_option_string(mpv, "demuxer-lavf-analyzeduration", "1")
+
+        // Initialize MPV
+        let initResult = mpv_initialize(mpv)
+        guard initResult >= 0 else {
+            print("MPV: Failed to initialize, error: \(initResult)")
+            return false
+        }
+
+        print("MPV: Initialized successfully")
+
+        // Request verbose log messages for debugging
+        mpv_request_log_messages(mpv, "v")
+
+        // Start event loop
+        startEventLoop()
+
+        return true
+    }
+
+    func loadURL(_ url: URL) {
+        guard let mpv = mpv else {
+            print("MPV: No context available")
+            return
+        }
+
+        let urlString = url.absoluteString
+        print("MPV: Loading URL: \(urlString)")
+
+        // Use mpv_command_string for simpler string-based command
+        let command = "loadfile \"\(urlString)\" replace"
+        let result = mpv_command_string(mpv, command)
+        if result < 0 {
+            let errorStr = String(cString: mpv_error_string(result))
+            print("MPV: loadfile command failed: \(errorStr) (\(result))")
+        } else {
+            print("MPV: loadfile command sent successfully")
+        }
+    }
+
+    func play() {
+        guard let mpv = mpv else { return }
+        var flag: Int32 = 0
+        let result = mpv_set_property(mpv, "pause", MPV_FORMAT_FLAG, &flag)
+        if result < 0 {
+            print("MPV: Failed to unpause: \(result)")
+        }
+    }
+
+    func pause() {
+        guard let mpv = mpv else { return }
+        var flag: Int32 = 1
+        let result = mpv_set_property(mpv, "pause", MPV_FORMAT_FLAG, &flag)
+        if result < 0 {
+            print("MPV: Failed to pause: \(result)")
+        }
+    }
+
+    func setWindowID(_ layer: CAMetalLayer) {
+        guard let mpv = mpv else { return }
+
+        // Cast the layer pointer to Int64 for mpv's wid option
+        let wid = Int64(Int(bitPattern: Unmanaged.passUnretained(layer).toOpaque()))
+        var widValue = wid
+
+        let result = mpv_set_option(mpv, "wid", MPV_FORMAT_INT64, &widValue)
+        if result < 0 {
+            let errorStr = String(cString: mpv_error_string(result))
+            print("MPV: Failed to set wid: \(errorStr)")
+        } else {
+            print("MPV: Successfully set window ID")
+        }
+    }
+
+    private func startEventLoop() {
+        DispatchQueue.global(qos: .userInteractive).async { [weak self] in
+            while let strongSelf = self, !strongSelf.isDestroyed, let mpv = strongSelf.mpv {
+                guard let event = mpv_wait_event(mpv, 0.5) else { continue }
+                strongSelf.handleEvent(event.pointee)
+
+                if event.pointee.event_id == MPV_EVENT_SHUTDOWN {
+                    break
+                }
+            }
+            print("MPV: Event loop ended")
+        }
+    }
+
+    private func handleEvent(_ event: mpv_event) {
+        switch event.event_id {
+        case MPV_EVENT_LOG_MESSAGE:
+            if let msg = event.data?.assumingMemoryBound(to: mpv_event_log_message.self).pointee,
+               let text = msg.text {
+                let logText = String(cString: text).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !logText.isEmpty {
+                    print("MPV [\(String(cString: msg.level!))]: \(logText)")
+                }
+            }
+
+        case MPV_EVENT_START_FILE:
+            print("MPV: Starting file")
+
+        case MPV_EVENT_FILE_LOADED:
+            print("MPV: File loaded successfully")
+
+        case MPV_EVENT_PLAYBACK_RESTART:
+            print("MPV: Playback started/restarted")
+
+        case MPV_EVENT_AUDIO_RECONFIG:
+            print("MPV: Audio reconfigured")
+
+        case MPV_EVENT_VIDEO_RECONFIG:
+            print("MPV: Video reconfigured")
+
+        case MPV_EVENT_END_FILE:
+            if let data = event.data?.assumingMemoryBound(to: mpv_event_end_file.self).pointee {
+                let reason = data.reason
+                print("MPV: Playback ended (reason: \(reason))")
+                if reason == MPV_END_FILE_REASON_EOF {
+                    // Normal end of file - video finished playing
+                    print("MPV: Video playback completed naturally")
+                    DispatchQueue.main.async { [weak self] in
+                        self?.onPlaybackEnded?()
+                    }
+                } else if reason == MPV_END_FILE_REASON_ERROR {
+                    let error = data.error
+                    let errorStr = String(cString: mpv_error_string(error))
+                    print("MPV: Playback error: \(errorStr)")
+                    DispatchQueue.main.async { [weak self] in
+                        self?.errorBinding?.wrappedValue = "Playback error: \(errorStr)"
+                    }
+                }
+            }
+
+        case MPV_EVENT_SHUTDOWN:
+            print("MPV: Shutdown event received")
+
+        case MPV_EVENT_NONE:
+            break
+
+        default:
+            print("MPV: Event \(event.event_id.rawValue)")
+        }
+    }
+}
+
+// MARK: - MPV Container View
+
+#if os(macOS)
+struct MPVContainerView: NSViewRepresentable {
+    let url: URL
+    @Binding var isPlaying: Bool
+    @Binding var errorMessage: String?
+    @Binding var currentPosition: Double
+    @Binding var duration: Double
+    @Binding var seekForward: (() -> Void)?
+    @Binding var seekBackward: (() -> Void)?
+    @Binding var seekToPosition: ((Double) -> Void)?
+    let seekBackwardTime: Int
+    let seekForwardTime: Int
+    var onPlaybackEnded: (() -> Void)?
+
+    func makeNSView(context: Context) -> MPVPlayerNSView {
+        let view = MPVPlayerNSView()
+        view.setup(errorBinding: $errorMessage)
+        view.onPositionUpdate = { position, dur in
+            DispatchQueue.main.async {
+                self.currentPosition = position
+                self.duration = dur
+            }
+        }
+        view.onPlaybackEnded = onPlaybackEnded
+        view.loadURL(url)
+        view.startPositionPolling()
+        context.coordinator.playerView = view
+
+        // Set up seek closures
+        DispatchQueue.main.async {
+            self.seekForward = {
+                view.seek(seconds: self.seekForwardTime)
+            }
+            self.seekBackward = {
+                view.seek(seconds: -self.seekBackwardTime)
+            }
+            self.seekToPosition = { position in
+                view.seekTo(position: position)
+            }
+        }
+
+        return view
+    }
+
+    func updateNSView(_ nsView: MPVPlayerNSView, context: Context) {
+        if isPlaying {
+            nsView.play()
+        } else {
+            nsView.pause()
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    static func dismantleNSView(_ nsView: MPVPlayerNSView, coordinator: Coordinator) {
+        nsView.cleanup()
+    }
+
+    class Coordinator {
+        var playerView: MPVPlayerNSView?
+    }
+}
+
+class MPVPlayerNSView: NSView {
+    private var player: MPVPlayerCore?
+    private var metalLayer: CAMetalLayer?
+    var onPositionUpdate: ((Double, Double) -> Void)?
+    var onPlaybackEnded: (() -> Void)?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        commonInit()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        commonInit()
+    }
+
+    private func commonInit() {
+        metalLayer = CAMetalLayer()
+        metalLayer?.backgroundColor = NSColor.black.cgColor
+        metalLayer?.pixelFormat = .bgra8Unorm
+        wantsLayer = true
+        layer = metalLayer
+    }
+
+    override func layout() {
+        super.layout()
+        metalLayer?.frame = bounds
+    }
+
+    func setup(errorBinding: Binding<String?>?) {
+        player = MPVPlayerCore()
+        guard let success = player?.setup(errorBinding: errorBinding), success else {
+            return
+        }
+        if let metalLayer = metalLayer {
+            player?.setWindowID(metalLayer)
+        }
+        player?.onPositionUpdate = { [weak self] position, duration in
+            self?.onPositionUpdate?(position, duration)
+        }
+        player?.onPlaybackEnded = { [weak self] in
+            self?.onPlaybackEnded?()
+        }
+    }
+
+    func loadURL(_ url: URL) {
+        player?.loadURL(url)
+    }
+
+    func play() {
+        player?.play()
+    }
+
+    func pause() {
+        player?.pause()
+    }
+
+    func seek(seconds: Int) {
+        player?.seek(seconds: seconds)
+    }
+
+    func seekTo(position: Double) {
+        player?.seekTo(position: position)
+    }
+
+    func startPositionPolling() {
+        player?.startPositionPolling()
+    }
+
+    func cleanup() {
+        player?.destroy()
+        player = nil
+    }
+}
+
+#else
+// iOS/tvOS implementation
+struct MPVContainerView: UIViewRepresentable {
+    let url: URL
+    @Binding var isPlaying: Bool
+    @Binding var errorMessage: String?
+    @Binding var currentPosition: Double
+    @Binding var duration: Double
+    @Binding var seekForward: (() -> Void)?
+    @Binding var seekBackward: (() -> Void)?
+    @Binding var seekToPosition: ((Double) -> Void)?
+    let seekBackwardTime: Int
+    let seekForwardTime: Int
+    var onPlaybackEnded: (() -> Void)?
+
+    #if os(tvOS)
+    var onTogglePlayPause: (() -> Void)?
+    var onToggleControls: (() -> Void)?
+    var onDismiss: (() -> Void)?
+    #endif
+
+    func makeUIView(context: Context) -> MPVPlayerUIView {
+        let view = MPVPlayerUIView()
+        view.setup(errorBinding: $errorMessage)
+        view.onPositionUpdate = { position, dur in
+            DispatchQueue.main.async {
+                self.currentPosition = position
+                self.duration = dur
+            }
+        }
+        view.onPlaybackEnded = onPlaybackEnded
+        view.loadURL(url)
+        view.startPositionPolling()
+        context.coordinator.playerView = view
+
+        // Set up seek closures
+        DispatchQueue.main.async {
+            self.seekForward = {
+                view.seek(seconds: self.seekForwardTime)
+            }
+            self.seekBackward = {
+                view.seek(seconds: -self.seekBackwardTime)
+            }
+            self.seekToPosition = { position in
+                view.seekTo(position: position)
+            }
+        }
+
+        #if os(tvOS)
+        // Set up tvOS remote control callbacks
+        view.onPlayPause = onTogglePlayPause
+        view.onSeekForward = { view.seek(seconds: self.seekForwardTime) }
+        view.onSeekBackward = { view.seek(seconds: -self.seekBackwardTime) }
+        view.onSelect = onToggleControls
+        view.onMenu = onDismiss
+        #endif
+
+        return view
+    }
+
+    func updateUIView(_ uiView: MPVPlayerUIView, context: Context) {
+        if isPlaying {
+            uiView.play()
+        } else {
+            uiView.pause()
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    static func dismantleUIView(_ uiView: MPVPlayerUIView, coordinator: Coordinator) {
+        uiView.cleanup()
+    }
+
+    class Coordinator {
+        var playerView: MPVPlayerUIView?
+    }
+}
+
+class MPVPlayerUIView: UIView {
+    private var player: MPVPlayerCore?
+    private var metalLayer: CAMetalLayer?
+    var onPositionUpdate: ((Double, Double) -> Void)?
+    var onPlaybackEnded: (() -> Void)?
+
+    #if os(tvOS)
+    // Callbacks for tvOS remote control
+    var onPlayPause: (() -> Void)?
+    var onSeekForward: (() -> Void)?
+    var onSeekBackward: (() -> Void)?
+    var onSelect: (() -> Void)?
+    var onMenu: (() -> Void)?
+
+    override var canBecomeFocused: Bool { true }
+    #endif
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        commonInit()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        commonInit()
+    }
+
+    private func commonInit() {
+        metalLayer = CAMetalLayer()
+        metalLayer?.backgroundColor = UIColor.black.cgColor
+        metalLayer?.pixelFormat = .bgra8Unorm
+        layer.addSublayer(metalLayer!)
+        backgroundColor = .black
+        #if os(tvOS)
+        isUserInteractionEnabled = true
+        #endif
+    }
+
+    #if os(tvOS)
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window != nil {
+            // Request focus when added to window
+            DispatchQueue.main.async {
+                self.setNeedsFocusUpdate()
+                self.updateFocusIfNeeded()
+            }
+        }
+    }
+
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        for press in presses {
+            switch press.type {
+            case .playPause:
+                onPlayPause?()
+                return
+            case .leftArrow:
+                onSeekBackward?()
+                return
+            case .rightArrow:
+                onSeekForward?()
+                return
+            case .select:
+                onSelect?()
+                return
+            case .menu:
+                onMenu?()
+                return
+            default:
+                break
+            }
+        }
+        super.pressesBegan(presses, with: event)
+    }
+    #endif
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        metalLayer?.frame = bounds
+        metalLayer?.contentsScale = UIScreen.main.scale
+    }
+
+    func setup(errorBinding: Binding<String?>?) {
+        player = MPVPlayerCore()
+        guard let success = player?.setup(errorBinding: errorBinding), success else {
+            return
+        }
+        if let metalLayer = metalLayer {
+            player?.setWindowID(metalLayer)
+        }
+        player?.onPositionUpdate = { [weak self] position, duration in
+            self?.onPositionUpdate?(position, duration)
+        }
+        player?.onPlaybackEnded = { [weak self] in
+            self?.onPlaybackEnded?()
+        }
+    }
+
+    func loadURL(_ url: URL) {
+        player?.loadURL(url)
+    }
+
+    func play() {
+        player?.play()
+    }
+
+    func pause() {
+        player?.pause()
+    }
+
+    func seek(seconds: Int) {
+        player?.seek(seconds: seconds)
+    }
+
+    func seekTo(position: Double) {
+        player?.seekTo(position: position)
+    }
+
+    func startPositionPolling() {
+        player?.startPositionPolling()
+    }
+
+    func cleanup() {
+        player?.destroy()
+        player = nil
+    }
+}
+#endif
+
+#Preview {
+    PlayerView(
+        url: URL(string: "https://example.com/video.mp4")!,
+        title: "Sample Video"
+    )
+    .environmentObject(AppState())
+    .environmentObject(NextPVRClient())
+}

@@ -1,0 +1,251 @@
+//
+//  RecordingsListView.swift
+//  nextpvr-apple-client
+//
+//  Recordings list view
+//
+
+import SwiftUI
+
+struct RecordingsListView: View {
+    @EnvironmentObject private var client: NextPVRClient
+    @EnvironmentObject private var appState: AppState
+    @State private var selectedRecording: Recording?
+    @State private var deleteError: String?
+
+    var body: some View {
+        RecordingsListContentView(
+            client: client,
+            appState: appState,
+            selectedRecording: $selectedRecording,
+            deleteError: $deleteError
+        )
+    }
+}
+
+private struct RecordingsListContentView: View {
+    @ObservedObject var client: NextPVRClient
+    @ObservedObject var appState: AppState
+    @StateObject private var viewModel: RecordingsViewModel
+    @Binding var selectedRecording: Recording?
+    @Binding var deleteError: String?
+
+    init(client: NextPVRClient, appState: AppState,
+         selectedRecording: Binding<Recording?>,
+         deleteError: Binding<String?>) {
+        self.client = client
+        self.appState = appState
+        self._selectedRecording = selectedRecording
+        self._deleteError = deleteError
+        self._viewModel = StateObject(wrappedValue: RecordingsViewModel(client: client))
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                // Tab picker
+                Picker("Filter", selection: $viewModel.filter) {
+                    Text("Completed").tag(RecordingsFilter.completed)
+                    Text("Scheduled").tag(RecordingsFilter.scheduled)
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+                .padding(.vertical, Theme.spacingSM)
+                .background(Theme.background)
+
+                // Content
+                Group {
+                    if viewModel.isLoading && viewModel.filteredRecordings.isEmpty {
+                        loadingView
+                    } else if let error = viewModel.error, viewModel.filteredRecordings.isEmpty {
+                        errorView(error)
+                    } else if viewModel.filteredRecordings.isEmpty {
+                        emptyView(viewModel)
+                    } else {
+                        recordingsList(viewModel)
+                    }
+                }
+            }
+            .sheet(item: $selectedRecording) { recording in
+                RecordingDetailView(recording: recording)
+                    .environmentObject(client)
+                    .environmentObject(appState)
+            }
+            .alert("Error", isPresented: .constant(deleteError != nil)) {
+                Button("OK") { deleteError = nil }
+            } message: {
+                if let error = deleteError {
+                    Text(error)
+                }
+            }
+        }
+        .background(Theme.background)
+        .task {
+            await viewModel.loadRecordings()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .recordingsDidChange)) { _ in
+            Task {
+                await viewModel.loadRecordings()
+            }
+        }
+    }
+
+    private var loadingView: some View {
+        VStack(spacing: Theme.spacingMD) {
+            ProgressView()
+                .scaleEffect(1.5)
+                .tint(Theme.accent)
+            Text("Loading recordings...")
+                .foregroundStyle(Theme.textSecondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func errorView(_ error: String) -> some View {
+        VStack(spacing: Theme.spacingMD) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 48))
+                .foregroundStyle(Theme.warning)
+            Text("Unable to load recordings")
+                .font(.headline)
+                .foregroundStyle(Theme.textPrimary)
+            Text(error)
+                .font(.subheadline)
+                .foregroundStyle(Theme.textSecondary)
+                .multilineTextAlignment(.center)
+            Button("Try Again") {
+                Task { await viewModel.loadRecordings() }
+            }
+            .buttonStyle(AccentButtonStyle())
+        }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func emptyView(_ vm: RecordingsViewModel) -> some View {
+        VStack(spacing: Theme.spacingMD) {
+            Image(systemName: "recordingtape")
+                .font(.system(size: 48))
+                .foregroundStyle(Theme.textTertiary)
+            Text("No recordings")
+                .font(.headline)
+                .foregroundStyle(Theme.textPrimary)
+            Text(emptyMessage(for: vm.filter))
+                .font(.subheadline)
+                .foregroundStyle(Theme.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func emptyMessage(for filter: RecordingsFilter) -> String {
+        switch filter {
+        case .all:
+            return "You don't have any recordings yet.\nSchedule recordings from the TV Guide."
+        case .completed:
+            return "No completed recordings."
+        case .scheduled:
+            return "No scheduled recordings."
+        }
+    }
+
+    private func recordingsList(_ vm: RecordingsViewModel) -> some View {
+        #if os(tvOS)
+        ScrollView {
+            LazyVStack(spacing: Theme.spacingMD) {
+                ForEach(vm.filteredRecordings) { recording in
+                    RecordingRowTV(
+                        recording: recording,
+                        onPlay: { playRecording(recording) },
+                        onShowDetails: { selectedRecording = recording },
+                        onDelete: {
+                            deleteRecording(recording)
+                        }
+                    )
+                    .contextMenu {
+                        Button {
+                            if recording.recordingStatus.isCompleted {
+                                playRecording(recording)
+                            }
+                        } label: {
+                            Label("Play", systemImage: "play.fill")
+                        }
+
+                        Button {
+                            selectedRecording = recording
+                        } label: {
+                            Label("Details", systemImage: "info.circle")
+                        }
+
+                        Button(role: .destructive) {
+                            deleteRecording(recording)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+                }
+            }
+            .padding()
+        }
+        #else
+        List {
+            ForEach(vm.filteredRecordings) { recording in
+                RecordingRow(recording: recording)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if recording.recordingStatus.isCompleted {
+                            playRecording(recording)
+                        } else {
+                            selectedRecording = recording
+                        }
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) {
+                            deleteRecording(recording)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+                    .listRowBackground(Theme.surface)
+            }
+        }
+        .listStyle(.plain)
+        .refreshable {
+            await vm.loadRecordings()
+        }
+        #endif
+    }
+
+    private func playRecording(_ recording: Recording) {
+        Task {
+            do {
+                let url = try await viewModel.playRecording(recording)
+                appState.playStream(
+                    url: url,
+                    title: recording.name,
+                    recordingId: recording.id,
+                    resumePosition: recording.playbackPosition
+                )
+            } catch {
+                deleteError = error.localizedDescription
+            }
+        }
+    }
+
+    private func deleteRecording(_ recording: Recording) {
+        Task {
+            do {
+                try await viewModel.deleteRecording(recording)
+            } catch {
+                deleteError = error.localizedDescription
+            }
+        }
+    }
+}
+
+#Preview {
+    RecordingsListView()
+        .environmentObject(NextPVRClient())
+        .environmentObject(AppState())
+        .preferredColorScheme(.dark)
+}
