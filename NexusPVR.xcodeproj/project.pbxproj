@@ -424,6 +424,7 @@
 				"EXCLUDED_SOURCE_FILE_NAMES[sdk=appletvsimulator*]" = LaunchScreen.storyboard;
 				"EXCLUDED_SOURCE_FILE_NAMES[sdk=macosx*]" = LaunchScreen.storyboard;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "NexusPVR needs to connect to your local NextPVR server for streaming TV and managing recordings.";
 				"INFOPLIST_KEY_NSLocalNetworkUsageDescription[sdk=iphoneos*]" = "NexusPVR needs to connect to your local NextPVR server for streaming TV and managing recordings.";
@@ -492,6 +493,7 @@
 				"EXCLUDED_SOURCE_FILE_NAMES[sdk=appletvsimulator*]" = LaunchScreen.storyboard;
 				"EXCLUDED_SOURCE_FILE_NAMES[sdk=macosx*]" = LaunchScreen.storyboard;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "NexusPVR needs to connect to your local NextPVR server for streaming TV and managing recordings.";
 				"INFOPLIST_KEY_NSLocalNetworkUsageDescription[sdk=iphoneos*]" = "NexusPVR needs to connect to your local NextPVR server for streaming TV and managing recordings.";
