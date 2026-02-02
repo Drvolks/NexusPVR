@@ -15,6 +15,8 @@ private struct HorizontalScrollOffsetPreferenceKey: PreferenceKey {
     }
 }
 
+
+
 // Helper struct to hold both program and channel for sheet presentation
 private struct ProgramDetail: Identifiable {
     let id = UUID()
@@ -213,6 +215,7 @@ struct GuideView: View {
     @State private var horizontalScrollOffset: CGFloat = 0
     @State private var scrollProxy: ScrollViewProxy?
     @State private var currentTimelineHour: Date?
+    @State private var scrollTargetId: String?
     @Environment(\.scenePhase) private var scenePhase
     #if os(tvOS)
     @Namespace private var guideNamespace
@@ -225,14 +228,11 @@ struct GuideView: View {
             tvOSNavigationBar
             #endif
 
-            // Timeline header row (fixed at top)
-            HStack(alignment: .top, spacing: 0) {
-                // Corner spacer
+            // Timeline header (with spacer for channel column)
+            HStack(spacing: 0) {
                 Rectangle()
                     .fill(Theme.surfaceElevated)
                     .frame(width: channelWidth, height: 30)
-
-                // Timeline header (scrolls horizontally)
                 ScrollViewReader { proxy in
                     ScrollView(.horizontal, showsIndicators: false) {
                         timelineHeaderContent
@@ -251,22 +251,57 @@ struct GuideView: View {
                 }
             }
 
-            // Main grid - single vertical scroll for both channels and programs
+            // Main grid
             ScrollView(.vertical, showsIndicators: true) {
-                LazyVStack(spacing: 1) {
-                    ForEach(viewModel.channels) { channel in
-                        HStack(alignment: .top, spacing: 0) {
-                            // Channel icon (fixed horizontally)
+                HStack(alignment: .top, spacing: 0) {
+                    // Channel column (fixed horizontally, scrolls vertically)
+                    VStack(spacing: 1) {
+                        ForEach(viewModel.channels) { channel in
                             channelCell(channel)
                                 .frame(width: channelWidth, height: rowHeight)
+                        }
+                    }
+                    .frame(width: channelWidth)
 
-                            // Program row (scrolls horizontally)
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                programsRow(channel)
-                                    .frame(height: rowHeight)
+                    // All programs in single horizontal scroll (scroll together)
+                    ScrollViewReader { programProxy in
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            VStack(spacing: 1) {
+                                // Invisible scroll anchors matching timeline header IDs
+                                HStack(spacing: 0) {
+                                    ForEach(viewModel.hoursToShow, id: \.self) { hour in
+                                        HStack(spacing: 0) {
+                                            Color.clear
+                                                .frame(width: hourWidth / 2, height: 1)
+                                                .id("scroll-\(hour.timeIntervalSince1970)")
+                                            Color.clear
+                                                .frame(width: hourWidth / 2, height: 1)
+                                                .id("scroll-\(hour.timeIntervalSince1970 + 1800)")
+                                        }
+                                    }
+                                }
+                                .frame(height: 0)
+
+                                ForEach(viewModel.channels) { channel in
+                                    programsRow(channel)
+                                        .frame(height: rowHeight)
+                                        .background(Theme.surface)
+                                }
                             }
                         }
-                        .background(Theme.surface)
+                        .onAppear {
+                            // Initial scroll to current time for programs
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                                if let targetId = scrollTargetId {
+                                    programProxy.scrollTo(targetId, anchor: UnitPoint(x: 0, y: 0))
+                                }
+                            }
+                        }
+                        .onChange(of: scrollTargetId) { _, newValue in
+                            if let targetId = newValue {
+                                programProxy.scrollTo(targetId, anchor: UnitPoint(x: 0, y: 0))
+                            }
+                        }
                     }
                 }
             }
@@ -503,7 +538,10 @@ struct GuideView: View {
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 withAnimation(isInitialLoad ? nil : .default) {
+                    // Scroll timeline header
                     proxy.scrollTo(scrollId, anchor: UnitPoint(x: 0, y: 0))
+                    // Update shared target to scroll all program rows
+                    scrollTargetId = scrollId
                 }
             }
         }
