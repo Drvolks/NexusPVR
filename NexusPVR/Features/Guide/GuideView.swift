@@ -29,6 +29,11 @@ struct GuideView: View {
     @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel = GuideViewModel()
 
+    #if os(tvOS)
+    /// Callback to request focus move to nav bar (called when pressing up at top row)
+    var onRequestNavBarFocus: (() -> Void)? = nil
+    #endif
+
     @State private var selectedProgramDetail: (program: Program, channel: Channel)?
     @State private var streamError: String?
 
@@ -217,17 +222,49 @@ struct GuideView: View {
     @State private var currentTimelineHour: Date?
     @State private var scrollTargetId: String?
     @Environment(\.scenePhase) private var scenePhase
+
     #if os(tvOS)
-    @Namespace private var guideNamespace
+    // tvOS manual focus tracking (like Rivulet approach)
+    @State private var focusedRow: Int = 0
+    @State private var focusedColumn: Int = 0
+    @State private var timeOffset: Int = 0  // 30-minute increments from now
+
+    // Visible time window: 3 hours
+    private let visibleHours: Double = 3.0
+    private var visibleMinutes: Double { visibleHours * 60 }
+
+    private var guideStartTime: Date {
+        // Start from current time, rounded down to nearest 30 minutes
+        let now = Date()
+        let calendar = Calendar.current
+        let minute = calendar.component(.minute, from: now)
+        let roundedMinute = (minute / 30) * 30
+        return calendar.date(bySettingHour: calendar.component(.hour, from: now),
+                            minute: roundedMinute,
+                            second: 0,
+                            of: now) ?? now
+    }
+
+    private var visibleStart: Date {
+        guideStartTime.addingTimeInterval(Double(timeOffset * 30 * 60))
+    }
+
+    private var visibleEnd: Date {
+        visibleStart.addingTimeInterval(visibleMinutes * 60)
+    }
     #endif
 
     private var guideContent: some View {
-        VStack(spacing: 0) {
-            #if os(tvOS)
-            // tvOS navigation controls
-            tvOSNavigationBar
-            #endif
+        #if os(tvOS)
+        tvOSGuideContent
+        #else
+        iOSMacOSGuideContent
+        #endif
+    }
 
+    #if !os(tvOS)
+    private var iOSMacOSGuideContent: some View {
+        VStack(spacing: 0) {
             // Timeline header (with spacer for channel column)
             HStack(spacing: 0) {
                 Rectangle()
@@ -239,11 +276,7 @@ struct GuideView: View {
                     }
                     .onAppear {
                         scrollProxy = proxy
-                        #if os(tvOS)
-                        scrollToCurrentTime(proxy: proxy, isInitialLoad: true)
-                        #else
                         scrollToCurrentTime(proxy: proxy)
-                        #endif
                     }
                     .onChange(of: viewModel.selectedDate) {
                         scrollToCurrentTime(proxy: proxy)
@@ -305,10 +338,6 @@ struct GuideView: View {
                     }
                 }
             }
-            #if os(tvOS)
-            .focusSection()
-            .ignoresSafeArea(.all, edges: .leading)
-            #endif
         }
         .onChange(of: scenePhase) {
             if scenePhase == .active {
@@ -319,44 +348,272 @@ struct GuideView: View {
                 }
             }
         }
-        #if os(tvOS)
-        .focusScope(guideNamespace)
-        #endif
     }
+    #endif
 
     #if os(tvOS)
-    private var tvOSNavigationBar: some View {
-        HStack(spacing: 24) {
+    private var tvOSGuideContent: some View {
+        GeometryReader { geometry in
+            let gridWidth = geometry.size.width - channelWidth
+            let pxPerMinute = gridWidth / visibleMinutes
+
+            // Wrap entire grid in a Button to capture all focus/input
             Button {
-                viewModel.previousDay()
+                selectFocusedProgram()
             } label: {
-                Image(systemName: "chevron.left")
-                    .font(.title2)
-                    .frame(width: 60, height: 60)
+                VStack(spacing: 0) {
+                    // Time header
+                    tvOSTimeHeader(gridWidth: gridWidth, pxPerMinute: pxPerMinute)
+
+                    // Grid with manual focus tracking
+                    ScrollViewReader { verticalProxy in
+                        ScrollView(.vertical, showsIndicators: false) {
+                            LazyVStack(spacing: 0) {
+                                ForEach(Array(viewModel.channels.enumerated()), id: \.element.id) { rowIndex, channel in
+                                    tvOSChannelRow(
+                                        channel: channel,
+                                        rowIndex: rowIndex,
+                                        gridWidth: gridWidth,
+                                        pxPerMinute: pxPerMinute
+                                    )
+                                    .id(rowIndex)
+                                }
+                            }
+                        }
+                        .onChange(of: focusedRow) { _, newRow in
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                verticalProxy.scrollTo(newRow, anchor: .center)
+                            }
+                        }
+                    }
+                }
             }
-            .buttonStyle(TVNavigationButtonStyle())
-            .prefersDefaultFocus(in: guideNamespace)
-
-            Text(viewModel.selectedDate, format: .dateTime.month(.wide).day().year())
-                .font(.title3)
-                .foregroundStyle(Theme.textPrimary)
-                .frame(minWidth: 200)
-
-            Button {
-                viewModel.nextDay()
-            } label: {
-                Image(systemName: "chevron.right")
-                    .font(.title2)
-                    .frame(width: 60, height: 60)
+            .buttonStyle(TVGridContainerButtonStyle())
+            .onMoveCommand { direction in
+                handleTVNavigation(direction)
             }
-            .buttonStyle(TVNavigationButtonStyle())
-
-            Spacer()
+            .onPlayPauseCommand {
+                selectFocusedProgram()
+            }
         }
-        .padding(.leading, Theme.spacingMD)
-        .padding(.trailing, 40)
-        .padding(.vertical, 20)
-        .background(Theme.surface)
+        .ignoresSafeArea(.all, edges: .leading)
+    }
+
+    /// Button style that makes the grid container fill available space with no visual changes
+    struct TVGridContainerButtonStyle: ButtonStyle {
+        func makeBody(configuration: Configuration) -> some View {
+            configuration.label
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private func tvOSTimeHeader(gridWidth: CGFloat, pxPerMinute: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            // Empty space for channel column
+            Rectangle()
+                .fill(Theme.surfaceElevated)
+                .frame(width: channelWidth, height: 40)
+
+            // Time slots
+            HStack(spacing: 0) {
+                ForEach(0..<Int(visibleHours * 2), id: \.self) { slot in
+                    let slotTime = visibleStart.addingTimeInterval(Double(slot * 30 * 60))
+                    Text(slotTime, format: .dateTime.hour().minute())
+                        .font(.caption)
+                        .foregroundStyle(Theme.textSecondary)
+                        .frame(width: pxPerMinute * 30, alignment: .leading)
+                        .padding(.leading, 8)
+                }
+            }
+            .frame(width: gridWidth)
+        }
+        .background(Theme.surfaceElevated)
+    }
+
+    private func tvOSChannelRow(channel: Channel, rowIndex: Int, gridWidth: CGFloat, pxPerMinute: CGFloat) -> some View {
+        let isRowFocused = rowIndex == focusedRow
+        let programs = tvOSVisiblePrograms(for: channel)
+
+        return HStack(spacing: 0) {
+            // Channel cell
+            tvOSChannelCell(channel: channel, isSelected: isRowFocused)
+
+            // Programs row
+            ZStack(alignment: .leading) {
+                Rectangle()
+                    .fill(isRowFocused ? Color(white: 0.08) : Color(white: 0.05))
+
+                if programs.isEmpty {
+                    Text("No Data")
+                        .font(.headline)
+                        .foregroundStyle(Theme.textTertiary)
+                        .padding(.leading, 16)
+                } else {
+                    ForEach(Array(programs.enumerated()), id: \.element.id) { colIndex, program in
+                        let isFocused = isRowFocused && colIndex == focusedColumn
+                        tvOSProgramCell(
+                            program: program,
+                            isFocused: isFocused,
+                            gridWidth: gridWidth,
+                            pxPerMinute: pxPerMinute
+                        )
+                    }
+                }
+            }
+            .frame(width: gridWidth, height: rowHeight)
+            .clipped()
+        }
+        .frame(height: rowHeight)
+    }
+
+    private func tvOSChannelCell(channel: Channel, isSelected: Bool) -> some View {
+        HStack(spacing: 12) {
+            CachedAsyncImage(url: client.channelIconURL(channelId: channel.id)) { image in
+                image
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            } placeholder: {
+                Image(systemName: "tv")
+                    .font(.title)
+                    .foregroundStyle(Theme.textTertiary)
+            }
+            .frame(width: 80, height: 60)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(channel.number)")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(Theme.textSecondary)
+                Text(channel.name)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(width: channelWidth, height: rowHeight)
+        .background(isSelected ? Color(white: 0.15) : Theme.surfaceElevated)
+    }
+
+    private func tvOSProgramCell(program: Program, isFocused: Bool, gridWidth: CGFloat, pxPerMinute: CGFloat) -> some View {
+        let (xPos, cellWidth) = tvOSProgramPosition(program: program, pxPerMinute: pxPerMinute)
+        let isAiring = program.isCurrentlyAiring
+        let isScheduled = viewModel.isScheduledRecording(program)
+
+        let bgColor: Color = {
+            if isFocused {
+                return Theme.accent
+            } else if isAiring {
+                return Color(white: 0.18)
+            } else {
+                return Color(white: 0.12)
+            }
+        }()
+
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text(program.name)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(isFocused ? .white : Theme.textPrimary)
+                    .lineLimit(1)
+
+                if isScheduled {
+                    Image(systemName: "record.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(Theme.recording)
+                }
+            }
+
+            Text(program.startDate, format: .dateTime.hour().minute())
+                .font(.system(size: 14))
+                .foregroundStyle(isFocused ? .white.opacity(0.8) : Theme.textSecondary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(width: max(cellWidth - 4, 80), height: rowHeight - 10, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 10).fill(bgColor))
+        .shadow(color: isFocused ? .black.opacity(0.5) : .clear, radius: 10, x: 0, y: 4)
+        .scaleEffect(isFocused ? 1.02 : 1.0, anchor: .leading)
+        .zIndex(isFocused ? 1 : 0)
+        .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isFocused)
+        .offset(x: xPos + 2)
+    }
+
+    private func tvOSProgramPosition(program: Program, pxPerMinute: CGFloat) -> (x: CGFloat, width: CGFloat) {
+        let progVisibleStart = max(program.startDate, visibleStart)
+        let progVisibleEnd = min(program.endDate, visibleEnd)
+
+        let x = CGFloat(progVisibleStart.timeIntervalSince(visibleStart) / 60) * pxPerMinute
+        let width = max(CGFloat(progVisibleEnd.timeIntervalSince(progVisibleStart) / 60) * pxPerMinute, 80)
+
+        return (x, width)
+    }
+
+    private func tvOSVisiblePrograms(for channel: Channel) -> [Program] {
+        let programs = viewModel.visiblePrograms(for: channel)
+        return programs.filter { program in
+            program.endDate > visibleStart && program.startDate < visibleEnd
+        }
+    }
+
+    private func handleTVNavigation(_ direction: MoveCommandDirection) {
+        let channels = viewModel.channels
+        guard !channels.isEmpty else { return }
+
+        switch direction {
+        case .up:
+            if focusedRow > 0 {
+                focusedRow -= 1
+                clampColumn()
+            } else {
+                // At top row - request focus move to nav bar
+                onRequestNavBarFocus?()
+            }
+        case .down:
+            if focusedRow < channels.count - 1 {
+                focusedRow += 1
+                clampColumn()
+            }
+        case .left:
+            if focusedColumn > 0 {
+                focusedColumn -= 1
+            } else if timeOffset > 0 {
+                // Scroll back in time
+                timeOffset -= 1
+                // Keep focus on first visible program
+                focusedColumn = 0
+            }
+        case .right:
+            let programs = tvOSVisiblePrograms(for: channels[focusedRow])
+            if focusedColumn < programs.count - 1 {
+                focusedColumn += 1
+            } else if timeOffset < 36 {  // Max 18 hours ahead (36 x 30min)
+                // Scroll forward in time
+                timeOffset += 1
+                focusedColumn = 0
+            }
+        @unknown default:
+            break
+        }
+    }
+
+    private func clampColumn() {
+        guard focusedRow < viewModel.channels.count else { return }
+        let programs = tvOSVisiblePrograms(for: viewModel.channels[focusedRow])
+        focusedColumn = min(focusedColumn, max(0, programs.count - 1))
+    }
+
+    private func selectFocusedProgram() {
+        guard focusedRow < viewModel.channels.count else { return }
+        let channel = viewModel.channels[focusedRow]
+        let programs = tvOSVisiblePrograms(for: channel)
+        guard focusedColumn < programs.count else { return }
+        let program = programs[focusedColumn]
+
+        if program.isCurrentlyAiring {
+            playLiveChannel(channel)
+        } else {
+            selectedProgramDetail = (program: program, channel: channel)
+        }
     }
     #endif
 

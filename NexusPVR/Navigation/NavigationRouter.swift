@@ -90,32 +90,53 @@ struct IOSNavigation: View {
 struct TVOSNavigation: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var client: NextPVRClient
+    @State private var navBarEnabled = true
+    @FocusState private var focusedTab: Tab?
 
     var body: some View {
-        TabView(selection: $appState.selectedTab) {
-            GuideView()
-                .tabItem {
-                    Label(Tab.guide.label, systemImage: Tab.guide.icon)
-                }
-                .tag(Tab.guide)
+        VStack(spacing: 0) {
+            // Top navigation bar (TabView style)
+            tvOSNavBar
+                .disabled(!navBarEnabled)
+                .focusSection()
 
-            RecordingsListView()
-                .tabItem {
-                    Label(Tab.recordings.label, systemImage: Tab.recordings.icon)
+            // Main content
+            Group {
+                switch appState.selectedTab {
+                case .guide:
+                    GuideView(onRequestNavBarFocus: { enableNavBar() })
+                case .recordings:
+                    RecordingsListView()
+                case .topics:
+                    TopicsView()
+                case .settings:
+                    SettingsView()
                 }
-                .tag(Tab.recordings)
-
-            TopicsView()
-                .tabItem {
-                    Label(Tab.topics.label, systemImage: Tab.topics.icon)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .focusSection()
+            .onExitCommand {
+                enableNavBar()
+            }
+            .onMoveCommand { direction in
+                // For non-Guide screens, up enables nav bar
+                if direction == .up && appState.selectedTab != .guide {
+                    enableNavBar()
                 }
-                .tag(Tab.topics)
-
-            SettingsView()
-                .tabItem {
-                    Label(Tab.settings.label, systemImage: Tab.settings.icon)
-                }
-                .tag(Tab.settings)
+            }
+        }
+        .onAppear {
+            // Start with focus on nav bar
+            focusedTab = appState.selectedTab
+        }
+        .onChange(of: focusedTab) { _, newTab in
+            if let tab = newTab {
+                // Change page when navigating in nav bar
+                appState.selectedTab = tab
+            } else {
+                // When nav bar loses focus, disable it
+                navBarEnabled = false
+            }
         }
         .fullScreenCover(isPresented: $appState.isShowingPlayer) {
             if let url = appState.currentlyPlayingURL {
@@ -127,6 +148,61 @@ struct TVOSNavigation: View {
                 )
             }
         }
+    }
+
+    private func enableNavBar() {
+        navBarEnabled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            focusedTab = appState.selectedTab
+        }
+    }
+
+    private var tvOSNavBar: some View {
+        HStack(spacing: 0) {
+            ForEach(Tab.allCases) { tab in
+                Button {
+                    // Click confirms selection and returns to content
+                    focusedTab = nil
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: tab.icon)
+                            .font(.title3)
+                        Text(tab.label)
+                            .font(.headline)
+                    }
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 16)
+                }
+                .buttonStyle(TVTabButtonStyle(isSelected: appState.selectedTab == tab))
+                .focused($focusedTab, equals: tab)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 20)
+        .padding(.horizontal, 40)
+        .background(
+            LinearGradient(
+                colors: [Color.black.opacity(0.8), Color.black.opacity(0.4), Color.clear],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+    }
+}
+
+struct TVTabButtonStyle: ButtonStyle {
+    let isSelected: Bool
+    @Environment(\.isFocused) var isFocused
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(isFocused ? .white : (isSelected ? Theme.accent : Theme.textSecondary))
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isFocused ? Theme.accent : Color.clear)
+            )
+            .scaleEffect(isFocused ? 1.1 : 1.0)
+            .animation(.easeInOut(duration: 0.15), value: isFocused)
     }
 }
 #endif
