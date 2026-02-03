@@ -195,26 +195,24 @@ final class NextPVRClient: ObservableObject {
     func getAllListings(for channels: [Channel]) async throws -> [Int: [Program]] {
         var result = [Int: [Program]]()
 
+        // Ensure we're authenticated before starting batch requests
+        if !isAuthenticated {
+            try await authenticate()
+        }
+
         // Fetch in batches to avoid overwhelming the server
+        // Use sequential requests within batches to avoid race conditions with session state
         let batchSize = 10
         for batchStart in stride(from: 0, to: channels.count, by: batchSize) {
             let batchEnd = min(batchStart + batchSize, channels.count)
             let batch = Array(channels[batchStart..<batchEnd])
 
-            await withTaskGroup(of: (Int, [Program]).self) { group in
-                for channel in batch {
-                    group.addTask {
-                        do {
-                            let listings = try await self.getListings(channelId: channel.id)
-                            return (channel.id, listings)
-                        } catch {
-                            return (channel.id, [])
-                        }
-                    }
-                }
-
-                for await (channelId, listings) in group {
-                    result[channelId] = listings
+            for channel in batch {
+                do {
+                    let listings = try await getListings(channelId: channel.id)
+                    result[channel.id] = listings
+                } catch {
+                    result[channel.id] = []
                 }
             }
         }
