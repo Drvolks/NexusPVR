@@ -7,7 +7,7 @@
 
 import Testing
 import Foundation
-@testable import nextpvr_apple_client
+@testable import NexusPVR
 
 struct GuideScrollHelperTests {
 
