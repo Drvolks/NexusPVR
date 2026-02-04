@@ -7,6 +7,10 @@
 
 import SwiftUI
 import Libmpv
+#if !os(macOS)
+import GLKit
+import OpenGLES
+#endif
 #if os(macOS)
 import AppKit
 #else
@@ -14,7 +18,6 @@ import UIKit
 #endif
 
 struct PlayerView: View {
-    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var client: NextPVRClient
 
@@ -62,6 +65,7 @@ struct PlayerView: View {
                 seekBackwardTime: seekBackwardTime,
                 seekForwardTime: seekForwardTime,
                 onPlaybackEnded: {
+                    savePlaybackPosition()
                     markAsWatched()
                 },
                 onTogglePlayPause: {
@@ -73,7 +77,8 @@ struct PlayerView: View {
                     toggleControls()
                 },
                 onDismiss: {
-                    dismiss()
+                    savePlaybackPosition()
+                    appState.stopPlayback()
                 }
             )
                 .ignoresSafeArea()
@@ -90,6 +95,7 @@ struct PlayerView: View {
                 seekBackwardTime: seekBackwardTime,
                 seekForwardTime: seekForwardTime,
                 onPlaybackEnded: {
+                    savePlaybackPosition()
                     markAsWatched()
                 }
             )
@@ -131,6 +137,7 @@ struct PlayerView: View {
             #if os(macOS)
             // Hidden buttons for keyboard shortcuts
             Button("") {
+                savePlaybackPosition()
                 appState.stopPlayback()
             }
             .keyboardShortcut(.escape, modifiers: [])
@@ -168,8 +175,11 @@ struct PlayerView: View {
             #endif
         }
         .onDisappear {
-            savePlaybackPosition()
-            appState.stopPlayback()
+            // Only save if not already stopped by an explicit exit path
+            if appState.isShowingPlayer {
+                savePlaybackPosition()
+                appState.stopPlayback()
+            }
             // Notify recordings list to refresh with updated progress
             if recordingId != nil {
                 NotificationCenter.default.post(name: .recordingsDidChange, object: nil)
@@ -385,11 +395,8 @@ struct PlayerView: View {
     private var topBar: some View {
         HStack {
             Button {
-                #if os(macOS)
+                savePlaybackPosition()
                 appState.stopPlayback()
-                #else
-                dismiss()
-                #endif
             } label: {
                 Image(systemName: "xmark")
                     .font(.title2)
@@ -438,6 +445,7 @@ struct PlayerView: View {
 
 class MPVPlayerCore: NSObject {
     private var mpv: OpaquePointer?
+    var mpvGL: OpaquePointer?
     private var errorBinding: Binding<String?>?
     private var isDestroyed = false
     private var positionTimer: Timer?
@@ -457,6 +465,12 @@ class MPVPlayerCore: NSObject {
         isDestroyed = true
 
         stopPositionPolling()
+
+        if let mpvGL = mpvGL {
+            mpv_render_context_set_update_callback(mpvGL, nil, nil)
+            mpv_render_context_free(mpvGL)
+            self.mpvGL = nil
+        }
 
         if let mpv = mpv {
             mpv_terminate_destroy(mpv)
@@ -523,10 +537,13 @@ class MPVPlayerCore: NSObject {
             return false
         }
 
-        // Video output - use OpenGL (simpler than Vulkan, no MoltenVK overhead)
+        // Video output
+        #if os(macOS)
         mpv_set_option_string(mpv, "vo", "gpu")
         mpv_set_option_string(mpv, "gpu-api", "opengl")
-        #if !os(macOS)
+        #else
+        mpv_set_option_string(mpv, "vo", "libmpv")
+        mpv_set_option_string(mpv, "gpu-api", "opengl")
         mpv_set_option_string(mpv, "opengl-es", "yes")
         #endif
 
@@ -635,6 +652,7 @@ class MPVPlayerCore: NSObject {
         }
     }
 
+    #if os(macOS)
     func setWindowID(_ layer: CAMetalLayer) {
         guard let mpv = mpv else { return }
 
@@ -650,6 +668,52 @@ class MPVPlayerCore: NSObject {
             print("MPV: Successfully set window ID")
         }
     }
+    #else
+    func createRenderContext(view: MPVPlayerGLView) {
+        guard let mpv = mpv else { return }
+
+        let api = UnsafeMutableRawPointer(mutating: (MPV_RENDER_API_TYPE_OPENGL as NSString).utf8String)
+        var initParams = mpv_opengl_init_params(
+            get_proc_address: { (ctx, name) -> UnsafeMutableRawPointer? in
+                let symbolName = CFStringCreateWithCString(kCFAllocatorDefault, name, CFStringBuiltInEncodings.ASCII.rawValue)
+                let identifier = CFBundleGetBundleWithIdentifier("com.apple.opengles" as CFString)
+                return CFBundleGetFunctionPointerForName(identifier, symbolName)
+            },
+            get_proc_address_ctx: nil
+        )
+
+        withUnsafeMutablePointer(to: &initParams) { initParamsPtr in
+            var params = [
+                mpv_render_param(type: MPV_RENDER_PARAM_API_TYPE, data: api),
+                mpv_render_param(type: MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, data: initParamsPtr),
+                mpv_render_param()
+            ]
+
+            let result = mpv_render_context_create(&mpvGL, mpv, &params)
+            if result < 0 {
+                let errorStr = String(cString: mpv_error_string(result))
+                print("MPV: Failed to create render context: \(errorStr)")
+                return
+            }
+            print("MPV: Render context created successfully")
+
+            view.mpvGL = UnsafeMutableRawPointer(mpvGL)
+
+            mpv_render_context_set_update_callback(
+                mpvGL,
+                { (ctx) in
+                    guard let ctx = ctx else { return }
+                    let view = Unmanaged<MPVPlayerGLView>.fromOpaque(ctx).takeUnretainedValue()
+                    guard view.needsDrawing else { return }
+                    view.renderQueue.async {
+                        view.display()
+                    }
+                },
+                UnsafeMutableRawPointer(Unmanaged.passUnretained(view).toOpaque())
+            )
+        }
+    }
+    #endif
 
     private func startEventLoop() {
         DispatchQueue.global(qos: .userInteractive).async { [weak self] in
@@ -886,8 +950,8 @@ struct MPVContainerView: UIViewRepresentable {
     var onDismiss: (() -> Void)?
     #endif
 
-    func makeUIView(context: Context) -> MPVPlayerUIView {
-        let view = MPVPlayerUIView()
+    func makeUIView(context: Context) -> MPVPlayerGLView {
+        let view = MPVPlayerGLView(frame: .zero)
         view.setup(errorBinding: $errorMessage)
         view.onPositionUpdate = { position, dur in
             DispatchQueue.main.async {
@@ -925,7 +989,7 @@ struct MPVContainerView: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ uiView: MPVPlayerUIView, context: Context) {
+    func updateUIView(_ uiView: MPVPlayerGLView, context: Context) {
         if isPlaying {
             uiView.play()
         } else {
@@ -937,18 +1001,22 @@ struct MPVContainerView: UIViewRepresentable {
         Coordinator()
     }
 
-    static func dismantleUIView(_ uiView: MPVPlayerUIView, coordinator: Coordinator) {
+    static func dismantleUIView(_ uiView: MPVPlayerGLView, coordinator: Coordinator) {
         uiView.cleanup()
     }
 
     class Coordinator {
-        var playerView: MPVPlayerUIView?
+        var playerView: MPVPlayerGLView?
     }
 }
 
-class MPVPlayerUIView: UIView {
+class MPVPlayerGLView: GLKView {
     private var player: MPVPlayerCore?
-    private var metalLayer: CAMetalLayer?
+    private var defaultFBO: GLint = -1
+    private var displayLink: CADisplayLink?
+    var mpvGL: UnsafeMutableRawPointer?
+    var needsDrawing = true
+    let renderQueue = DispatchQueue(label: "nexuspvr.opengl", qos: .userInteractive)
     var onPositionUpdate: ((Double, Double) -> Void)?
     var onPlaybackEnded: (() -> Void)?
 
@@ -964,7 +1032,15 @@ class MPVPlayerUIView: UIView {
     #endif
 
     override init(frame: CGRect) {
-        super.init(frame: frame)
+        guard let glContext = EAGLContext(api: .openGLES2) else {
+            fatalError("Failed to initialize OpenGL ES 2.0 context")
+        }
+        super.init(frame: frame, context: glContext)
+        commonInit()
+    }
+
+    override init(frame: CGRect, context: EAGLContext) {
+        super.init(frame: frame, context: context)
         commonInit()
     }
 
@@ -974,14 +1050,65 @@ class MPVPlayerUIView: UIView {
     }
 
     private func commonInit() {
-        metalLayer = CAMetalLayer()
-        metalLayer?.backgroundColor = UIColor.black.cgColor
-        metalLayer?.pixelFormat = .bgra8Unorm
-        layer.addSublayer(metalLayer!)
+        bindDrawable()
+        isOpaque = true
+        enableSetNeedsDisplay = false
         backgroundColor = .black
+        autoresizingMask = [.flexibleWidth, .flexibleHeight]
+
+        // Fill black initially
+        glClearColor(0, 0, 0, 1)
+        glClear(UInt32(GL_COLOR_BUFFER_BIT))
+
+        // Display link for frame sync
+        displayLink = CADisplayLink(target: self, selector: #selector(updateFrame))
+        displayLink?.add(to: .main, forMode: .common)
+
         #if os(tvOS)
         isUserInteractionEnabled = true
         #endif
+    }
+
+    deinit {
+        displayLink?.invalidate()
+    }
+
+    @objc private func updateFrame() {
+        if needsDrawing {
+            setNeedsDisplay()
+        }
+    }
+
+    override func draw(_ rect: CGRect) {
+        guard needsDrawing, let mpvGL = mpvGL else { return }
+
+        guard EAGLContext.setCurrent(context) else { return }
+
+        glGetIntegerv(UInt32(GL_FRAMEBUFFER_BINDING), &defaultFBO)
+        guard defaultFBO != 0 else { return }
+
+        var dims: [GLint] = [0, 0, 0, 0]
+        glGetIntegerv(GLenum(GL_VIEWPORT), &dims)
+
+        var data = mpv_opengl_fbo(
+            fbo: Int32(defaultFBO),
+            w: Int32(dims[2]),
+            h: Int32(dims[3]),
+            internal_format: 0
+        )
+
+        var flip: CInt = 1
+
+        withUnsafeMutablePointer(to: &flip) { flipPtr in
+            withUnsafeMutablePointer(to: &data) { dataPtr in
+                var params = [
+                    mpv_render_param(type: MPV_RENDER_PARAM_OPENGL_FBO, data: dataPtr),
+                    mpv_render_param(type: MPV_RENDER_PARAM_FLIP_Y, data: flipPtr),
+                    mpv_render_param()
+                ]
+                mpv_render_context_render(OpaquePointer(mpvGL), &params)
+            }
+        }
     }
 
     #if os(tvOS)
@@ -1024,8 +1151,9 @@ class MPVPlayerUIView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        metalLayer?.frame = bounds
-        metalLayer?.contentsScale = UIScreen.main.scale
+        // GLKView handles resize automatically via bindDrawable in draw()
+        // Trigger a redraw on layout change so MPV re-renders at new size
+        needsDrawing = true
     }
 
     func setup(errorBinding: Binding<String?>?) {
@@ -1033,9 +1161,7 @@ class MPVPlayerUIView: UIView {
         guard let success = player?.setup(errorBinding: errorBinding), success else {
             return
         }
-        if let metalLayer = metalLayer {
-            player?.setWindowID(metalLayer)
-        }
+        player?.createRenderContext(view: self)
         player?.onPositionUpdate = { [weak self] position, duration in
             self?.onPositionUpdate?(position, duration)
         }
@@ -1069,6 +1195,14 @@ class MPVPlayerUIView: UIView {
     }
 
     func cleanup() {
+        // Stop new frames from being queued
+        needsDrawing = false
+        displayLink?.invalidate()
+        displayLink = nil
+        // Nil out render context pointer so any in-flight draw() exits early
+        mpvGL = nil
+        // Wait for any pending render to finish before destroying
+        renderQueue.sync {}
         player?.destroy()
         player = nil
     }
