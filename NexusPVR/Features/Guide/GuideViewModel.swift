@@ -12,7 +12,14 @@ import Combine
 final class GuideViewModel: ObservableObject {
     @Published var channels: [Channel] = []
     @Published var listings = [Int: [Program]]()
-    @Published var recordings: [Recording] = []
+    @Published var recordings: [Recording] = [] {
+        didSet {
+            recordingsByEventId = Dictionary(
+                recordings.compactMap { r in r.epgEventId.map { ($0, r) } },
+                uniquingKeysWith: { first, _ in first }
+            )
+        }
+    }
     @Published var isLoading = false
     @Published var hasLoaded = false
     @Published var error: String?
@@ -98,13 +105,8 @@ final class GuideViewModel: ObservableObject {
 
             let (loadedListings, (completed, scheduled)) = try await (listingsTask, recordingsTask)
 
-            // Update recordings with O(1) lookup index
-            let allRecordings = completed + scheduled
-            recordings = allRecordings
-            recordingsByEventId = Dictionary(
-                allRecordings.compactMap { r in r.epgEventId.map { ($0, r) } },
-                uniquingKeysWith: { first, _ in first }
-            )
+            // Update recordings (didSet rebuilds O(1) lookup index)
+            recordings = completed + scheduled
 
             listings = loadedListings
             updateVisiblePrograms()
