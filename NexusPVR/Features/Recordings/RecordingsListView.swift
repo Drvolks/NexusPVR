@@ -206,6 +206,29 @@ private struct RecordingsListContentView: View {
                             Label("Delete", systemImage: "trash")
                         }
                     }
+                    .contextMenu {
+                        if recording.recordingStatus.isCompleted {
+                            Button {
+                                playRecording(recording)
+                            } label: {
+                                Label("Play", systemImage: "play.fill")
+                            }
+                        }
+
+                        Button {
+                            selectedRecording = recording
+                        } label: {
+                            Label("Details", systemImage: "info.circle")
+                        }
+
+                        Divider()
+
+                        Button(role: .destructive) {
+                            deleteRecording(recording)
+                        } label: {
+                            Label(recording.recordingStatus.isScheduled ? "Cancel Recording" : "Delete", systemImage: "trash")
+                        }
+                    }
                     .listRowBackground(Theme.surface)
             }
         }
