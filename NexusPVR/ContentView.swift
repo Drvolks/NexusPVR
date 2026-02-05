@@ -40,12 +40,12 @@ struct ContentView: View {
                 client.updateConfig(cloudConfig)
             }
 
-            isCheckingCloud = false
-
-            // Try to authenticate on launch if configured
+            // Authenticate before showing main UI to avoid race with GuideView
             if client.isConfigured && !client.isAuthenticated {
                 try? await client.authenticate()
             }
+
+            isCheckingCloud = false
         }
     }
 
