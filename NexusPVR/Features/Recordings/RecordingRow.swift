@@ -90,12 +90,18 @@ struct RecordingRow: View {
                     }
                 }
 
-                // Row 3: Date | Duration
+                // Row 3: Date + time range | Duration
                 HStack {
-                    if let date = recording.startDate {
-                        Text(date, style: .date)
-                            .font(.caption)
-                            .foregroundStyle(Theme.textTertiary)
+                    if let start = recording.startDate {
+                        if recording.recordingStatus.isScheduled, let end = recording.endDate {
+                            Text("\(start.formatted(date: .abbreviated, time: .shortened)) – \(end.formatted(date: .omitted, time: .shortened))")
+                                .font(.caption)
+                                .foregroundStyle(Theme.textTertiary)
+                        } else {
+                            Text(start, style: .date)
+                                .font(.caption)
+                                .foregroundStyle(Theme.textTertiary)
+                        }
                     }
                     Spacer()
                     if let duration = recording.durationMinutes {
@@ -292,9 +298,13 @@ struct RecordingRowTV: View {
                             Label(channel, systemImage: "tv")
                         }
 
-                        if let date = recording.startDate {
+                        if let start = recording.startDate {
                             Label {
-                                Text(date, style: .date)
+                                if recording.recordingStatus.isScheduled, let end = recording.endDate {
+                                    Text("\(start.formatted(date: .abbreviated, time: .shortened)) – \(end.formatted(date: .omitted, time: .shortened))")
+                                } else {
+                                    Text(start, style: .date)
+                                }
                             } icon: {
                                 Image(systemName: "calendar")
                             }
