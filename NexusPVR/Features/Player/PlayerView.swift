@@ -1014,6 +1014,8 @@ class MPVPlayerGLView: GLKView {
     private var player: MPVPlayerCore?
     private var defaultFBO: GLint = -1
     private var displayLink: CADisplayLink?
+    private var resizeDebouncer: DispatchWorkItem?
+    private var isResizing = false
     var mpvGL: UnsafeMutableRawPointer?
     var needsDrawing = true
     let renderQueue = DispatchQueue(label: "nexuspvr.opengl", qos: .userInteractive)
@@ -1080,7 +1082,7 @@ class MPVPlayerGLView: GLKView {
     }
 
     override func draw(_ rect: CGRect) {
-        guard needsDrawing, let mpvGL = mpvGL else { return }
+        guard needsDrawing, !isResizing, let mpvGL = mpvGL else { return }
 
         guard EAGLContext.setCurrent(context) else { return }
 
@@ -1151,9 +1153,17 @@ class MPVPlayerGLView: GLKView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        // GLKView handles resize automatically via bindDrawable in draw()
-        // Trigger a redraw on layout change so MPV re-renders at new size
-        needsDrawing = true
+        // During orientation animation, layoutSubviews fires on every frame.
+        // Skip MPV renders during the resize — the last rendered frame scales
+        // naturally via UIKit's animation. Re-render once the size settles.
+        resizeDebouncer?.cancel()
+        isResizing = true
+        let work = DispatchWorkItem { [weak self] in
+            self?.isResizing = false
+            self?.needsDrawing = true
+        }
+        resizeDebouncer = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
     }
 
     func setup(errorBinding: Binding<String?>?) {
