@@ -41,6 +41,9 @@ struct PlayerView: View {
     @State private var seekToPositionFunc: ((Double) -> Void)?
     @State private var hasResumed = false
     @State private var isPlayerReady = false
+    @State private var videoCodec: String?
+    @State private var videoHeight: Int?
+    @State private var hwDecoder: String?
 
     init(url: URL, title: String, recordingId: Int? = nil, resumePosition: Int? = nil) {
         self.url = url
@@ -79,6 +82,11 @@ struct PlayerView: View {
                 onDismiss: {
                     savePlaybackPosition()
                     appState.stopPlayback()
+                },
+                onVideoInfoUpdate: { codec, height, hwdec in
+                    videoCodec = codec
+                    videoHeight = height
+                    hwDecoder = hwdec
                 }
             )
                 .ignoresSafeArea()
@@ -97,6 +105,11 @@ struct PlayerView: View {
                 onPlaybackEnded: {
                     savePlaybackPosition()
                     markAsWatched()
+                },
+                onVideoInfoUpdate: { codec, height, hwdec in
+                    videoCodec = codec
+                    videoHeight = height
+                    hwDecoder = hwdec
                 }
             )
                 .ignoresSafeArea()
@@ -411,9 +424,57 @@ struct PlayerView: View {
                 .lineLimit(1)
 
             Spacer()
+
+            videoBadges
+                .padding(.trailing, 4)
         }
         .padding(.horizontal)
         .padding(.top, Theme.spacingMD)
+    }
+
+    private var videoBadges: some View {
+        HStack(spacing: 6) {
+            if let height = videoHeight {
+                badgeText(resolutionLabel(height: height), color: .white)
+            }
+            if let codec = videoCodec {
+                badgeText(formatCodecName(codec), color: .white)
+            }
+            if let hw = hwDecoder, !hw.isEmpty, hw != "no" {
+                badgeText("HW", color: .green)
+            } else if videoCodec != nil {
+                badgeText("SW", color: .orange)
+            }
+        }
+    }
+
+    private func badgeText(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.caption2)
+            .fontWeight(.semibold)
+            .foregroundStyle(color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.black.opacity(0.6))
+            .cornerRadius(4)
+    }
+
+    private func resolutionLabel(height: Int) -> String {
+        if height >= 2160 { return "4K" }
+        if height >= 1440 { return "1440p" }
+        if height >= 1080 { return "1080p" }
+        if height >= 720 { return "720p" }
+        if height >= 480 { return "480p" }
+        return "\(height)p"
+    }
+
+    private func formatCodecName(_ codec: String) -> String {
+        let lower = codec.lowercased()
+        if lower.contains("h264") || lower.contains("avc") { return "H.264" }
+        if lower.contains("hevc") || lower.contains("h265") { return "HEVC" }
+        if lower.contains("vp9") { return "VP9" }
+        if lower.contains("av1") || lower.contains("av01") { return "AV1" }
+        return codec.uppercased()
     }
 
     private func toggleControls() {
@@ -449,8 +510,13 @@ class MPVPlayerCore: NSObject {
     private var errorBinding: Binding<String?>?
     private var isDestroyed = false
     private var positionTimer: Timer?
+    private let eventLoopGroup = DispatchGroup()
     var onPositionUpdate: ((Double, Double) -> Void)?
     var onPlaybackEnded: (() -> Void)?
+    var onVideoInfoUpdate: ((String?, Int?, String?) -> Void)?
+    private var lastCodec: String?
+    private var lastHeight: Int?
+    private var lastHwdec: String?
 
     override init() {
         super.init()
@@ -466,11 +532,25 @@ class MPVPlayerCore: NSObject {
 
         stopPositionPolling()
 
+        // Nil out callbacks to break reference cycles with SwiftUI @State
+        onPositionUpdate = nil
+        onPlaybackEnded = nil
+        onVideoInfoUpdate = nil
+
         if let mpvGL = mpvGL {
             mpv_render_context_set_update_callback(mpvGL, nil, nil)
             mpv_render_context_free(mpvGL)
             self.mpvGL = nil
         }
+
+        // Wake the event loop so it sees isDestroyed and exits
+        if let mpv = mpv {
+            mpv_wakeup(mpv)
+        }
+
+        // Wait for the event loop thread to finish before freeing mpv
+        // (mpv API is not safe to call concurrently with mpv_terminate_destroy)
+        eventLoopGroup.wait()
 
         if let mpv = mpv {
             mpv_terminate_destroy(mpv)
@@ -484,8 +564,18 @@ class MPVPlayerCore: NSObject {
             guard let self = self else { return }
             let position = self.getTimePosition()
             let duration = self.getDuration()
+            let info = self.getVideoInfo()
+            let changed = info.codec != self.lastCodec || info.height != self.lastHeight || info.hwdec != self.lastHwdec
+            if changed {
+                self.lastCodec = info.codec
+                self.lastHeight = info.height
+                self.lastHwdec = info.hwdec
+            }
             DispatchQueue.main.async {
                 self.onPositionUpdate?(position, duration)
+                if changed {
+                    self.onVideoInfoUpdate?(info.codec, info.height, info.hwdec)
+                }
             }
         }
     }
@@ -525,6 +615,31 @@ class MPVPlayerCore: NSObject {
         if result < 0 {
             print("MPV: seekTo command failed: \(result)")
         }
+    }
+
+    func getVideoInfo() -> (codec: String?, height: Int?, hwdec: String?) {
+        guard let mpv = mpv else { return (nil, nil, nil) }
+
+        var codec: String?
+        var height: Int?
+        var hwdec: String?
+
+        if let cString = mpv_get_property_string(mpv, "video-codec") {
+            codec = String(cString: cString)
+            mpv_free(cString)
+        }
+
+        var h: Int64 = 0
+        if mpv_get_property(mpv, "height", MPV_FORMAT_INT64, &h) >= 0 {
+            height = Int(h)
+        }
+
+        if let cString = mpv_get_property_string(mpv, "hwdec-current") {
+            hwdec = String(cString: cString)
+            mpv_free(cString)
+        }
+
+        return (codec, height, hwdec)
     }
 
     func setup(errorBinding: Binding<String?>?) -> Bool {
@@ -732,9 +847,12 @@ class MPVPlayerCore: NSObject {
     #endif
 
     private func startEventLoop() {
+        eventLoopGroup.enter()
         DispatchQueue.global(qos: .userInteractive).async { [weak self] in
+            defer { self?.eventLoopGroup.leave() }
             while let strongSelf = self, !strongSelf.isDestroyed, let mpv = strongSelf.mpv {
                 guard let event = mpv_wait_event(mpv, 0.5) else { continue }
+                if strongSelf.isDestroyed { break }
                 strongSelf.handleEvent(event.pointee)
 
                 if event.pointee.event_id == MPV_EVENT_SHUTDOWN {
@@ -751,7 +869,7 @@ class MPVPlayerCore: NSObject {
             if let msg = event.data?.assumingMemoryBound(to: mpv_event_log_message.self).pointee,
                let text = msg.text {
                 let logText = String(cString: text).trimmingCharacters(in: .whitespacesAndNewlines)
-                if !logText.isEmpty {
+                if !logText.isEmpty && !logText.hasPrefix("Set property:") {
                     print("MPV [\(String(cString: msg.level!))]: \(logText)")
                 }
             }
@@ -764,6 +882,10 @@ class MPVPlayerCore: NSObject {
 
         case MPV_EVENT_PLAYBACK_RESTART:
             print("MPV: Playback started/restarted")
+            let info = getVideoInfo()
+            DispatchQueue.main.async { [weak self] in
+                self?.onVideoInfoUpdate?(info.codec, info.height, info.hwdec)
+            }
 
         case MPV_EVENT_AUDIO_RECONFIG:
             print("MPV: Audio reconfigured")
@@ -818,6 +940,7 @@ struct MPVContainerView: NSViewRepresentable {
     let seekBackwardTime: Int
     let seekForwardTime: Int
     var onPlaybackEnded: (() -> Void)?
+    var onVideoInfoUpdate: ((String?, Int?, String?) -> Void)?
 
     func makeNSView(context: Context) -> MPVPlayerNSView {
         let view = MPVPlayerNSView()
@@ -829,6 +952,7 @@ struct MPVContainerView: NSViewRepresentable {
             }
         }
         view.onPlaybackEnded = onPlaybackEnded
+        view.onVideoInfoUpdate = onVideoInfoUpdate
         view.loadURL(url)
         view.startPositionPolling()
         context.coordinator.playerView = view
@@ -875,6 +999,7 @@ class MPVPlayerNSView: NSView {
     private var metalLayer: CAMetalLayer?
     var onPositionUpdate: ((Double, Double) -> Void)?
     var onPlaybackEnded: (() -> Void)?
+    var onVideoInfoUpdate: ((String?, Int?, String?) -> Void)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -913,6 +1038,9 @@ class MPVPlayerNSView: NSView {
         player?.onPlaybackEnded = { [weak self] in
             self?.onPlaybackEnded?()
         }
+        player?.onVideoInfoUpdate = { [weak self] codec, height, hwdec in
+            self?.onVideoInfoUpdate?(codec, height, hwdec)
+        }
     }
 
     func loadURL(_ url: URL) {
@@ -942,6 +1070,9 @@ class MPVPlayerNSView: NSView {
     func cleanup() {
         player?.destroy()
         player = nil
+        onPositionUpdate = nil
+        onPlaybackEnded = nil
+        onVideoInfoUpdate = nil
     }
 }
 
@@ -966,6 +1097,8 @@ struct MPVContainerView: UIViewRepresentable {
     var onDismiss: (() -> Void)?
     #endif
 
+    var onVideoInfoUpdate: ((String?, Int?, String?) -> Void)?
+
     func makeUIView(context: Context) -> MPVPlayerGLView {
         let view = MPVPlayerGLView(frame: .zero)
         view.setup(errorBinding: $errorMessage)
@@ -976,6 +1109,7 @@ struct MPVContainerView: UIViewRepresentable {
             }
         }
         view.onPlaybackEnded = onPlaybackEnded
+        view.onVideoInfoUpdate = onVideoInfoUpdate
         view.loadURL(url)
         view.startPositionPolling()
         context.coordinator.playerView = view
@@ -1037,6 +1171,7 @@ class MPVPlayerGLView: GLKView {
     let renderQueue = DispatchQueue(label: "nexuspvr.opengl", qos: .userInteractive)
     var onPositionUpdate: ((Double, Double) -> Void)?
     var onPlaybackEnded: (() -> Void)?
+    var onVideoInfoUpdate: ((String?, Int?, String?) -> Void)?
 
     #if os(tvOS)
     // Callbacks for tvOS remote control
@@ -1194,6 +1329,9 @@ class MPVPlayerGLView: GLKView {
         player?.onPlaybackEnded = { [weak self] in
             self?.onPlaybackEnded?()
         }
+        player?.onVideoInfoUpdate = { [weak self] codec, height, hwdec in
+            self?.onVideoInfoUpdate?(codec, height, hwdec)
+        }
     }
 
     func loadURL(_ url: URL) {
@@ -1231,6 +1369,9 @@ class MPVPlayerGLView: GLKView {
         renderQueue.sync {}
         player?.destroy()
         player = nil
+        onPositionUpdate = nil
+        onPlaybackEnded = nil
+        onVideoInfoUpdate = nil
     }
 }
 #endif
