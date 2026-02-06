@@ -143,7 +143,8 @@ Sizes required:
 
 Location: `Assets.xcassets/tv.brandassets/App Icon.imagestack/`
 
-### Example: Generate tvOS Icon Layers
+### Generate tvOS Icon Layers
+Use python3 to generate images
 
 ```python
 from PIL import Image, ImageDraw
