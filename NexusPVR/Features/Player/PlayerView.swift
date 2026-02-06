@@ -164,19 +164,21 @@ struct PlayerView: View {
             .opacity(0)
             .frame(width: 0, height: 0)
 
-            Button("") {
-                seekBackward?()
-            }
-            .keyboardShortcut(.leftArrow, modifiers: [])
-            .opacity(0)
-            .frame(width: 0, height: 0)
+            if !isLiveStream {
+                Button("") {
+                    seekBackward?()
+                }
+                .keyboardShortcut(.leftArrow, modifiers: [])
+                .opacity(0)
+                .frame(width: 0, height: 0)
 
-            Button("") {
-                seekForward?()
+                Button("") {
+                    seekForward?()
+                }
+                .keyboardShortcut(.rightArrow, modifiers: [])
+                .opacity(0)
+                .frame(width: 0, height: 0)
             }
-            .keyboardShortcut(.rightArrow, modifiers: [])
-            .opacity(0)
-            .frame(width: 0, height: 0)
             #endif
         }
         .background(Color.black)
@@ -269,8 +271,8 @@ struct PlayerView: View {
 
             Spacer()
 
-            // Bottom controls: progress bar and time
-            if duration > 0 {
+            // Bottom controls: progress bar and time (recordings only)
+            if !isLiveStream && duration > 0 {
                 bottomControls
             }
         }
@@ -283,17 +285,21 @@ struct PlayerView: View {
         )
     }
 
+    private var isLiveStream: Bool { recordingId == nil }
+
     private var centerControls: some View {
         HStack(spacing: 48) {
-            // Seek backward button
-            Button {
-                seekBackward?()
-            } label: {
-                Image(systemName: "gobackward.\(seekBackwardTime)")
-                    .font(.system(size: 40))
-                    .foregroundStyle(.white)
+            if !isLiveStream {
+                // Seek backward button
+                Button {
+                    seekBackward?()
+                } label: {
+                    Image(systemName: "gobackward.\(seekBackwardTime)")
+                        .font(.system(size: 40))
+                        .foregroundStyle(.white)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
 
             // Play/pause button
             Button {
@@ -305,15 +311,17 @@ struct PlayerView: View {
             }
             .buttonStyle(.plain)
 
-            // Seek forward button
-            Button {
-                seekForward?()
-            } label: {
-                Image(systemName: "goforward.\(seekForwardTime)")
-                    .font(.system(size: 40))
-                    .foregroundStyle(.white)
+            if !isLiveStream {
+                // Seek forward button
+                Button {
+                    seekForward?()
+                } label: {
+                    Image(systemName: "goforward.\(seekForwardTime)")
+                        .font(.system(size: 40))
+                        .foregroundStyle(.white)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
     }
 
