@@ -547,53 +547,69 @@ class MPVPlayerCore: NSObject {
         mpv_set_option_string(mpv, "opengl-es", "yes")
         #endif
 
-        // Disable youtube-dl/yt-dlp - not needed for direct streams
+        // Enable yt-dlp for direct YouTube URL support (optional)
         mpv_set_option_string(mpv, "ytdl", "no")
 
-        // Hardware decoding - VideoToolbox with zero-copy interop
-        mpv_set_option_string(mpv, "hwdec", "videotoolbox")
-        mpv_set_option_string(mpv, "gpu-hwdec-interop", "videotoolbox")
+        // Disable ALL Lua scripts — LuaJIT's JIT compiler generates code at runtime
+        // that violates macOS hardened runtime code signing (SIGKILL Code Signature Invalid).
+        // Each built-in script must be disabled individually; load-scripts only affects external ones.
+        mpv_set_option_string(mpv, "load-scripts", "no")
+        mpv_set_option_string(mpv, "osc", "no")
+        mpv_set_option_string(mpv, "load-stats-overlay", "no")
+        mpv_set_option_string(mpv, "load-console", "no")
+        mpv_set_option_string(mpv, "load-auto-profiles", "no")
+        mpv_set_option_string(mpv, "load-select", "no")
+        mpv_set_option_string(mpv, "load-commands", "no")
+        mpv_set_option_string(mpv, "load-context-menu", "no")
+        mpv_set_option_string(mpv, "load-positioning", "no")
+        mpv_set_option_string(mpv, "input-default-bindings", "no")
 
-        // Deinterlacing for TV recordings (often interlaced)
-        mpv_set_option_string(mpv, "deinterlace", "auto")
+        // Hardware decoding - only H.264/HEVC use hardware decode
+        // AV1/VP9 forced to software (AV1 hwdec is broken on iOS, causes texture errors)
+        mpv_set_option_string(mpv, "hwdec", "auto-safe")
+        mpv_set_option_string(mpv, "hwdec-codecs", "h264,hevc,av1")
 
-        // Keep player open after playback
+        // CPU threading for software decode (MPV recommends max 16)
+        let threadCount = min(ProcessInfo.processInfo.processorCount * 2, 16)
+        mpv_set_option_string(mpv, "vd-lavc-threads", "\(threadCount)")
+
+        // Keep player open
         mpv_set_option_string(mpv, "keep-open", "yes")
         mpv_set_option_string(mpv, "idle", "yes")
 
-        // Streaming/buffering options - moderate buffers for recordings
+        // Buffering for streaming - wait for video to buffer before starting
         mpv_set_option_string(mpv, "cache", "yes")
-        mpv_set_option_string(mpv, "cache-secs", "30")
-        mpv_set_option_string(mpv, "demuxer-max-bytes", "64MiB")
-        mpv_set_option_string(mpv, "demuxer-max-back-bytes", "32MiB")
-        mpv_set_option_string(mpv, "demuxer-readahead-secs", "10")
-
-        // Network options
+        mpv_set_option_string(mpv, "cache-secs", "120")
+        mpv_set_option_string(mpv, "cache-pause-initial", "yes")  // Pause until cache is filled initially
+        mpv_set_option_string(mpv, "cache-pause-wait", "2")  // Wait for 2 seconds of cache before resuming
+        mpv_set_option_string(mpv, "demuxer-max-bytes", "150MiB")
+        mpv_set_option_string(mpv, "demuxer-max-back-bytes", "150MiB")
+        mpv_set_option_string(mpv, "demuxer-readahead-secs", "20")
+        mpv_set_option_string(mpv, "demuxer-seekable-cache", "yes")
+        
+        // Network
         mpv_set_option_string(mpv, "network-timeout", "30")
         mpv_set_option_string(mpv, "demuxer-lavf-o", "reconnect=1,reconnect_streamed=1")
 
-        // Audio options - use audiounit on Apple platforms
+        // Audio
         #if !os(macOS)
         mpv_set_option_string(mpv, "ao", "audiounit")
         #endif
         mpv_set_option_string(mpv, "audio-channels", "stereo")
         mpv_set_option_string(mpv, "volume", "100")
-        mpv_set_option_string(mpv, "audio-buffer", "1.0")
+        mpv_set_option_string(mpv, "audio-buffer", "0.2")  // Smaller buffer for faster audio sync after seek
         mpv_set_option_string(mpv, "audio-fallback-to-null", "yes")
+        mpv_set_option_string(mpv, "audio-stream-silence", "yes")  // Output silence while audio buffers (avoid muting)
+        
+        // Seeking - precise seeks for better audio sync with external audio tracks
+        mpv_set_option_string(mpv, "hr-seek", "yes")
 
-        // Fast scaling (reduce GPU load)
-        mpv_set_option_string(mpv, "scale", "bilinear")
-        mpv_set_option_string(mpv, "dscale", "bilinear")
+        // Dithering (required for Apple's OpenGL implementation)
         mpv_set_option_string(mpv, "dither", "ordered")
 
-        // Disable expensive post-processing for streaming
-        mpv_set_option_string(mpv, "interpolation", "no")
-        mpv_set_option_string(mpv, "deband", "no")
-        mpv_set_option_string(mpv, "correct-downscaling", "no")
-
-        // Demuxer options
+        // Demuxer - minimal probing for faster startup (like Yattee)
         mpv_set_option_string(mpv, "demuxer", "lavf")
-        mpv_set_option_string(mpv, "demuxer-lavf-probe-info", "yes")
+        mpv_set_option_string(mpv, "demuxer-lavf-probe-info", "no")
         mpv_set_option_string(mpv, "demuxer-lavf-analyzeduration", "1")
 
         // Initialize MPV
