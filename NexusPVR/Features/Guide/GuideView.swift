@@ -497,29 +497,16 @@ struct GuideView: View {
     }
 
     private func tvOSChannelCell(channel: Channel, isSelected: Bool) -> some View {
-        HStack(spacing: 12) {
-            CachedAsyncImage(url: client.channelIconURL(channelId: channel.id)) { image in
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-            } placeholder: {
-                Image(systemName: "tv")
-                    .font(.title)
-                    .foregroundStyle(Theme.textTertiary)
-            }
-            .frame(width: 80, height: 60)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("\(channel.number)")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(Theme.textSecondary)
-                Text(channel.name)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Theme.textPrimary)
-                    .lineLimit(1)
-            }
+        CachedAsyncImage(url: client.channelIconURL(channelId: channel.id)) { image in
+            image
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+        } placeholder: {
+            Image(systemName: "tv")
+                .font(.title)
+                .foregroundStyle(Theme.textTertiary)
         }
-        .padding(.horizontal, 12)
+        .frame(width: 80, height: 60)
         .frame(width: channelWidth, height: rowHeight)
         .background(isSelected ? Color(white: 0.15) : Theme.surfaceElevated)
     }
