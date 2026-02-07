@@ -412,8 +412,8 @@ struct ProgramDetailView: View {
     private func checkIfScheduled() async {
         do {
             // Load all recordings to check if this program is scheduled
-            let (completed, scheduled) = try await client.getAllRecordings()
-            let allRecordings = completed + scheduled
+            let (completed, recording, scheduled) = try await client.getAllRecordings()
+            let allRecordings = completed + recording + scheduled
 
             // Find if there's a recording for this program
             if let recording = allRecordings.first(where: { $0.epgEventId == program.id }) {

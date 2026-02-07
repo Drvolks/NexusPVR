@@ -41,6 +41,7 @@ struct PlayerView: View {
     @State private var seekToPositionFunc: ((Double) -> Void)?
     @State private var hasResumed = false
     @State private var isPlayerReady = false
+    @State private var startTimeOffset: Double = 0
     @State private var videoCodec: String?
     @State private var videoHeight: Int?
     @State private var hwDecoder: String?
@@ -208,6 +209,11 @@ struct PlayerView: View {
             // Resume playback position once duration is known (playback has started)
             if !hasResumed && duration > 0 {
                 hasResumed = true
+                // Capture initial position as display offset for streams with non-zero
+                // start times (e.g., in-progress recordings with PTS offset)
+                if currentPosition > 1 {
+                    startTimeOffset = currentPosition
+                }
                 if let resumePos = resumePosition, resumePos > 0 {
                     // Has resume position - seek then show player
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -354,12 +360,12 @@ struct PlayerView: View {
                         .onChanged { value in
                             isSeeking = true
                             let progress = max(0, min(1, value.location.x / geometry.size.width))
-                            seekPosition = progress * duration
+                            seekPosition = progress * duration + startTimeOffset
                             scheduleHideControls()
                         }
                         .onEnded { value in
                             let progress = max(0, min(1, value.location.x / geometry.size.width))
-                            let targetPosition = progress * duration
+                            let targetPosition = progress * duration + startTimeOffset
                             seekToPosition(targetPosition)
                             isSeeking = false
                         }
@@ -370,7 +376,7 @@ struct PlayerView: View {
 
             // Time labels
             HStack {
-                Text(formatTime(isSeeking ? seekPosition : currentPosition))
+                Text(formatTime((isSeeking ? seekPosition : currentPosition) - startTimeOffset))
                     .font(.caption)
                     .foregroundStyle(.white)
                     .monospacedDigit()
@@ -389,8 +395,8 @@ struct PlayerView: View {
 
     private func progressWidth(for totalWidth: CGFloat) -> CGFloat {
         guard duration > 0 else { return 0 }
-        let position = isSeeking ? seekPosition : currentPosition
-        let progress = position / duration
+        let adjPosition = (isSeeking ? seekPosition : currentPosition) - startTimeOffset
+        let progress = adjPosition / duration
         return max(0, min(totalWidth, CGFloat(progress) * totalWidth))
     }
 

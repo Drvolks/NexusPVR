@@ -30,6 +30,10 @@ enum RecordingStatus: String, Codable {
         self == .ready
     }
 
+    var isPlayable: Bool {
+        self == .ready || self == .recording
+    }
+
     var isScheduled: Bool {
         self == .pending
     }
@@ -71,7 +75,7 @@ struct Recording: Identifiable, Codable, Hashable {
 
     var recordingStatus: RecordingStatus {
         guard let status else { return .pending }
-        return RecordingStatus(rawValue: status) ?? .pending
+        return RecordingStatus(rawValue: status.lowercased()) ?? .pending
     }
 
     var fileSizeFormatted: String? {

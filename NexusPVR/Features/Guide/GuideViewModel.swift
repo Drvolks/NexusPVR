@@ -103,10 +103,15 @@ final class GuideViewModel: ObservableObject {
             async let listingsTask = client.getAllListings(for: sortedChannels)
             async let recordingsTask = client.getAllRecordings()
 
-            let (loadedListings, (completed, scheduled)) = try await (listingsTask, recordingsTask)
+            let (loadedListings, (completed, recording, scheduled)) = try await (listingsTask, recordingsTask)
 
             // Update recordings (didSet rebuilds O(1) lookup index)
-            recordings = completed + scheduled
+            recordings = completed + recording + scheduled
+            #if DEBUG
+            for r in recordings {
+                print("GuideVM: Recording id=\(r.id) name=\(r.name) status=\(r.status ?? "nil") epgEventId=\(r.epgEventId.map(String.init) ?? "nil") channelId=\(r.channelId.map(String.init) ?? "nil")")
+            }
+            #endif
 
             listings = loadedListings
             updateVisiblePrograms()
@@ -159,5 +164,57 @@ final class GuideViewModel: ObservableObject {
 
     func recordingStatus(_ program: Program) -> RecordingStatus? {
         recordingsByEventId[program.id]?.recordingStatus
+    }
+
+    func recordingId(for program: Program) -> Int? {
+        // Try direct event ID match first
+        if let id = recordingsByEventId[program.id]?.id {
+            return id
+        }
+        // Fallback: find a recording on the same channel that overlaps this program's time
+        guard let channelId = program.channelId else { return nil }
+        return findOverlappingRecording(channelId: channelId, programStart: program.startDate, programEnd: program.endDate)?.id
+    }
+
+    /// Check if a program has a recording, including fallback by channel/time overlap
+    func activeRecordingId(for program: Program, channelId: Int) -> Int? {
+        if let id = recordingsByEventId[program.id]?.id {
+            #if DEBUG
+            print("GuideVM: activeRecordingId matched by epgEventId for '\(program.name)' -> \(id)")
+            #endif
+            return id
+        }
+        let match = findOverlappingRecording(channelId: channelId, programStart: program.startDate, programEnd: program.endDate)
+        #if DEBUG
+        if let m = match {
+            print("GuideVM: activeRecordingId matched by channel/time for '\(program.name)' -> \(m.id)")
+        } else {
+            let inProgress = recordings.filter { $0.recordingStatus == .recording }
+            print("GuideVM: activeRecordingId NO match for '\(program.name)' programId=\(program.id) channelId=\(channelId) isAiring=\(program.isCurrentlyAiring) recordingsWithRecordingStatus=\(inProgress.count) totalRecordings=\(recordings.count)")
+        }
+        #endif
+        return match?.id
+    }
+
+    /// Find a recording in progress that overlaps the given time range on the given channel
+    private func findOverlappingRecording(channelId: Int, programStart: Date, programEnd: Date) -> Recording? {
+        for r in recordings {
+            guard r.channelId == channelId else { continue }
+            guard r.recordingStatus == .recording else { continue }
+            guard let rStart = r.startDate, let rEnd = r.endDate else { continue }
+            if rStart < programEnd && rEnd > programStart {
+                return r
+            }
+        }
+        return nil
+    }
+
+    func reloadRecordings(client: NextPVRClient) async {
+        do {
+            let (completed, recording, scheduled) = try await client.getAllRecordings()
+            recordings = completed + recording + scheduled
+        } catch {
+            // Silently fail - recordings indicator will update on next full reload
+        }
     }
 }

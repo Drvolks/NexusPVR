@@ -256,7 +256,7 @@ struct RecordingRowTV: View {
 
     var body: some View {
         Button {
-            if recording.recordingStatus.isCompleted {
+            if recording.recordingStatus.isPlayable {
                 onPlay()
             } else {
                 onShowDetails()

@@ -141,8 +141,8 @@ struct TopicProgramRow: View {
 
     private func checkIfScheduled() async {
         do {
-            let (completed, scheduled) = try await client.getAllRecordings()
-            let allRecordings = completed + scheduled
+            let (completed, recording, scheduled) = try await client.getAllRecordings()
+            let allRecordings = completed + recording + scheduled
 
             #if DEBUG
             print("TopicProgramRow: Checking program '\(program.name)' at \(program.startDate)")
@@ -418,8 +418,8 @@ struct TopicProgramRowTV: View {
 
     private func checkIfScheduled() async {
         do {
-            let (completed, scheduled) = try await client.getAllRecordings()
-            let allRecordings = completed + scheduled
+            let (completed, recording, scheduled) = try await client.getAllRecordings()
+            let allRecordings = completed + recording + scheduled
 
             if let recording = allRecordings.first(where: { $0.epgEventId == program.id }) {
                 isScheduled = true
