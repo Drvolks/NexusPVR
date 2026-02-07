@@ -36,6 +36,7 @@ struct GuideView: View {
 
     @State private var selectedProgramDetail: (program: Program, channel: Channel)?
     @State private var streamError: String?
+    @State private var inProgressProgram: (program: Program, channel: Channel, recordingId: Int)?
 
     // Cache keywords to avoid disk I/O during rendering
     @State private var cachedKeywords: [String] = []
@@ -52,6 +53,30 @@ struct GuideView: View {
             #endif
             .sheet(item: programDetailBinding, onDismiss: onDismissDetail) { detail in
                 programDetailSheet(detail)
+            }
+            .confirmationDialog("Recording in Progress",
+                                isPresented: .constant(inProgressProgram != nil),
+                                presenting: inProgressProgram) { info in
+                Button("Watch from Beginning") {
+                    Task {
+                        do {
+                            let url = try await client.recordingStreamURL(recordingId: info.recordingId)
+                            appState.playStream(url: url, title: info.program.name, recordingId: info.recordingId)
+                        } catch {
+                            streamError = error.localizedDescription
+                        }
+                    }
+                    inProgressProgram = nil
+                }
+                Button("Watch Live") {
+                    playLiveChannel(info.channel)
+                    inProgressProgram = nil
+                }
+                Button("Cancel", role: .cancel) {
+                    inProgressProgram = nil
+                }
+            } message: { info in
+                Text("\(info.program.name) is currently recording.")
             }
             .alert("Error", isPresented: .constant(streamError != nil)) {
                 Button("OK") { streamError = nil }
@@ -395,6 +420,11 @@ struct GuideView: View {
             .onPlayPauseCommand {
                 selectFocusedProgram()
             }
+            .contextMenu {
+                if let info = focusedProgramInfo {
+                    tvOSContextMenuItems(program: info.program, channel: info.channel)
+                }
+            }
         }
         .ignoresSafeArea(.all, edges: .leading)
     }
@@ -615,6 +645,70 @@ struct GuideView: View {
             selectedProgramDetail = (program: program, channel: channel)
         }
     }
+
+    private var focusedProgramInfo: (program: Program, channel: Channel)? {
+        let channels = viewModel.channels
+        guard focusedRow < channels.count else { return nil }
+        let channel = channels[focusedRow]
+        let programs = tvOSVisiblePrograms(for: channel)
+        guard focusedColumn < programs.count else { return nil }
+        return (programs[focusedColumn], channel)
+    }
+
+    @ViewBuilder
+    private func tvOSContextMenuItems(program: Program, channel: Channel) -> some View {
+        if program.isCurrentlyAiring, let recId = viewModel.activeRecordingId(for: program, channelId: channel.id) {
+            Button {
+                Task {
+                    do {
+                        let url = try await client.recordingStreamURL(recordingId: recId)
+                        appState.playStream(url: url, title: program.name, recordingId: recId)
+                    } catch {
+                        streamError = error.localizedDescription
+                    }
+                }
+            } label: {
+                Label("Watch from Beginning", systemImage: "play.fill")
+            }
+            Button {
+                playLiveChannel(channel)
+            } label: {
+                Label("Watch Live", systemImage: "dot.radiowaves.left.and.right")
+            }
+            Button {
+                Task {
+                    try? await client.cancelRecording(recordingId: recId)
+                    await viewModel.reloadRecordings(client: client)
+                }
+            } label: {
+                Label("Cancel Recording", systemImage: "xmark.circle")
+            }
+        } else if viewModel.isScheduledRecording(program), let recId = viewModel.recordingId(for: program) {
+            Button {
+                Task {
+                    try? await client.cancelRecording(recordingId: recId)
+                    await viewModel.reloadRecordings(client: client)
+                }
+            } label: {
+                Label("Cancel Recording", systemImage: "xmark.circle")
+            }
+        } else if !program.hasEnded {
+            Button {
+                Task {
+                    try? await client.scheduleRecording(eventId: program.id)
+                    await viewModel.reloadRecordings(client: client)
+                }
+            } label: {
+                Label("Record", systemImage: "record.circle")
+            }
+        }
+
+        Button {
+            selectedProgramDetail = (program: program, channel: channel)
+        } label: {
+            Label("Details", systemImage: "info.circle")
+        }
+    }
     #endif
 
     private var timelineHeaderContent: some View {
@@ -712,8 +806,10 @@ struct GuideView: View {
 
                 Button {
                     #if os(tvOS)
-                    // tvOS: live programs play directly, past/future show details
-                    if program.isCurrentlyAiring {
+                    // tvOS: recording in progress shows options, live plays directly
+                    if program.isCurrentlyAiring, let recId = viewModel.activeRecordingId(for: program, channelId: channel.id) {
+                        inProgressProgram = (program: program, channel: channel, recordingId: recId)
+                    } else if program.isCurrentlyAiring {
                         playLiveChannel(channel)
                     } else {
                         selectedProgramDetail = (program: program, channel: channel)
@@ -735,7 +831,35 @@ struct GuideView: View {
                 .buttonStyle(TVGuideButtonStyle())
                 .focusEffectDisabled()
                 .contextMenu {
-                    if program.isCurrentlyAiring {
+                    if program.isCurrentlyAiring, let recId = viewModel.activeRecordingId(for: program, channelId: channel.id) {
+                        Button {
+                            Task {
+                                do {
+                                    let url = try await client.recordingStreamURL(recordingId: recId)
+                                    appState.playStream(url: url, title: program.name, recordingId: recId)
+                                } catch {
+                                    streamError = error.localizedDescription
+                                }
+                            }
+                        } label: {
+                            Label("Watch from Beginning", systemImage: "play.fill")
+                        }
+
+                        Button {
+                            playLiveChannel(channel)
+                        } label: {
+                            Label("Watch Live", systemImage: "dot.radiowaves.left.and.right")
+                        }
+
+                        Button {
+                            Task {
+                                try? await client.cancelRecording(recordingId: recId)
+                                await viewModel.reloadRecordings(client: client)
+                            }
+                        } label: {
+                            Label("Cancel Recording", systemImage: "xmark.circle")
+                        }
+                    } else if program.isCurrentlyAiring {
                         Button {
                             selectedProgramDetail = (program: program, channel: channel)
                         } label: {
@@ -753,6 +877,63 @@ struct GuideView: View {
                 }
                 #else
                 .buttonStyle(.plain)
+                .contextMenu {
+                    if program.isCurrentlyAiring, let recId = viewModel.activeRecordingId(for: program, channelId: channel.id) {
+                        Button {
+                            Task {
+                                do {
+                                    let url = try await client.recordingStreamURL(recordingId: recId)
+                                    appState.playStream(url: url, title: program.name, recordingId: recId)
+                                } catch {
+                                    streamError = error.localizedDescription
+                                }
+                            }
+                        } label: {
+                            Label("Watch from Beginning", systemImage: "play.fill")
+                        }
+
+                        Button {
+                            playLiveChannel(channel)
+                        } label: {
+                            Label("Watch Live", systemImage: "dot.radiowaves.left.and.right")
+                        }
+
+                        Button {
+                            Task {
+                                try? await client.cancelRecording(recordingId: recId)
+                                await viewModel.reloadRecordings(client: client)
+                            }
+                        } label: {
+                            Label("Cancel Recording", systemImage: "xmark.circle")
+                        }
+                    } else if !program.hasEnded {
+                        if isScheduled, let recId = viewModel.recordingId(for: program) {
+                            Button {
+                                Task {
+                                    try? await client.cancelRecording(recordingId: recId)
+                                    await viewModel.reloadRecordings(client: client)
+                                }
+                            } label: {
+                                Label("Cancel Recording", systemImage: "xmark.circle")
+                            }
+                        } else {
+                            Button {
+                                Task {
+                                    try? await client.scheduleRecording(eventId: program.id)
+                                    await viewModel.reloadRecordings(client: client)
+                                }
+                            } label: {
+                                Label("Record", systemImage: "record.circle")
+                            }
+                        }
+                    }
+
+                    Button {
+                        selectedProgramDetail = (program: program, channel: channel)
+                    } label: {
+                        Label("Details", systemImage: "info.circle")
+                    }
+                }
                 #endif
                 .offset(x: viewModel.programOffset(for: program, hourWidth: hourWidth, startTime: timelineStart))
             }
@@ -806,8 +987,8 @@ struct GuideView: View {
 
     private func refreshRecordings() async {
         do {
-            let (completed, scheduled) = try await client.getAllRecordings()
-            viewModel.recordings = completed + scheduled
+            let (completed, recording, scheduled) = try await client.getAllRecordings()
+            viewModel.recordings = completed + recording + scheduled
         } catch {
             // Silently fail - the grid just won't update the indicators
         }

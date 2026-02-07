@@ -230,18 +230,18 @@ final class NextPVRClient: ObservableObject {
         return response.recordings ?? []
     }
 
-    func getCompletedRecordings() async throws -> [Recording] {
-        try await getRecordings(filter: "ready")
-    }
+    func getAllRecordings() async throws -> (completed: [Recording], recording: [Recording], scheduled: [Recording]) {
+        async let ready = getRecordings(filter: "ready")
+        async let inProgress = getRecordings(filter: "recording")
+        async let pending = getRecordings(filter: "pending")
 
-    func getScheduledRecordings() async throws -> [Recording] {
-        try await getRecordings(filter: "pending")
-    }
-
-    func getAllRecordings() async throws -> (completed: [Recording], scheduled: [Recording]) {
-        async let completed = getCompletedRecordings()
-        async let scheduled = getScheduledRecordings()
-        return try await (completed, scheduled)
+        let (readyResults, inProgressResults, pendingResults) = try await (ready, inProgress, pending)
+        // The API can return recordings across multiple filters; categorize by actual status
+        let activeRecordings = inProgressResults.filter { $0.recordingStatus == .recording }
+        let activeIds = Set(activeRecordings.map(\.id))
+        let completedRecordings = readyResults.filter { !activeIds.contains($0.id) }
+        let scheduledRecordings = pendingResults.filter { !activeIds.contains($0.id) }
+        return (completedRecordings, activeRecordings, scheduledRecordings)
     }
 
     func scheduleRecording(eventId: Int) async throws {

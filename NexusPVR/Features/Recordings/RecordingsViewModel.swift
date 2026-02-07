@@ -8,9 +8,9 @@
 import SwiftUI
 import Combine
 
-enum RecordingsFilter: String, CaseIterable, Identifiable {
-    case all = "All"
+enum RecordingsFilter: String, Identifiable {
     case completed = "Completed"
+    case recording = "Recording"
     case scheduled = "Scheduled"
 
     var id: String { rawValue }
@@ -19,6 +19,7 @@ enum RecordingsFilter: String, CaseIterable, Identifiable {
 @MainActor
 final class RecordingsViewModel: ObservableObject {
     @Published var completedRecordings: [Recording] = []
+    @Published var activeRecordings: [Recording] = []
     @Published var scheduledRecordings: [Recording] = []
     @Published var isLoading = false
     @Published var error: String?
@@ -30,15 +31,19 @@ final class RecordingsViewModel: ObservableObject {
         self.client = client
     }
 
+    var hasActiveRecordings: Bool {
+        !activeRecordings.isEmpty
+    }
+
     var filteredRecordings: [Recording] {
         switch filter {
-        case .all:
-            return (completedRecordings + scheduledRecordings).sorted { r1, r2 in
+        case .completed:
+            return completedRecordings.sorted { r1, r2 in
                 guard let d1 = r1.startDate, let d2 = r2.startDate else { return false }
                 return d1 > d2
             }
-        case .completed:
-            return completedRecordings.sorted { r1, r2 in
+        case .recording:
+            return activeRecordings.sorted { r1, r2 in
                 guard let d1 = r1.startDate, let d2 = r2.startDate else { return false }
                 return d1 > d2
             }
@@ -67,13 +72,16 @@ final class RecordingsViewModel: ObservableObject {
                 try await client.authenticate()
             }
 
-            let (completed, scheduled) = try await client.getAllRecordings()
+            let (completed, recording, scheduled) = try await client.getAllRecordings()
             completedRecordings = completed
+            activeRecordings = recording
             scheduledRecordings = scheduled
-            #if DEBUG
-            print("RecordingsViewModel: Loaded \(completedRecordings.count) completed, \(scheduledRecordings.count) scheduled")
-            print("RecordingsViewModel: Filtered recordings count: \(filteredRecordings.count)")
-            #endif
+
+            // If viewing recording tab but no active recordings, switch to completed
+            if filter == .recording && activeRecordings.isEmpty {
+                filter = .completed
+            }
+
             isLoading = false
         } catch {
             self.error = error.localizedDescription
@@ -86,6 +94,7 @@ final class RecordingsViewModel: ObservableObject {
 
         // Remove from local lists
         completedRecordings.removeAll { $0.id == recording.id }
+        activeRecordings.removeAll { $0.id == recording.id }
         scheduledRecordings.removeAll { $0.id == recording.id }
     }
 

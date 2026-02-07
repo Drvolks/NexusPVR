@@ -29,6 +29,7 @@ private struct RecordingsListContentView: View {
     @StateObject private var viewModel: RecordingsViewModel
     @Binding var selectedRecording: Recording?
     @Binding var deleteError: String?
+    @State private var inProgressRecording: Recording?
 
     init(client: NextPVRClient, appState: AppState,
          selectedRecording: Binding<Recording?>,
@@ -46,6 +47,9 @@ private struct RecordingsListContentView: View {
                 // Tab picker
                 Picker("Filter", selection: $viewModel.filter) {
                     Text("Completed").tag(RecordingsFilter.completed)
+                    if viewModel.hasActiveRecordings {
+                        Text("Recording").tag(RecordingsFilter.recording)
+                    }
                     Text("Scheduled").tag(RecordingsFilter.scheduled)
                 }
                 .pickerStyle(.segmented)
@@ -70,6 +74,23 @@ private struct RecordingsListContentView: View {
                 RecordingDetailView(recording: recording)
                     .environmentObject(client)
                     .environmentObject(appState)
+            }
+            .confirmationDialog("Play Recording", isPresented: .constant(inProgressRecording != nil), presenting: inProgressRecording) { recording in
+                Button("Play from Beginning") {
+                    playRecording(recording)
+                    inProgressRecording = nil
+                }
+                if recording.channelId != nil {
+                    Button("Watch Live") {
+                        playRecordingLive(recording)
+                        inProgressRecording = nil
+                    }
+                }
+                Button("Cancel", role: .cancel) {
+                    inProgressRecording = nil
+                }
+            } message: { recording in
+                Text("\(recording.name) is currently recording.")
             }
             .alert("Error", isPresented: .constant(deleteError != nil)) {
                 Button("OK") { deleteError = nil }
@@ -140,10 +161,10 @@ private struct RecordingsListContentView: View {
 
     private func emptyMessage(for filter: RecordingsFilter) -> String {
         switch filter {
-        case .all:
-            return "You don't have any recordings yet.\nSchedule recordings from the TV Guide."
         case .completed:
             return "No completed recordings."
+        case .recording:
+            return "No recordings in progress."
         case .scheduled:
             return "No scheduled recordings."
         }
@@ -163,12 +184,25 @@ private struct RecordingsListContentView: View {
                         }
                     )
                     .contextMenu {
-                        Button {
-                            if recording.recordingStatus.isCompleted {
+                        if recording.recordingStatus == .recording {
+                            Button {
                                 playRecording(recording)
+                            } label: {
+                                Label("Play from Beginning", systemImage: "play.fill")
                             }
-                        } label: {
-                            Label("Play", systemImage: "play.fill")
+                            if recording.channelId != nil {
+                                Button {
+                                    playRecordingLive(recording)
+                                } label: {
+                                    Label("Watch Live", systemImage: "dot.radiowaves.left.and.right")
+                                }
+                            }
+                        } else if recording.recordingStatus.isPlayable {
+                            Button {
+                                playRecording(recording)
+                            } label: {
+                                Label("Play", systemImage: "play.fill")
+                            }
                         }
 
                         Button {
@@ -193,7 +227,9 @@ private struct RecordingsListContentView: View {
                 RecordingRow(recording: recording)
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        if recording.recordingStatus.isCompleted {
+                        if recording.recordingStatus == .recording {
+                            inProgressRecording = recording
+                        } else if recording.recordingStatus.isPlayable {
                             playRecording(recording)
                         } else {
                             selectedRecording = recording
@@ -207,7 +243,20 @@ private struct RecordingsListContentView: View {
                         }
                     }
                     .contextMenu {
-                        if recording.recordingStatus.isCompleted {
+                        if recording.recordingStatus == .recording {
+                            Button {
+                                playRecording(recording)
+                            } label: {
+                                Label("Play from Beginning", systemImage: "play.fill")
+                            }
+                            if recording.channelId != nil {
+                                Button {
+                                    playRecordingLive(recording)
+                                } label: {
+                                    Label("Watch Live", systemImage: "dot.radiowaves.left.and.right")
+                                }
+                            }
+                        } else if recording.recordingStatus.isPlayable {
                             Button {
                                 playRecording(recording)
                             } label: {
@@ -248,6 +297,21 @@ private struct RecordingsListContentView: View {
                     title: recording.name,
                     recordingId: recording.id,
                     resumePosition: recording.playbackPosition
+                )
+            } catch {
+                deleteError = error.localizedDescription
+            }
+        }
+    }
+
+    private func playRecordingLive(_ recording: Recording) {
+        guard let channelId = recording.channelId else { return }
+        Task {
+            do {
+                let url = try await client.liveStreamURL(channelId: channelId)
+                appState.playStream(
+                    url: url,
+                    title: recording.name
                 )
             } catch {
                 deleteError = error.localizedDescription
