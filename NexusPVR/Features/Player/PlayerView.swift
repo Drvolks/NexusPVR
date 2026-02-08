@@ -80,6 +80,12 @@ struct PlayerView: View {
                 onToggleControls: {
                     toggleControls()
                 },
+                onShowControls: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showControls = true
+                    }
+                    scheduleHideControls()
+                },
                 onDismiss: {
                     savePlaybackPosition()
                     appState.stopPlayback()
@@ -1108,6 +1114,7 @@ struct MPVContainerView: UIViewRepresentable {
     #if os(tvOS)
     var onTogglePlayPause: (() -> Void)?
     var onToggleControls: (() -> Void)?
+    var onShowControls: (() -> Void)?
     var onDismiss: (() -> Void)?
     #endif
 
@@ -1144,8 +1151,14 @@ struct MPVContainerView: UIViewRepresentable {
         #if os(tvOS)
         // Set up tvOS remote control callbacks
         view.onPlayPause = onTogglePlayPause
-        view.onSeekForward = { view.seek(seconds: self.seekForwardTime) }
-        view.onSeekBackward = { view.seek(seconds: -self.seekBackwardTime) }
+        view.onSeekForward = {
+            view.seek(seconds: self.seekForwardTime)
+            self.onShowControls?()
+        }
+        view.onSeekBackward = {
+            view.seek(seconds: -self.seekBackwardTime)
+            self.onShowControls?()
+        }
         view.onSelect = onToggleControls
         view.onMenu = onDismiss
         #endif
