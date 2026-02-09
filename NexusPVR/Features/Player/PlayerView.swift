@@ -427,6 +427,7 @@ struct PlayerView: View {
 
     private var topBar: some View {
         HStack {
+            #if !os(tvOS)
             Button {
                 savePlaybackPosition()
                 appState.stopPlayback()
@@ -437,6 +438,7 @@ struct PlayerView: View {
                     .padding()
             }
             .buttonStyle(.plain)
+            #endif
 
             Text(title)
                 .font(.headline)
@@ -793,7 +795,7 @@ class MPVPlayerCore: NSObject {
 
         // Network
         mpv_set_option_string(mpv, "network-timeout", "30")
-        mpv_set_option_string(mpv, "demuxer-lavf-o", "reconnect=1,reconnect_streamed=1")
+        mpv_set_option_string(mpv, "stream-lavf-o", "reconnect=1,reconnect_streamed=1,reconnect_delay_max=5")
 
         // Audio
         #if !os(macOS)
@@ -808,8 +810,16 @@ class MPVPlayerCore: NSObject {
         // Seeking - precise seeks for better audio sync with external audio tracks
         mpv_set_option_string(mpv, "hr-seek", "yes")
 
-        // Dithering (required for Apple's OpenGL implementation)
+        // Disable MPV's built-in OSD (seek bar, etc.) — we use our own SwiftUI overlay
+        mpv_set_option_string(mpv, "osd-level", "0")
+
+        // Dithering - disabled on GLES 2.0 (tvOS/iOS) to avoid INVALID_ENUM texture errors
+        // in dumb mode. Content is 8-bit SDR to 8-bit display, so dithering has no effect.
+        #if os(macOS)
         mpv_set_option_string(mpv, "dither", "ordered")
+        #else
+        mpv_set_option_string(mpv, "dither", "no")
+        #endif
 
         // Demuxer
         mpv_set_option_string(mpv, "demuxer", "lavf")
