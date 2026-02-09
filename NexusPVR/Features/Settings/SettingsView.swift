@@ -13,7 +13,6 @@ struct SettingsView: View {
     @State private var showingKeywordsEditor = false
     @State private var seekBackwardSeconds: Int = UserPreferences.load().seekBackwardSeconds
     @State private var seekForwardSeconds: Int = UserPreferences.load().seekForwardSeconds
-    @State private var videoProfile: VideoProfile = UserPreferences.load().videoProfile
 
     #if os(tvOS)
     @State private var serverConfig = ServerConfig.load()
@@ -45,6 +44,7 @@ struct SettingsView: View {
                 serverSection
                 keywordsSection
                 playbackSection
+                playerStatsSection
             }
             .navigationTitle("Settings")
             #if os(iOS)
@@ -195,45 +195,9 @@ struct SettingsView: View {
                 // Playback Section
                 TVSettingsSection(
                     title: "Playback",
-                    icon: "play.circle",
-                    footer: "Smooth Playback enables deinterlacing and larger buffers for sports. Requires restarting playback to take effect."
+                    icon: "play.circle"
                 ) {
                     VStack(spacing: Theme.spacingMD) {
-                        // Video Profile
-                        VStack(spacing: Theme.spacingSM) {
-                            Text("Video Profile")
-                                .foregroundStyle(Theme.textPrimary)
-
-                            HStack(spacing: Theme.spacingMD) {
-                                ForEach(VideoProfile.allCases, id: \.self) { profile in
-                                    Button {
-                                        videoProfile = profile
-                                        var prefs = UserPreferences.load()
-                                        prefs.videoProfile = profile
-                                        prefs.save()
-                                    } label: {
-                                        VStack(spacing: 4) {
-                                            Text(profile.displayName)
-                                                .font(.callout)
-                                                .fontWeight(.medium)
-                                            Text(profile.subtitle)
-                                                .font(.caption2)
-                                                .foregroundStyle(videoProfile == profile ? .white.opacity(0.8) : Theme.textSecondary)
-                                        }
-                                        .padding(.horizontal, Theme.spacingLG)
-                                        .padding(.vertical, Theme.spacingMD)
-                                        .background(videoProfile == profile ? Theme.accent : Theme.surfaceElevated)
-                                        .foregroundStyle(videoProfile == profile ? .white : Theme.textPrimary)
-                                        .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
-                                    }
-                                    .buttonStyle(.card)
-                                }
-                            }
-                        }
-
-                        Divider()
-                            .background(Theme.textTertiary)
-
                         // Seek Backward
                         VStack(spacing: Theme.spacingSM) {
                             Text("Seek Backward")
@@ -293,6 +257,9 @@ struct SettingsView: View {
                     }
                 }
                 .focusSection()
+
+                // Player Stats Section
+                playerStatsSection
             }
             .padding(.vertical)
             .padding(.horizontal, 40)
@@ -420,12 +387,6 @@ struct SettingsView: View {
 
     private var playbackSection: some View {
         Section {
-            Picker("Video Profile", selection: $videoProfile) {
-                ForEach(VideoProfile.allCases, id: \.self) { profile in
-                    Text(profile.displayName).tag(profile)
-                }
-            }
-
             Picker("Seek Backward", selection: $seekBackwardSeconds) {
                 Text("5 seconds").tag(5)
                 Text("10 seconds").tag(10)
@@ -441,13 +402,6 @@ struct SettingsView: View {
             }
         } header: {
             Text("Playback")
-        } footer: {
-            Text("Smooth Playback enables deinterlacing and larger buffers for sports. Restart playback to apply changes.")
-        }
-        .onChange(of: videoProfile) {
-            var prefs = UserPreferences.load()
-            prefs.videoProfile = videoProfile
-            prefs.save()
         }
         .onChange(of: seekBackwardSeconds) {
             var prefs = UserPreferences.load()
@@ -458,6 +412,53 @@ struct SettingsView: View {
             var prefs = UserPreferences.load()
             prefs.seekForwardSeconds = seekForwardSeconds
             prefs.save()
+        }
+    }
+
+    #if os(tvOS)
+    private var playerStatsSection: some View {
+        let stats = PlayerStats.load()
+        return TVSettingsSection(
+            title: "Player Stats",
+            icon: "chart.bar",
+            footer: "From last played video"
+        ) {
+            VStack(spacing: Theme.spacingSM) {
+                statsRow(label: "Avg FPS", value: stats.avgFps > 0 ? String(format: "%.1f", stats.avgFps) : "--")
+                statsRow(label: "Avg Bitrate", value: stats.avgBitrateKbps > 0 ? String(format: "%.0f kbps", stats.avgBitrateKbps) : "--")
+                statsRow(label: "Max A/V Sync", value: stats.maxAvsync > 0 ? String(format: "%.3f s", stats.maxAvsync) : "--")
+                statsRow(label: "Dropped Frames", value: "\(stats.totalDroppedFrames)")
+                statsRow(label: "Decoder Dropped", value: "\(stats.totalDecoderDroppedFrames)")
+                statsRow(label: "VO Delayed", value: "\(stats.totalVoDelayedFrames)")
+            }
+        }
+    }
+    #else
+    private var playerStatsSection: some View {
+        let stats = PlayerStats.load()
+        return Section {
+            statsRow(label: "Avg FPS", value: stats.avgFps > 0 ? String(format: "%.1f", stats.avgFps) : "--")
+            statsRow(label: "Avg Bitrate", value: stats.avgBitrateKbps > 0 ? String(format: "%.0f kbps", stats.avgBitrateKbps) : "--")
+            statsRow(label: "Max A/V Sync", value: stats.maxAvsync > 0 ? String(format: "%.3f s", stats.maxAvsync) : "--")
+            statsRow(label: "Dropped Frames", value: "\(stats.totalDroppedFrames)")
+            statsRow(label: "Decoder Dropped", value: "\(stats.totalDecoderDroppedFrames)")
+            statsRow(label: "VO Delayed", value: "\(stats.totalVoDelayedFrames)")
+        } header: {
+            Text("Player Stats")
+        } footer: {
+            Text("From last played video")
+        }
+    }
+    #endif
+
+    private func statsRow(label: String, value: String) -> some View {
+        HStack {
+            Text(label)
+                .foregroundStyle(Theme.textSecondary)
+            Spacer()
+            Text(value)
+                .foregroundStyle(Theme.textPrimary)
+                .monospacedDigit()
         }
     }
 }

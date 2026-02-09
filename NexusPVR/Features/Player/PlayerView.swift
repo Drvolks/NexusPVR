@@ -538,6 +538,11 @@ class MPVPlayerCore: NSObject {
     private var lastHeight: Int?
     private var lastHwdec: String?
 
+    // Performance stats accumulation
+    private var fpsSamples: [Double] = []
+    private var bitrateSamples: [Double] = []
+    private var peakAvsync: Double = 0
+
     override init() {
         super.init()
     }
@@ -550,6 +555,7 @@ class MPVPlayerCore: NSObject {
         guard !isDestroyed else { return }
         isDestroyed = true
 
+        savePlayerStats()
         stopPositionPolling()
 
         // Nil out callbacks to break reference cycles with SwiftUI @State
@@ -580,6 +586,7 @@ class MPVPlayerCore: NSObject {
 
     func startPositionPolling() {
         stopPositionPolling()
+        var statsCounter = 0
         positionTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             let position = self.getTimePosition()
@@ -590,6 +597,11 @@ class MPVPlayerCore: NSObject {
                 self.lastCodec = info.codec
                 self.lastHeight = info.height
                 self.lastHwdec = info.hwdec
+            }
+            // Log performance stats every 5 seconds
+            statsCounter += 1
+            if statsCounter % 10 == 0 {
+                self.logPerformanceStats()
             }
             DispatchQueue.main.async {
                 self.onPositionUpdate?(position, duration)
@@ -603,6 +615,63 @@ class MPVPlayerCore: NSObject {
     func stopPositionPolling() {
         positionTimer?.invalidate()
         positionTimer = nil
+    }
+
+    private func logPerformanceStats() {
+        guard let mpv = mpv else { return }
+
+        var droppedFrames: Int64 = 0
+        mpv_get_property(mpv, "frame-drop-count", MPV_FORMAT_INT64, &droppedFrames)
+
+        var decoderDroppedFrames: Int64 = 0
+        mpv_get_property(mpv, "decoder-frame-drop-count", MPV_FORMAT_INT64, &decoderDroppedFrames)
+
+        var fps: Double = 0
+        mpv_get_property(mpv, "estimated-vf-fps", MPV_FORMAT_DOUBLE, &fps)
+
+        var avsync: Double = 0
+        mpv_get_property(mpv, "avsync", MPV_FORMAT_DOUBLE, &avsync)
+
+        var voDelayed: Int64 = 0
+        mpv_get_property(mpv, "vo-delayed-frame-count", MPV_FORMAT_INT64, &voDelayed)
+
+        var videoBitrate: Double = 0
+        mpv_get_property(mpv, "video-bitrate", MPV_FORMAT_DOUBLE, &videoBitrate)
+
+        var cacheUsed: Int64 = 0
+        mpv_get_property(mpv, "demuxer-cache-duration", MPV_FORMAT_INT64, &cacheUsed)
+
+        // Accumulate samples for averages
+        if fps > 0 { fpsSamples.append(fps) }
+        if videoBitrate > 0 { bitrateSamples.append(videoBitrate / 1000) }
+        peakAvsync = max(peakAvsync, abs(avsync))
+
+        print("MPV [perf]: fps=\(String(format: "%.1f", fps)) avsync=\(String(format: "%.3f", avsync))s dropped=\(droppedFrames) decoder-dropped=\(decoderDroppedFrames) vo-delayed=\(voDelayed) bitrate=\(String(format: "%.0f", videoBitrate / 1000))kbps cache=\(cacheUsed)s")
+    }
+
+    func savePlayerStats() {
+        guard let mpv = mpv else { return }
+
+        var droppedFrames: Int64 = 0
+        mpv_get_property(mpv, "frame-drop-count", MPV_FORMAT_INT64, &droppedFrames)
+
+        var decoderDroppedFrames: Int64 = 0
+        mpv_get_property(mpv, "decoder-frame-drop-count", MPV_FORMAT_INT64, &decoderDroppedFrames)
+
+        var voDelayed: Int64 = 0
+        mpv_get_property(mpv, "vo-delayed-frame-count", MPV_FORMAT_INT64, &voDelayed)
+
+        let avgFps = fpsSamples.isEmpty ? 0 : fpsSamples.reduce(0, +) / Double(fpsSamples.count)
+        let avgBitrate = bitrateSamples.isEmpty ? 0 : bitrateSamples.reduce(0, +) / Double(bitrateSamples.count)
+
+        var stats = PlayerStats()
+        stats.avgFps = avgFps
+        stats.avgBitrateKbps = avgBitrate
+        stats.totalDroppedFrames = droppedFrames
+        stats.totalDecoderDroppedFrames = decoderDroppedFrames
+        stats.totalVoDelayedFrames = voDelayed
+        stats.maxAvsync = peakAvsync
+        stats.save()
     }
 
     func getTimePosition() -> Double {
@@ -712,9 +781,6 @@ class MPVPlayerCore: NSObject {
         mpv_set_option_string(mpv, "keep-open", "yes")
         mpv_set_option_string(mpv, "idle", "yes")
 
-        // Load video profile for profile-specific settings
-        let videoProfile = UserPreferences.load().videoProfile
-
         // Buffering for streaming - wait for video to buffer before starting
         mpv_set_option_string(mpv, "cache", "yes")
         mpv_set_option_string(mpv, "cache-secs", "120")
@@ -722,21 +788,8 @@ class MPVPlayerCore: NSObject {
         mpv_set_option_string(mpv, "demuxer-max-bytes", "150MiB")
         mpv_set_option_string(mpv, "demuxer-max-back-bytes", "150MiB")
         mpv_set_option_string(mpv, "demuxer-seekable-cache", "yes")
-
-        switch videoProfile {
-        case .balanced:
-            mpv_set_option_string(mpv, "cache-pause-wait", "2")
-            mpv_set_option_string(mpv, "demuxer-readahead-secs", "20")
-        case .smooth:
-            // Larger buffer before resuming to avoid mid-playback stalls
-            mpv_set_option_string(mpv, "cache-pause-wait", "5")
-            // More readahead for high-bitrate sports streams
-            mpv_set_option_string(mpv, "demuxer-readahead-secs", "60")
-            // Deinterlace - sports broadcasts are often 1080i interlaced
-            mpv_set_option_string(mpv, "deinterlace", "yes")
-            // Never drop frames - prevents stuttering on high-motion content
-            mpv_set_option_string(mpv, "framedrop", "no")
-        }
+        mpv_set_option_string(mpv, "cache-pause-wait", "5")
+        mpv_set_option_string(mpv, "demuxer-readahead-secs", "60")
 
         // Network
         mpv_set_option_string(mpv, "network-timeout", "30")
@@ -760,16 +813,8 @@ class MPVPlayerCore: NSObject {
 
         // Demuxer
         mpv_set_option_string(mpv, "demuxer", "lavf")
-        switch videoProfile {
-        case .balanced:
-            // Minimal probing for faster startup
-            mpv_set_option_string(mpv, "demuxer-lavf-probe-info", "no")
-            mpv_set_option_string(mpv, "demuxer-lavf-analyzeduration", "1")
-        case .smooth:
-            // Thorough probing for correct stream detection (interlaced, high-bitrate)
-            mpv_set_option_string(mpv, "demuxer-lavf-probe-info", "auto")
-            mpv_set_option_string(mpv, "demuxer-lavf-analyzeduration", "3000000")
-        }
+        mpv_set_option_string(mpv, "demuxer-lavf-probe-info", "auto")
+        mpv_set_option_string(mpv, "demuxer-lavf-analyzeduration", "3000000")
 
         // Initialize MPV
         let initResult = mpv_initialize(mpv)
