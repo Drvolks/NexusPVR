@@ -7,10 +7,30 @@
 
 import Foundation
 
+enum VideoProfile: String, Codable, CaseIterable {
+    case balanced = "balanced"
+    case smooth = "smooth"
+
+    var displayName: String {
+        switch self {
+        case .balanced: return "Balanced"
+        case .smooth: return "Smooth Playback"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .balanced: return "Fast startup, lower latency"
+        case .smooth: return "Sports & high-motion optimized"
+        }
+    }
+}
+
 struct UserPreferences: Codable {
     var keywords: [String] = []
     var seekBackwardSeconds: Int = 10
     var seekForwardSeconds: Int = 30
+    var videoProfile: VideoProfile = .balanced
 
     // Migration: keep old property for decoding existing data
     private enum CodingKeys: String, CodingKey {
@@ -18,6 +38,7 @@ struct UserPreferences: Codable {
         case seekBackwardSeconds
         case seekForwardSeconds
         case seekTimeSeconds // legacy
+        case videoProfile
     }
 
     init() {}
@@ -34,6 +55,7 @@ struct UserPreferences: Codable {
         } else {
             seekForwardSeconds = 30
         }
+        videoProfile = try container.decodeIfPresent(VideoProfile.self, forKey: .videoProfile) ?? .balanced
     }
 
     func encode(to encoder: Encoder) throws {
@@ -41,6 +63,7 @@ struct UserPreferences: Codable {
         try container.encode(keywords, forKey: .keywords)
         try container.encode(seekBackwardSeconds, forKey: .seekBackwardSeconds)
         try container.encode(seekForwardSeconds, forKey: .seekForwardSeconds)
+        try container.encode(videoProfile, forKey: .videoProfile)
     }
 
     private static let storageKey = "UserPreferences"

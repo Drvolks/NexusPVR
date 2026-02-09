@@ -712,16 +712,32 @@ class MPVPlayerCore: NSObject {
         mpv_set_option_string(mpv, "keep-open", "yes")
         mpv_set_option_string(mpv, "idle", "yes")
 
+        // Load video profile for profile-specific settings
+        let videoProfile = UserPreferences.load().videoProfile
+
         // Buffering for streaming - wait for video to buffer before starting
         mpv_set_option_string(mpv, "cache", "yes")
         mpv_set_option_string(mpv, "cache-secs", "120")
         mpv_set_option_string(mpv, "cache-pause-initial", "yes")  // Pause until cache is filled initially
-        mpv_set_option_string(mpv, "cache-pause-wait", "2")  // Wait for 2 seconds of cache before resuming
         mpv_set_option_string(mpv, "demuxer-max-bytes", "150MiB")
         mpv_set_option_string(mpv, "demuxer-max-back-bytes", "150MiB")
-        mpv_set_option_string(mpv, "demuxer-readahead-secs", "20")
         mpv_set_option_string(mpv, "demuxer-seekable-cache", "yes")
-        
+
+        switch videoProfile {
+        case .balanced:
+            mpv_set_option_string(mpv, "cache-pause-wait", "2")
+            mpv_set_option_string(mpv, "demuxer-readahead-secs", "20")
+        case .smooth:
+            // Larger buffer before resuming to avoid mid-playback stalls
+            mpv_set_option_string(mpv, "cache-pause-wait", "5")
+            // More readahead for high-bitrate sports streams
+            mpv_set_option_string(mpv, "demuxer-readahead-secs", "60")
+            // Deinterlace - sports broadcasts are often 1080i interlaced
+            mpv_set_option_string(mpv, "deinterlace", "yes")
+            // Never drop frames - prevents stuttering on high-motion content
+            mpv_set_option_string(mpv, "framedrop", "no")
+        }
+
         // Network
         mpv_set_option_string(mpv, "network-timeout", "30")
         mpv_set_option_string(mpv, "demuxer-lavf-o", "reconnect=1,reconnect_streamed=1")
@@ -735,17 +751,25 @@ class MPVPlayerCore: NSObject {
         mpv_set_option_string(mpv, "audio-buffer", "0.2")  // Smaller buffer for faster audio sync after seek
         mpv_set_option_string(mpv, "audio-fallback-to-null", "yes")
         mpv_set_option_string(mpv, "audio-stream-silence", "yes")  // Output silence while audio buffers (avoid muting)
-        
+
         // Seeking - precise seeks for better audio sync with external audio tracks
         mpv_set_option_string(mpv, "hr-seek", "yes")
 
         // Dithering (required for Apple's OpenGL implementation)
         mpv_set_option_string(mpv, "dither", "ordered")
 
-        // Demuxer - minimal probing for faster startup (like Yattee)
+        // Demuxer
         mpv_set_option_string(mpv, "demuxer", "lavf")
-        mpv_set_option_string(mpv, "demuxer-lavf-probe-info", "no")
-        mpv_set_option_string(mpv, "demuxer-lavf-analyzeduration", "1")
+        switch videoProfile {
+        case .balanced:
+            // Minimal probing for faster startup
+            mpv_set_option_string(mpv, "demuxer-lavf-probe-info", "no")
+            mpv_set_option_string(mpv, "demuxer-lavf-analyzeduration", "1")
+        case .smooth:
+            // Thorough probing for correct stream detection (interlaced, high-bitrate)
+            mpv_set_option_string(mpv, "demuxer-lavf-probe-info", "auto")
+            mpv_set_option_string(mpv, "demuxer-lavf-analyzeduration", "3000000")
+        }
 
         // Initialize MPV
         let initResult = mpv_initialize(mpv)
