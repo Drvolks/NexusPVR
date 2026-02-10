@@ -36,36 +36,36 @@ extension Color {
 }
 
 enum Theme {
-    // MARK: - Primary Colors (NextPVR branding)
+    // MARK: - Primary Colors
 
-    static let accent = Color(hex: "#00a8e8")        // Bright cyan-blue
-    static let accentSecondary = Color(hex: "#48cae4") // Lighter cyan
+    static let accent = Brand.accent
+    static let accentSecondary = Brand.accentSecondary
 
     // MARK: - Background Colors
 
-    static let background = Color(hex: "#0f0f0f")    // Deep dark
-    static let surface = Color(hex: "#141414")       // Card/surface
-    static let surfaceElevated = Color(hex: "#1a1a1a") // Elevated surface
-    static let surfaceHighlight = Color(hex: "#222222") // Highlighted surface
+    static let background = Brand.background
+    static let surface = Brand.surface
+    static let surfaceElevated = Brand.surfaceElevated
+    static let surfaceHighlight = Brand.surfaceHighlight
 
     // MARK: - Text Colors
 
-    static let textPrimary = Color.white
-    static let textSecondary = Color(hex: "#b3b3b3")
-    static let textTertiary = Color(hex: "#666666")
+    static let textPrimary = Brand.textPrimary
+    static let textSecondary = Brand.textSecondary
+    static let textTertiary = Brand.textTertiary
 
     // MARK: - Status Colors
 
-    static let success = Color(hex: "#4caf50")
-    static let warning = Color(hex: "#ff9800")
-    static let error = Color(hex: "#f44336")
-    static let recording = Color(hex: "#e91e63")     // Recording indicator
+    static let success = Brand.success
+    static let warning = Brand.warning
+    static let error = Brand.error
+    static let recording = Brand.recording
 
     // MARK: - Guide Colors
 
-    static let guideNowPlaying = Color(hex: "#1e3a5f") // Current program highlight
-    static let guidePast = Color(hex: "#1a1a1a").opacity(0.5) // Past programs
-    static let guideScheduled = accent.opacity(0.3)  // Scheduled recording
+    static let guideNowPlaying = Brand.guideNowPlaying
+    static let guidePast = Brand.surface.opacity(0.5)
+    static let guideScheduled = Brand.accent.opacity(0.3)
 
     // MARK: - Spacing
 

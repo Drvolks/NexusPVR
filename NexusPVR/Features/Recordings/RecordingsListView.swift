@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct RecordingsListView: View {
-    @EnvironmentObject private var client: NextPVRClient
+    @EnvironmentObject private var client: PVRClient
     @EnvironmentObject private var appState: AppState
     @State private var selectedRecording: Recording?
     @State private var deleteError: String?
@@ -24,14 +24,14 @@ struct RecordingsListView: View {
 }
 
 private struct RecordingsListContentView: View {
-    @ObservedObject var client: NextPVRClient
+    @ObservedObject var client: PVRClient
     @ObservedObject var appState: AppState
     @StateObject private var viewModel: RecordingsViewModel
     @Binding var selectedRecording: Recording?
     @Binding var deleteError: String?
     @State private var inProgressRecording: Recording?
 
-    init(client: NextPVRClient, appState: AppState,
+    init(client: PVRClient, appState: AppState,
          selectedRecording: Binding<Recording?>,
          deleteError: Binding<String?>) {
         self.client = client
@@ -332,7 +332,7 @@ private struct RecordingsListContentView: View {
 
 #Preview {
     RecordingsListView()
-        .environmentObject(NextPVRClient())
+        .environmentObject(PVRClient())
         .environmentObject(AppState())
         .preferredColorScheme(.dark)
 }

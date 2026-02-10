@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct TopicProgramRow: View {
-    @EnvironmentObject private var client: NextPVRClient
+    @EnvironmentObject private var client: PVRClient
     @EnvironmentObject private var appState: AppState
 
     let program: Program
@@ -248,7 +248,7 @@ struct TopicProgramRow: View {
 #if os(tvOS)
 /// Combined row for tvOS - single focusable button with action on the right
 struct TopicProgramRowTV: View {
-    @EnvironmentObject private var client: NextPVRClient
+    @EnvironmentObject private var client: PVRClient
     @EnvironmentObject private var appState: AppState
 
     let program: Program

@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct LiveTVView: View {
-    @EnvironmentObject private var client: NextPVRClient
+    @EnvironmentObject private var client: PVRClient
     @EnvironmentObject private var appState: AppState
     @State private var viewModel: LiveTVViewModel?
     @State private var playError: String?
@@ -113,7 +113,7 @@ struct LiveTVView: View {
             Text("No channels available")
                 .font(.headline)
                 .foregroundStyle(Theme.textPrimary)
-            Text("Configure your NextPVR server in Settings")
+            Text(Brand.configureServerMessage)
                 .font(.subheadline)
                 .foregroundStyle(Theme.textSecondary)
         }
@@ -156,7 +156,7 @@ struct LiveTVView: View {
 // MARK: - Channel Card
 
 struct ChannelCard: View {
-    @EnvironmentObject private var client: NextPVRClient
+    @EnvironmentObject private var client: PVRClient
 
     let channel: Channel
     let currentProgram: Program?
@@ -233,7 +233,7 @@ struct ChannelCard: View {
 
 #Preview {
     LiveTVView()
-        .environmentObject(NextPVRClient())
+        .environmentObject(PVRClient())
         .environmentObject(AppState())
         .preferredColorScheme(.dark)
 }

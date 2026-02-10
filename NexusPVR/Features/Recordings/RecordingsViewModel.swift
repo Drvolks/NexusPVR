@@ -25,9 +25,9 @@ final class RecordingsViewModel: ObservableObject {
     @Published var error: String?
     @Published var filter: RecordingsFilter = .completed
 
-    private let client: NextPVRClient
+    private let client: PVRClient
 
-    init(client: NextPVRClient) {
+    init(client: PVRClient) {
         self.client = client
     }
 

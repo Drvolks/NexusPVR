@@ -35,7 +35,7 @@ enum NextPVRError: Error, LocalizedError {
 }
 
 @MainActor
-final class NextPVRClient: ObservableObject {
+final class NextPVRClient: ObservableObject, PVRClientProtocol {
     @Published private(set) var isAuthenticated = false
     @Published private(set) var isConnecting = false
     @Published private(set) var lastError: NextPVRError?
@@ -43,7 +43,7 @@ final class NextPVRClient: ObservableObject {
     private(set) var config: ServerConfig
     private var sid: String?
     private let session: URLSession
-    private let deviceName = "NextPVR-Apple"
+    private let deviceName = Brand.deviceName
 
     init(config: ServerConfig? = nil) {
         self.config = config ?? ServerConfig.load()

@@ -19,7 +19,7 @@ import UIKit
 
 struct PlayerView: View {
     @EnvironmentObject private var appState: AppState
-    @EnvironmentObject private var client: NextPVRClient
+    @EnvironmentObject private var client: PVRClient
 
     let url: URL
     let title: String
@@ -1038,6 +1038,7 @@ struct MPVContainerView: NSViewRepresentable {
     @Binding var seekToPosition: ((Double) -> Void)?
     let seekBackwardTime: Int
     let seekForwardTime: Int
+
     var onPlaybackEnded: (() -> Void)?
     var onVideoInfoUpdate: ((String?, Int?, String?) -> Void)?
 
@@ -1188,6 +1189,7 @@ struct MPVContainerView: UIViewRepresentable {
     @Binding var seekToPosition: ((Double) -> Void)?
     let seekBackwardTime: Int
     let seekForwardTime: Int
+
     var onPlaybackEnded: (() -> Void)?
 
     #if os(tvOS)
@@ -1488,5 +1490,5 @@ class MPVPlayerGLView: GLKView {
         title: "Sample Video"
     )
     .environmentObject(AppState())
-    .environmentObject(NextPVRClient())
+    .environmentObject(PVRClient())
 }

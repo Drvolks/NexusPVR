@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct TopicsView: View {
-    @EnvironmentObject private var client: NextPVRClient
+    @EnvironmentObject private var client: PVRClient
     @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel = TopicsViewModel()
     @State private var selectedProgramDetail: (program: Program, channel: Channel)?
@@ -195,7 +195,7 @@ private struct ProgramTopicDetail: Identifiable {
 
 #Preview {
     TopicsView()
-        .environmentObject(NextPVRClient())
+        .environmentObject(PVRClient())
         .environmentObject(AppState())
         .preferredColorScheme(.dark)
 }

@@ -25,7 +25,7 @@ private struct ProgramDetail: Identifiable {
 }
 
 struct GuideView: View {
-    @EnvironmentObject private var client: NextPVRClient
+    @EnvironmentObject private var client: PVRClient
     @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel = GuideViewModel()
 
@@ -145,18 +145,23 @@ struct GuideView: View {
     }
 
     private func playLiveChannel(_ channel: Channel) {
-        // Use the direct stream URL from channelDetails
-        guard let urlString = channel.streamURL,
-              let url = URL(string: urlString) else {
-            streamError = "No stream URL available for this channel"
-            return
+        // Use the direct stream URL from channelDetails if available
+        if let urlString = channel.streamURL, let url = URL(string: urlString) {
+            #if DEBUG
+            print("Playing channel stream: \(url.absoluteString)")
+            #endif
+            appState.playStream(url: url, title: channel.name)
+        } else {
+            // Fall back to API call (required for Dispatcharr which uses UUID-based proxy URLs)
+            Task {
+                do {
+                    let url = try await client.liveStreamURL(channelId: channel.id)
+                    appState.playStream(url: url, title: channel.name)
+                } catch {
+                    streamError = error.localizedDescription
+                }
+            }
         }
-
-        #if DEBUG
-        print("Playing channel stream: \(url.absoluteString)")
-        #endif
-
-        appState.playStream(url: url, title: channel.name)
     }
 
     #if !os(tvOS)
@@ -235,7 +240,7 @@ struct GuideView: View {
             Text("No channels available")
                 .font(.headline)
                 .foregroundStyle(Theme.textPrimary)
-            Text("Configure your NextPVR server in Settings")
+            Text(Brand.configureServerMessage)
                 .font(.subheadline)
                 .foregroundStyle(Theme.textSecondary)
         }
@@ -998,7 +1003,7 @@ struct GuideView: View {
 
 #Preview {
     GuideView()
-        .environmentObject(NextPVRClient())
+        .environmentObject(PVRClient())
         .environmentObject(AppState())
         .preferredColorScheme(.dark)
 }

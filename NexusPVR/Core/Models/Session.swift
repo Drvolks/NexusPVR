@@ -37,6 +37,8 @@ struct ServerConfig: Codable, Equatable {
     var host: String
     var port: Int
     var pin: String
+    var username: String
+    var password: String
     var useHTTPS: Bool
 
     var baseURL: String {
@@ -45,11 +47,35 @@ struct ServerConfig: Codable, Equatable {
     }
 
     static var `default`: ServerConfig {
-        ServerConfig(host: "", port: 8866, pin: "0000", useHTTPS: false)
+        ServerConfig(host: "", port: Brand.defaultPort, pin: Brand.defaultPIN, username: "", password: "", useHTTPS: false)
     }
 
     var isConfigured: Bool {
         !host.isEmpty
+    }
+
+    // Coding keys with defaults for backward compatibility
+    enum CodingKeys: String, CodingKey {
+        case host, port, pin, username, password, useHTTPS
+    }
+
+    init(host: String, port: Int, pin: String, username: String = "", password: String = "", useHTTPS: Bool) {
+        self.host = host
+        self.port = port
+        self.pin = pin
+        self.username = username
+        self.password = password
+        self.useHTTPS = useHTTPS
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        host = try container.decode(String.self, forKey: .host)
+        port = try container.decode(Int.self, forKey: .port)
+        pin = try container.decodeIfPresent(String.self, forKey: .pin) ?? ""
+        username = try container.decodeIfPresent(String.self, forKey: .username) ?? ""
+        password = try container.decodeIfPresent(String.self, forKey: .password) ?? ""
+        useHTTPS = try container.decode(Bool.self, forKey: .useHTTPS)
     }
 }
 
@@ -90,7 +116,7 @@ extension ServerConfig {
         if !legacyHost.isEmpty {
             let config = ServerConfig(
                 host: legacyHost,
-                port: defaults.integer(forKey: portKey) == 0 ? 8866 : defaults.integer(forKey: portKey),
+                port: defaults.integer(forKey: portKey) == 0 ? Brand.defaultPort : defaults.integer(forKey: portKey),
                 pin: defaults.string(forKey: pinKey) ?? "",
                 useHTTPS: defaults.bool(forKey: useHTTPSKey)
             )

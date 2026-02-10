@@ -9,7 +9,7 @@ import SwiftUI
 
 struct ProgramDetailView: View {
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var client: NextPVRClient
+    @EnvironmentObject private var client: PVRClient
     @EnvironmentObject private var appState: AppState
 
     let program: Program
@@ -457,7 +457,7 @@ struct ProgramDetailView: View {
         program: .preview,
         channel: Channel(id: 1, name: "ABC", number: 7)
     )
-    .environmentObject(NextPVRClient())
+    .environmentObject(PVRClient())
     .environmentObject(AppState())
     .preferredColorScheme(.dark)
 }

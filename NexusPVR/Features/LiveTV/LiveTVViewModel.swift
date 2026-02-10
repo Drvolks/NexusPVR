@@ -16,9 +16,9 @@ final class LiveTVViewModel: ObservableObject {
     @Published var error: String?
     @Published var searchText = ""
 
-    private let client: NextPVRClient
+    private let client: PVRClient
 
-    init(client: NextPVRClient) {
+    init(client: PVRClient) {
         self.client = client
     }
 

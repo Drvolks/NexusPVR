@@ -9,7 +9,7 @@ import SwiftUI
 
 struct ServerConfigView: View {
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var client: NextPVRClient
+    @EnvironmentObject private var client: PVRClient
 
     @State private var config = ServerConfig.load()
     @State private var isConnecting = false
@@ -52,7 +52,7 @@ struct ServerConfigView: View {
                         dismiss()
                     }
                 } message: {
-                    Text("Successfully connected to NextPVR server.")
+                    Text(Brand.connectionSuccessMessage)
                 }
         }
     }
@@ -89,7 +89,7 @@ struct ServerConfigView: View {
 
                     VStack(spacing: Theme.spacingMD) {
                         TVTextField(placeholder: "Host (e.g. 192.168.1.100)", text: $config.host)
-                        TVNumberField(placeholder: "Port (default: 8866)", value: $config.port)
+                        TVNumberField(placeholder: "Port (default: \(Brand.defaultPort))", value: $config.port)
 
                         HStack {
                             Text("Use HTTPS")
@@ -113,7 +113,12 @@ struct ServerConfigView: View {
                         .font(.headline)
                         .foregroundStyle(Theme.textSecondary)
 
+                    #if DISPATCHERPVR
+                    TVTextField(placeholder: "Username", text: $config.username)
+                    TVTextField(placeholder: "Password", text: $config.password)
+                    #else
                     TVTextField(placeholder: "PIN", text: $config.pin)
+                    #endif
                 }
                 .padding()
                 .background(Theme.surface)
@@ -227,7 +232,7 @@ struct ServerConfigView: View {
             }
 
             LabeledContent("Port") {
-                TextField("8866", value: $config.port, format: .number)
+                TextField("\(Brand.defaultPort)", value: $config.port, format: .number)
                     .multilineTextAlignment(.trailing)
                     #if os(iOS)
                     .keyboardType(.numberPad)
@@ -242,12 +247,31 @@ struct ServerConfigView: View {
         } header: {
             Text("Server Address")
         } footer: {
-            Text("Enter your NextPVR server address. Default port is 8866.")
+            Text(Brand.serverFooter)
         }
     }
 
     private var connectionSection: some View {
         Section {
+            #if DISPATCHERPVR
+            LabeledContent("Username") {
+                TextField("Username", text: $config.username)
+                    #if os(iOS)
+                    .autocapitalization(.none)
+                    #endif
+                    #if os(macOS)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 150)
+                    #endif
+            }
+            LabeledContent("Password") {
+                SecureField("Password", text: $config.password)
+                    #if os(macOS)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 150)
+                    #endif
+            }
+            #else
             LabeledContent("PIN") {
                 SecureField("Enter PIN", text: $config.pin)
                     #if os(iOS)
@@ -258,10 +282,11 @@ struct ServerConfigView: View {
                     .frame(width: 150)
                     #endif
             }
+            #endif
         } header: {
             Text("Authentication")
         } footer: {
-            Text("Enter your NextPVR PIN for authentication.")
+            Text(Brand.authFooter)
         }
     }
 
@@ -356,6 +381,6 @@ struct ServerConfigView: View {
 
 #Preview {
     ServerConfigView()
-        .environmentObject(NextPVRClient())
+        .environmentObject(PVRClient())
         .preferredColorScheme(.dark)
 }

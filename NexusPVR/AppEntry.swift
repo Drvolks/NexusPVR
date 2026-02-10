@@ -1,16 +1,16 @@
 //
-//  NexusPVRApp.swift
-//  NexusPVR
+//  AppEntry.swift
+//  PVR Client
 //
-//  NextPVR client for iOS, iPadOS, tvOS, and macOS
+//  App entry point for iOS, iPadOS, tvOS, and macOS
 //
 
 import SwiftUI
 
 @main
-struct NexusPVRApp: App {
+struct PVRApp: App {
     @StateObject private var appState = AppState()
-    @StateObject private var client = NextPVRClient()
+    @StateObject private var client = PVRClient()
 
     init() {
         // Trigger iCloud sync on startup to pull latest data

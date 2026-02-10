@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @EnvironmentObject private var client: NextPVRClient
+    @EnvironmentObject private var client: PVRClient
     @State private var showingServerConfig = false
     @State private var showingKeywordsEditor = false
     @State private var seekBackwardSeconds: Int = UserPreferences.load().seekBackwardSeconds
@@ -74,7 +74,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: Theme.spacingXL) {
                 // Server Section
                 TVSettingsSection(
-                    title: "NextPVR Server",
+                    title: "\(Brand.serverName) Server",
                     icon: "server.rack",
                     statusView: {
                         if client.isAuthenticated && !hasConfigChanges {
@@ -106,15 +106,31 @@ struct SettingsView: View {
                             Text("Port")
                                 .foregroundStyle(Theme.textSecondary)
                                 .frame(width: 80, alignment: .trailing)
-                            TVNumberField(placeholder: "8866", value: $serverConfig.port)
+                            TVNumberField(placeholder: "\(Brand.defaultPort)", value: $serverConfig.port)
                         }
 
+                        #if DISPATCHERPVR
+                        HStack {
+                            Text("User")
+                                .foregroundStyle(Theme.textSecondary)
+                                .frame(width: 80, alignment: .trailing)
+                            TVTextField(placeholder: "Username", text: $serverConfig.username)
+                        }
+
+                        HStack {
+                            Text("Pass")
+                                .foregroundStyle(Theme.textSecondary)
+                                .frame(width: 80, alignment: .trailing)
+                            TVTextField(placeholder: "Password", text: $serverConfig.password)
+                        }
+                        #else
                         HStack {
                             Text("PIN")
                                 .foregroundStyle(Theme.textSecondary)
                                 .frame(width: 80, alignment: .trailing)
                             TVTextField(placeholder: "0000", text: $serverConfig.pin)
                         }
+                        #endif
 
                         Button {
                             saveAndConnect()
@@ -381,7 +397,7 @@ struct SettingsView: View {
                 }
             }
         } header: {
-            Text("NextPVR Server")
+            Text("\(Brand.serverName) Server")
         }
     }
 
@@ -465,6 +481,6 @@ struct SettingsView: View {
 
 #Preview {
     SettingsView()
-        .environmentObject(NextPVRClient())
+        .environmentObject(PVRClient())
         .preferredColorScheme(.dark)
 }

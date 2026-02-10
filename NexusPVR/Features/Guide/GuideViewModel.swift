@@ -71,7 +71,7 @@ final class GuideViewModel: ObservableObject {
         visibleProgramsByChannel = result
     }
 
-    func loadData(using client: NextPVRClient) async {
+    func loadData(using client: PVRClient) async {
         // Yield to allow the view to finish rendering before modifying state
         await Task.yield()
 
@@ -209,7 +209,7 @@ final class GuideViewModel: ObservableObject {
         return nil
     }
 
-    func reloadRecordings(client: NextPVRClient) async {
+    func reloadRecordings(client: PVRClient) async {
         do {
             let (completed, recording, scheduled) = try await client.getAllRecordings()
             recordings = completed + recording + scheduled

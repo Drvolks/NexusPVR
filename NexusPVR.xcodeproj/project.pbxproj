@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		6E9E3CF02F31559900D2B8DF /* MPVKit in Frameworks */ = {isa = PBXBuildFile; productRef = 6E9E3CEF2F31559900D2B8DF /* MPVKit */; };
+		D1AAAA0A2F31559900D2B8DF /* MPVKit in Frameworks */ = {isa = PBXBuildFile; productRef = D1AAAA0B2F31559900D2B8DF /* MPVKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -31,11 +32,26 @@
 		6E74158C2F315368001FE083 /* NexusPVR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NexusPVR.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6E74159B2F315369001FE083 /* NexusPVRTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NexusPVRTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6E7415A52F315369001FE083 /* NexusPVRUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NexusPVRUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		D1AAAA012F31559900D2B8DF /* DispatcherPVR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DispatcherPVR.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		D1AAAA0C2F31559900D2B8DF /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Assets.xcassets,
+				NexusPVR.entitlements,
+			);
+			target = D1AAAA062F31559900D2B8DF /* DispatcherPVR */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		6E74158E2F315368001FE083 /* NexusPVR */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				D1AAAA0C2F31559900D2B8DF /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+			);
 			path = NexusPVR;
 			sourceTree = "<group>";
 		};
@@ -47,6 +63,11 @@
 		6E7415A82F315369001FE083 /* NexusPVRUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = NexusPVRUITests;
+			sourceTree = "<group>";
+		};
+		D1AAAA022F31559900D2B8DF /* DispatcherPVR */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = DispatcherPVR;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -74,6 +95,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D1AAAA042F31559900D2B8DF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D1AAAA0A2F31559900D2B8DF /* MPVKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -81,6 +110,7 @@
 			isa = PBXGroup;
 			children = (
 				6E74158E2F315368001FE083 /* NexusPVR */,
+				D1AAAA022F31559900D2B8DF /* DispatcherPVR */,
 				6E74159E2F315369001FE083 /* NexusPVRTests */,
 				6E7415A82F315369001FE083 /* NexusPVRUITests */,
 				6E74158D2F315368001FE083 /* Products */,
@@ -91,6 +121,7 @@
 			isa = PBXGroup;
 			children = (
 				6E74158C2F315368001FE083 /* NexusPVR.app */,
+				D1AAAA012F31559900D2B8DF /* DispatcherPVR.app */,
 				6E74159B2F315369001FE083 /* NexusPVRTests.xctest */,
 				6E7415A52F315369001FE083 /* NexusPVRUITests.xctest */,
 			);
@@ -169,6 +200,30 @@
 			productReference = 6E7415A52F315369001FE083 /* NexusPVRUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		D1AAAA062F31559900D2B8DF /* DispatcherPVR */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D1AAAA092F31559900D2B8DF /* Build configuration list for PBXNativeTarget "DispatcherPVR" */;
+			buildPhases = (
+				D1AAAA032F31559900D2B8DF /* Sources */,
+				D1AAAA042F31559900D2B8DF /* Frameworks */,
+				D1AAAA052F31559900D2B8DF /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				6E74158E2F315368001FE083 /* NexusPVR */,
+				D1AAAA022F31559900D2B8DF /* DispatcherPVR */,
+			);
+			name = DispatcherPVR;
+			packageProductDependencies = (
+				D1AAAA0B2F31559900D2B8DF /* MPVKit */,
+			);
+			productName = DispatcherPVR;
+			productReference = D1AAAA012F31559900D2B8DF /* DispatcherPVR.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -190,6 +245,9 @@
 						CreatedOnToolsVersion = 26.2;
 						TestTargetID = 6E74158B2F315368001FE083;
 					};
+					D1AAAA062F31559900D2B8DF = {
+						CreatedOnToolsVersion = 26.2;
+					};
 				};
 			};
 			buildConfigurationList = 6E7415872F315368001FE083 /* Build configuration list for PBXProject "NexusPVR" */;
@@ -210,6 +268,7 @@
 			projectRoot = "";
 			targets = (
 				6E74158B2F315368001FE083 /* NexusPVR */,
+				D1AAAA062F31559900D2B8DF /* DispatcherPVR */,
 				6E74159A2F315369001FE083 /* NexusPVRTests */,
 				6E7415A42F315369001FE083 /* NexusPVRUITests */,
 			);
@@ -238,6 +297,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D1AAAA052F31559900D2B8DF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -256,6 +322,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		6E7415A12F315369001FE083 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D1AAAA032F31559900D2B8DF /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -636,6 +709,147 @@
 			};
 			name = Release;
 		};
+		D1AAAA072F31559900D2B8DF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletvos*]" = tv;
+				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletvsimulator*]" = tv;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = DispatcherPVR/DispatcherPVR.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 654X66AK24;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=appletvos*]" = LaunchScreen.storyboard;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=appletvsimulator*]" = LaunchScreen.storyboard;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=macosx*]" = LaunchScreen.storyboard;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "DispatcherPVR needs to connect to your local Dispatcharr server for streaming TV and managing recordings.";
+				"INFOPLIST_KEY_NSLocalNetworkUsageDescription[sdk=iphoneos*]" = "DispatcherPVR needs to connect to your local Dispatcharr server for streaming TV and managing recordings.";
+				"INFOPLIST_KEY_NSLocalNetworkUsageDescription[sdk=iphonesimulator*]" = "DispatcherPVR needs to connect to your local Dispatcharr server for streaming TV and managing recordings.";
+				"INFOPLIST_KEY_NSLocalNetworkUsageDescription[sdk=macosx*]" = "DispatcherPVR needs to connect to your local Dispatcharr server for streaming TV and managing recordings.";
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UILaunchStoryboardName[sdk=iphoneos*]" = LaunchScreen;
+				"INFOPLIST_KEY_UILaunchStoryboardName[sdk=iphonesimulator*]" = LaunchScreen;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "consultation-massawippi.DispatcherPVR";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = auto;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG DISPATCHERPVR $(inherited)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,3";
+				TVOS_DEPLOYMENT_TARGET = 26.0;
+				XROS_DEPLOYMENT_TARGET = 26.2;
+			};
+			name = Debug;
+		};
+		D1AAAA082F31559900D2B8DF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletvos*]" = tv;
+				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletvsimulator*]" = tv;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = DispatcherPVR/DispatcherPVR.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 654X66AK24;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=appletvos*]" = LaunchScreen.storyboard;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=appletvsimulator*]" = LaunchScreen.storyboard;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=macosx*]" = LaunchScreen.storyboard;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "DispatcherPVR needs to connect to your local Dispatcharr server for streaming TV and managing recordings.";
+				"INFOPLIST_KEY_NSLocalNetworkUsageDescription[sdk=iphoneos*]" = "DispatcherPVR needs to connect to your local Dispatcharr server for streaming TV and managing recordings.";
+				"INFOPLIST_KEY_NSLocalNetworkUsageDescription[sdk=iphonesimulator*]" = "DispatcherPVR needs to connect to your local Dispatcharr server for streaming TV and managing recordings.";
+				"INFOPLIST_KEY_NSLocalNetworkUsageDescription[sdk=macosx*]" = "DispatcherPVR needs to connect to your local Dispatcharr server for streaming TV and managing recordings.";
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UILaunchStoryboardName[sdk=iphoneos*]" = LaunchScreen;
+				"INFOPLIST_KEY_UILaunchStoryboardName[sdk=iphonesimulator*]" = LaunchScreen;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "consultation-massawippi.DispatcherPVR";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = auto;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DISPATCHERPVR $(inherited)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,3";
+				TVOS_DEPLOYMENT_TARGET = 26.0;
+				XROS_DEPLOYMENT_TARGET = 26.2;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -675,6 +889,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		D1AAAA092F31559900D2B8DF /* Build configuration list for PBXNativeTarget "DispatcherPVR" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D1AAAA072F31559900D2B8DF /* Debug */,
+				D1AAAA082F31559900D2B8DF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -690,6 +913,11 @@
 
 /* Begin XCSwiftPackageProductDependency section */
 		6E9E3CEF2F31559900D2B8DF /* MPVKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6E9E3CEE2F31559900D2B8DF /* XCRemoteSwiftPackageReference "MPVKit" */;
+			productName = MPVKit;
+		};
+		D1AAAA0B2F31559900D2B8DF /* MPVKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 6E9E3CEE2F31559900D2B8DF /* XCRemoteSwiftPackageReference "MPVKit" */;
 			productName = MPVKit;

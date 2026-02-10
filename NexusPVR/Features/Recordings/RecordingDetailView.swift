@@ -9,7 +9,7 @@ import SwiftUI
 
 struct RecordingDetailView: View {
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var client: NextPVRClient
+    @EnvironmentObject private var client: PVRClient
     @EnvironmentObject private var appState: AppState
 
     let recording: Recording
@@ -430,7 +430,7 @@ struct RecordingDetailView: View {
 
 #Preview {
     RecordingDetailView(recording: .preview)
-        .environmentObject(NextPVRClient())
+        .environmentObject(PVRClient())
         .environmentObject(AppState())
         .preferredColorScheme(.dark)
 }

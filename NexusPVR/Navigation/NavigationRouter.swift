@@ -9,7 +9,7 @@ import SwiftUI
 
 struct NavigationRouter: View {
     @EnvironmentObject private var appState: AppState
-    @EnvironmentObject private var client: NextPVRClient
+    @EnvironmentObject private var client: PVRClient
 
     var body: some View {
         Group {
@@ -30,7 +30,7 @@ struct NavigationRouter: View {
 #if os(iOS)
 struct IOSNavigation: View {
     @EnvironmentObject private var appState: AppState
-    @EnvironmentObject private var client: NextPVRClient
+    @EnvironmentObject private var client: PVRClient
 
     var body: some View {
         // Content area with safe area inset for custom tab bar
@@ -89,7 +89,7 @@ struct IOSNavigation: View {
 #if os(tvOS)
 struct TVOSNavigation: View {
     @EnvironmentObject private var appState: AppState
-    @EnvironmentObject private var client: NextPVRClient
+    @EnvironmentObject private var client: PVRClient
     @State private var navBarEnabled = true
     @FocusState private var focusedTab: Tab?
 
@@ -212,7 +212,7 @@ struct TVTabButtonStyle: ButtonStyle {
 #if os(macOS)
 struct MacOSNavigation: View {
     @EnvironmentObject private var appState: AppState
-    @EnvironmentObject private var client: NextPVRClient
+    @EnvironmentObject private var client: PVRClient
 
     var body: some View {
         Group {
@@ -253,5 +253,5 @@ struct MacOSNavigation: View {
 #Preview {
     NavigationRouter()
         .environmentObject(AppState())
-        .environmentObject(NextPVRClient())
+        .environmentObject(PVRClient())
 }

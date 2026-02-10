@@ -9,7 +9,7 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var appState: AppState
-    @EnvironmentObject private var client: NextPVRClient
+    @EnvironmentObject private var client: PVRClient
     @State private var showingSetup = false
     @State private var isCheckingCloud = true
 
@@ -59,11 +59,11 @@ struct ContentView: View {
                     .font(.system(size: 80))
                     .foregroundStyle(Theme.accent)
 
-                Text("NextPVR")
+                Text(Brand.appName)
                     .font(.displayLarge)
                     .foregroundStyle(Theme.textPrimary)
 
-                Text("Apple Client")
+                Text(Brand.subtitle)
                     .font(.title2)
                     .foregroundStyle(Theme.textSecondary)
             }
@@ -76,7 +76,7 @@ struct ContentView: View {
                     .font(.headline)
                     .foregroundStyle(Theme.textPrimary)
 
-                Text("Connect to your NextPVR server to get started.")
+                Text(Brand.setupPrompt)
                     .font(.subheadline)
                     .foregroundStyle(Theme.textSecondary)
                     .multilineTextAlignment(.center)
@@ -110,13 +110,13 @@ struct ContentView: View {
 #Preview("Configured") {
     ContentView()
         .environmentObject(AppState())
-        .environmentObject(NextPVRClient(config: ServerConfig(host: "192.168.1.100", port: 8866, pin: "1234", useHTTPS: false)))
+        .environmentObject(PVRClient(config: ServerConfig(host: "192.168.1.100", port: 8866, pin: "1234", useHTTPS: false)))
         .preferredColorScheme(.dark)
 }
 
 #Preview("Not Configured") {
     ContentView()
         .environmentObject(AppState())
-        .environmentObject(NextPVRClient())
+        .environmentObject(PVRClient())
         .preferredColorScheme(.dark)
 }

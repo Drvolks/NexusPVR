@@ -42,7 +42,7 @@ final class TopicsViewModel: ObservableObject {
         }
     }
 
-    func loadData(using client: NextPVRClient) async {
+    func loadData(using client: PVRClient) async {
         await Task.yield()
 
         // Load keywords from preferences
