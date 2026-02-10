@@ -8,10 +8,13 @@
 import SwiftUI
 import Combine
 
-enum Tab: String, CaseIterable, Identifiable {
+enum Tab: String, Identifiable {
     case guide = "Guide"
     case recordings = "Recordings"
     case topics = "Topics"
+    #if DISPATCHERPVR
+    case stats = "Status"
+    #endif
     case settings = "Settings"
 
     var id: String { rawValue }
@@ -21,11 +24,23 @@ enum Tab: String, CaseIterable, Identifiable {
         case .guide: return "calendar"
         case .topics: return "star.fill"
         case .recordings: return "recordingtape"
+        #if DISPATCHERPVR
+        case .stats: return "chart.bar.fill"
+        #endif
         case .settings: return "gear"
         }
     }
 
     var label: String { rawValue }
+
+    static var allCases: [Tab] {
+        var cases: [Tab] = [.guide, .recordings, .topics]
+        #if DISPATCHERPVR
+        cases.append(.stats)
+        #endif
+        cases.append(.settings)
+        return cases
+    }
 }
 
 @MainActor
@@ -45,6 +60,32 @@ final class AppState: ObservableObject {
     // Alert state
     @Published var alertMessage: String?
     @Published var isShowingAlert = false
+
+    #if DISPATCHERPVR
+    // Active stream count for badge
+    @Published var activeStreamCount = 0
+    private var streamCountTask: Task<Void, Never>?
+
+    func startStreamCountPolling(client: DispatcherClient) {
+        stopStreamCountPolling()
+        streamCountTask = Task {
+            while !Task.isCancelled {
+                do {
+                    let status = try await client.getProxyStatus()
+                    activeStreamCount = status.count ?? status.channels?.count ?? 0
+                } catch {
+                    // Silently ignore - badge just won't update
+                }
+                try? await Task.sleep(for: .seconds(10))
+            }
+        }
+    }
+
+    func stopStreamCountPolling() {
+        streamCountTask?.cancel()
+        streamCountTask = nil
+    }
+    #endif
 
     func showAlert(_ message: String) {
         alertMessage = message

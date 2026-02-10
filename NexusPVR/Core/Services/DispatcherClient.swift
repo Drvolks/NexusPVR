@@ -438,6 +438,15 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         return URL(string: "\(baseURL)/api/channels/logos/\(logoId)/cache/?token=\(token)")
     }
 
+    // MARK: - Proxy Status
+
+    func getProxyStatus() async throws -> ProxyStatusResponse {
+        guard let url = URL(string: "\(baseURL)/proxy/ts/status") else {
+            throw PVRClientError.invalidResponse
+        }
+        return try await authenticatedRequest(url)
+    }
+
 }
 
 // MARK: - API Response Models
@@ -644,6 +653,62 @@ struct DispatcharrProgramRef: Codable {
         case subTitle = "sub_title"
         case description
         case tvgId = "tvg_id"
+    }
+}
+
+// MARK: - Proxy Status Models
+
+struct ProxyStatusResponse: Decodable {
+    let count: Int?
+    let channels: [ProxyChannelStatus]?
+}
+
+struct ProxyChannelStatus: Decodable, Identifiable {
+    var id: String { streamName }
+
+    let streamName: String
+    let state: String
+    let resolution: String?
+    let videoCodec: String?
+    let audioCodec: String?
+    let audioChannels: String?
+    let avgBitrate: String?
+    let sourceFps: Double?
+    let ffmpegSpeed: Double?
+    let uptime: Double?
+    let totalBytes: Int64?
+    let m3uProfileName: String?
+    let clientCount: Int?
+    let clients: [ProxyClientInfo]?
+
+    enum CodingKeys: String, CodingKey {
+        case streamName = "stream_name"
+        case state, resolution
+        case videoCodec = "video_codec"
+        case audioCodec = "audio_codec"
+        case audioChannels = "audio_channels"
+        case avgBitrate = "avg_bitrate"
+        case sourceFps = "source_fps"
+        case ffmpegSpeed = "ffmpeg_speed"
+        case uptime
+        case totalBytes = "total_bytes"
+        case m3uProfileName = "m3u_profile_name"
+        case clientCount = "client_count"
+        case clients
+    }
+}
+
+struct ProxyClientInfo: Decodable, Identifiable {
+    var id: String { ipAddress + userAgent }
+
+    let ipAddress: String
+    let userAgent: String
+    let connectedSince: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case ipAddress = "ip_address"
+        case userAgent = "user_agent"
+        case connectedSince = "connected_since"
     }
 }
 

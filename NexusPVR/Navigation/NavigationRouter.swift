@@ -22,6 +22,11 @@ struct NavigationRouter: View {
             #endif
         }
         .preferredColorScheme(.dark)
+        #if DISPATCHERPVR
+        .task {
+            appState.startStreamCountPolling(client: client as! DispatcherClient)
+        }
+        #endif
     }
 }
 
@@ -42,6 +47,10 @@ struct IOSNavigation: View {
                 TopicsView()
             case .recordings:
                 RecordingsListView()
+            #if DISPATCHERPVR
+            case .stats:
+                StatsView()
+            #endif
             case .settings:
                 SettingsView()
             }
@@ -57,6 +66,9 @@ struct IOSNavigation: View {
                         VStack(spacing: 4) {
                             Image(systemName: tab.icon)
                                 .font(.system(size: 22))
+                                .overlay(alignment: .topTrailing) {
+                                    tabBadge(for: tab)
+                                }
                             Text(tab.label)
                                 .font(.caption2)
                         }
@@ -80,6 +92,22 @@ struct IOSNavigation: View {
                 )
             }
         }
+    }
+
+    @ViewBuilder
+    private func tabBadge(for tab: Tab) -> some View {
+        #if DISPATCHERPVR
+        if tab == .stats && appState.activeStreamCount > 0 {
+            Text("\(appState.activeStreamCount)")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .background(Theme.accent)
+                .clipShape(Capsule())
+                .offset(x: 8, y: -6)
+        }
+        #endif
     }
 }
 #endif
@@ -109,6 +137,10 @@ struct TVOSNavigation: View {
                     RecordingsListView()
                 case .topics:
                     TopicsView()
+                #if DISPATCHERPVR
+                case .stats:
+                    StatsView()
+                #endif
                 case .settings:
                     SettingsView()
                 }
@@ -169,6 +201,17 @@ struct TVOSNavigation: View {
                             .font(.title3)
                         Text(tab.label)
                             .font(.headline)
+                        #if DISPATCHERPVR
+                        if tab == .stats && appState.activeStreamCount > 0 {
+                            Text("\(appState.activeStreamCount)")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 2)
+                                .background(Theme.accent)
+                                .clipShape(Capsule())
+                        }
+                        #endif
                     }
                     .padding(.horizontal, 28)
                     .padding(.vertical, 16)
@@ -228,8 +271,22 @@ struct MacOSNavigation: View {
                 // Show regular navigation with sidebar
                 NavigationSplitView {
                     List(Tab.allCases, selection: $appState.selectedTab) { tab in
-                        Label(tab.label, systemImage: tab.icon)
-                            .tag(tab)
+                        HStack {
+                            Label(tab.label, systemImage: tab.icon)
+                            #if DISPATCHERPVR
+                            if tab == .stats && appState.activeStreamCount > 0 {
+                                Spacer()
+                                Text("\(appState.activeStreamCount)")
+                                    .font(.caption2.bold())
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Theme.accent)
+                                    .clipShape(Capsule())
+                            }
+                            #endif
+                        }
+                        .tag(tab)
                     }
                     .navigationSplitViewColumnWidth(min: 180, ideal: 200)
                 } detail: {
@@ -240,6 +297,10 @@ struct MacOSNavigation: View {
                         TopicsView()
                     case .recordings:
                         RecordingsListView()
+                    #if DISPATCHERPVR
+                    case .stats:
+                        StatsView()
+                    #endif
                     case .settings:
                         SettingsView()
                     }
