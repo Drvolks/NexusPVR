@@ -36,11 +36,11 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		D1AAAA0C2F31559900D2B8DF /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+		D1AAAA0C2F31559900D2B8DF /* Exceptions for "NexusPVR" folder in "DispatcherPVR" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Assets.xcassets,
-				NexusPVR.entitlements,
+				LaunchScreen.storyboard,
 			);
 			target = D1AAAA062F31559900D2B8DF /* DispatcherPVR */;
 		};
@@ -50,7 +50,7 @@
 		6E74158E2F315368001FE083 /* NexusPVR */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				D1AAAA0C2F31559900D2B8DF /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+				D1AAAA0C2F31559900D2B8DF /* Exceptions for "NexusPVR" folder in "DispatcherPVR" target */,
 			);
 			path = NexusPVR;
 			sourceTree = "<group>";
