@@ -46,10 +46,10 @@ private struct RecordingsListContentView: View {
             VStack(spacing: 0) {
                 // Tab picker
                 Picker("Filter", selection: $viewModel.filter) {
-                    Text("Completed").tag(RecordingsFilter.completed)
                     if viewModel.hasActiveRecordings {
                         Text("Recording").tag(RecordingsFilter.recording)
                     }
+                    Text("Completed").tag(RecordingsFilter.completed)
                     Text("Scheduled").tag(RecordingsFilter.scheduled)
                 }
                 .pickerStyle(.segmented)
