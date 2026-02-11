@@ -12,6 +12,7 @@ import SwiftUI
 struct WatchProgressCircle: View {
     let progress: Double // 0.0 to 1.0
     let size: CGFloat
+    var sport: Sport? = nil
 
     private var isFullyWatched: Bool {
         progress >= 0.9
@@ -32,8 +33,12 @@ struct WatchProgressCircle: View {
                 )
                 .rotationEffect(.degrees(-90))
 
-            // Center icon
-            if isFullyWatched {
+            // Center icon: sport icon if available, otherwise play/checkmark
+            if let sport {
+                Image(systemName: sport.sfSymbol)
+                    .font(.system(size: size * 0.38))
+                    .foregroundStyle(isFullyWatched ? Theme.success : Theme.accent)
+            } else if isFullyWatched {
                 Image(systemName: "checkmark")
                     .font(.system(size: size * 0.4, weight: .bold))
                     .foregroundStyle(Theme.success)
@@ -61,6 +66,10 @@ struct RecordingRow: View {
         return min(1.0, Double(position) / Double(duration))
     }
 
+    private var detectedSport: Sport? {
+        SportDetector.detect(from: recording)
+    }
+
     var body: some View {
         HStack(alignment: .center, spacing: Theme.spacingMD) {
             // Left column: Status indicator (centered vertically)
@@ -68,7 +77,7 @@ struct RecordingRow: View {
 
             // Content area
             VStack(alignment: .leading, spacing: Theme.spacingXS) {
-                // Row 1: Program title (full width)
+                // Row 1: Program title
                 Text(recording.name)
                     .font(.headline)
                     .foregroundStyle(Theme.textPrimary)
@@ -119,16 +128,16 @@ struct RecordingRow: View {
     private var statusIcon: some View {
         // For completed recordings with watch progress, show the progress circle
         if recording.recordingStatus.isCompleted, let progress = watchProgress {
-            WatchProgressCircle(progress: progress, size: 44)
+            WatchProgressCircle(progress: progress, size: 44, sport: detectedSport)
         } else if recording.recordingStatus.isCompleted {
-            // Completed but not started watching - show play icon
+            // Completed but not started watching
             ZStack {
                 Circle()
                     .fill(Theme.accent.opacity(0.2))
                     .frame(width: 44, height: 44)
 
-                Image(systemName: "play.fill")
-                    .font(.title3)
+                Image(systemName: detectedSport?.sfSymbol ?? "play.fill")
+                    .font(.system(size: 44 * 0.38))
                     .foregroundStyle(Theme.accent)
             }
         } else {
@@ -138,8 +147,8 @@ struct RecordingRow: View {
                     .fill(statusColor.opacity(0.2))
                     .frame(width: 44, height: 44)
 
-                Image(systemName: statusIconName)
-                    .font(.title3)
+                Image(systemName: detectedSport?.sfSymbol ?? statusIconName)
+                    .font(.system(size: 44 * 0.38))
                     .foregroundStyle(statusColor)
             }
         }
@@ -239,6 +248,10 @@ struct RecordingRowTV: View {
         }
     }
 
+    private var detectedSport: Sport? {
+        SportDetector.detect(from: recording)
+    }
+
     private var actionColor: Color {
         switch recording.recordingStatus {
         case .ready:
@@ -263,17 +276,17 @@ struct RecordingRowTV: View {
             }
         } label: {
             HStack(spacing: Theme.spacingLG) {
-                // Status icon or watch progress
+                // Status icon or watch progress (with sport icon merged in center)
                 if recording.recordingStatus.isCompleted, let progress = watchProgress {
-                    WatchProgressCircle(progress: progress, size: 60)
+                    WatchProgressCircle(progress: progress, size: 60, sport: detectedSport)
                 } else {
                     ZStack {
                         Circle()
                             .fill(actionColor.opacity(0.2))
                             .frame(width: 60, height: 60)
 
-                        Image(systemName: actionIcon)
-                            .font(.title2)
+                        Image(systemName: detectedSport?.sfSymbol ?? actionIcon)
+                            .font(.system(size: 60 * 0.38))
                             .foregroundStyle(actionColor)
                     }
                 }

@@ -15,41 +15,53 @@ struct ProgramCell: View {
     var matchesKeyword: Bool = false
     var leadingPadding: CGFloat = 0 // Padding for portion that's off-screen to the left
 
+    private var detectedSport: Sport? {
+        SportDetector.detect(from: program)
+    }
+
+    private var showSportIcon: Bool {
+        guard detectedSport != nil else { return false }
+        #if os(tvOS)
+        return width > 200
+        #else
+        return width > 100
+        #endif
+    }
+
     var body: some View {
         ZStack(alignment: .leading) {
             // Background
             backgroundView
 
             // Content - padded to align with visible portion
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    if isCurrentlyRecording {
-                        Image(systemName: "record.circle.fill")
-                            .font(.caption2)
-                            .foregroundStyle(Theme.recording)
-                    } else if isScheduledRecording {
-                        Image(systemName: "record.circle")
-                            .font(.caption2)
-                            .foregroundStyle(Theme.recording)
-                    }
+            HStack(spacing: 4) {
+                if showSportIcon, let sport = detectedSport {
+                    SportIconView(sport: sport, size: Theme.cellHeight - Theme.spacingXS * 2 - 2)
+                }
 
+                VStack(alignment: .leading, spacing: 2) {
                     Text(program.name)
                         .font(.caption)
                         .fontWeight(.medium)
                         .foregroundStyle(Theme.textPrimary)
                         .lineLimit(1)
-                }
 
-                if let subtitle = program.subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
+                    Text(timeString)
                         .font(.caption2)
-                        .foregroundStyle(Theme.textSecondary)
-                        .lineLimit(1)
+                        .foregroundStyle(Theme.textTertiary)
                 }
 
-                Text(timeString)
-                    .font(.caption2)
-                    .foregroundStyle(Theme.textTertiary)
+                Spacer(minLength: 0)
+
+                if isCurrentlyRecording {
+                    Image(systemName: "record.circle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(Theme.recording)
+                } else if isScheduledRecording {
+                    Image(systemName: "record.circle")
+                        .font(.caption2)
+                        .foregroundStyle(Theme.recording)
+                }
             }
             .padding(.leading, Theme.spacingSM + (program.isCurrentlyAiring ? leadingPadding : 0))
             .padding(.trailing, Theme.spacingSM)

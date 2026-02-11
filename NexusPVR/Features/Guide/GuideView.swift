@@ -520,10 +520,13 @@ struct GuideView: View {
         let (xPos, cellWidth) = tvOSProgramPosition(program: program, pxPerMinute: pxPerMinute)
         let isAiring = program.isCurrentlyAiring
         let isScheduled = viewModel.isScheduledRecording(program)
+        let isRecording = isScheduled && isAiring && viewModel.recordingStatus(program) == .recording
 
         let bgColor: Color = {
             if isFocused {
                 return Theme.accent
+            } else if isRecording {
+                return Theme.recording.opacity(0.3)
             } else if isAiring {
                 return Color(white: 0.18)
             } else {
@@ -531,23 +534,34 @@ struct GuideView: View {
             }
         }()
 
-        return VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Text(program.name)
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(isFocused ? .white : Theme.textPrimary)
-                    .lineLimit(1)
+        let showSport = cellWidth > 200
+        let sportIconSize = rowHeight - 10 - 16 // cell height minus padding
 
-                if isScheduled {
-                    Image(systemName: "record.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(Theme.recording)
-                }
+        return HStack(spacing: 6) {
+            if showSport, let sport = SportDetector.detect(from: program) {
+                SportIconView(sport: sport, size: sportIconSize)
             }
 
-            Text(program.startDate, format: .dateTime.hour().minute())
-                .font(.system(size: 14))
-                .foregroundStyle(isFocused ? .white.opacity(0.8) : Theme.textSecondary)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(program.name)
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(isFocused ? .white : Theme.textPrimary)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 0)
+
+                    if isScheduled {
+                        Image(systemName: "record.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(Theme.recording)
+                    }
+                }
+
+                Text(program.startDate, format: .dateTime.hour().minute())
+                    .font(.system(size: 14))
+                    .foregroundStyle(isFocused ? .white.opacity(0.8) : Theme.textSecondary)
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

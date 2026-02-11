@@ -24,22 +24,26 @@ struct TopicProgramRow: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: Theme.spacingMD) {
-            // Left column: Channel logo (centered vertically)
-            CachedAsyncImage(url: client.channelIconURL(channelId: channel.id)) { image in
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-            } placeholder: {
-                ProgressView()
-                    .scaleEffect(0.5)
+            // Left column: Sport icon or default TV icon
+            ZStack {
+                Circle()
+                    .fill(Theme.surfaceElevated)
+
+                if let sport = SportDetector.detect(from: program) {
+                    Image(systemName: sport.sfSymbol)
+                        .font(.system(size: 22))
+                        .foregroundStyle(Theme.textSecondary)
+                } else {
+                    Image(systemName: "tv")
+                        .font(.system(size: 22))
+                        .foregroundStyle(Theme.textTertiary)
+                }
             }
             .frame(width: 56, height: 56)
-            .background(Theme.surfaceElevated)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
 
             // Content area
             VStack(alignment: .leading, spacing: Theme.spacingXS) {
-                // Row 1: Program title (full width)
+                // Row 1: Program title
                 HStack {
                     Text(program.name)
                         .font(.headline)
@@ -144,19 +148,10 @@ struct TopicProgramRow: View {
             let (completed, recording, scheduled) = try await client.getAllRecordings()
             let allRecordings = completed + recording + scheduled
 
-            #if DEBUG
-            print("TopicProgramRow: Checking program '\(program.name)' at \(program.startDate)")
-            print("  Program ID: \(program.id)")
-            print("  Scheduled recordings count: \(scheduled.count)")
-            #endif
-
             // Check if this exact program is scheduled
             if let recording = allRecordings.first(where: { $0.epgEventId == program.id }) {
                 isScheduled = true
                 existingRecordingId = recording.id
-                #if DEBUG
-                print("  -> Found matching recording by epgEventId: \(recording.id)")
-                #endif
             }
 
             // Check for existing completed recording with similar name
@@ -165,21 +160,7 @@ struct TopicProgramRow: View {
                 recording.recordingStatus == .ready
             }) {
                 existingRecording = existing
-                #if DEBUG
-                print("  -> Found existing completed recording")
-                #endif
             }
-
-            // Check for earlier scheduled recording with similar name (excluding this program)
-            #if DEBUG
-            let matchingScheduled = scheduled.filter { recording in
-                namesAreEqual(recording.name, program.name)
-            }
-            print("  -> Found \(matchingScheduled.count) scheduled recordings with similar name:")
-            for rec in matchingScheduled {
-                print("     - ID: \(rec.id), epgEventId: \(rec.epgEventId ?? -1), startTime: \(rec.startTime ?? 0), status: \(rec.status ?? "nil")")
-            }
-            #endif
 
             if let earlier = scheduled.first(where: { recording in
                 namesAreEqual(recording.name, program.name) &&
@@ -188,9 +169,6 @@ struct TopicProgramRow: View {
                 recording.recordingStatus == .pending
             }) {
                 earlierScheduled = earlier
-                #if DEBUG
-                print("  -> Found earlier scheduled recording at \(earlier.startDate ?? Date())")
-                #endif
             }
         } catch {
             // Silently fail
@@ -308,18 +286,22 @@ struct TopicProgramRowTV: View {
             performAction()
         } label: {
             HStack(alignment: .center, spacing: Theme.spacingLG) {
-                // Channel logo on the left
-                CachedAsyncImage(url: client.channelIconURL(channelId: channel.id)) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                } placeholder: {
-                    ProgressView()
-                        .scaleEffect(0.5)
+                // Sport icon or default TV icon
+                ZStack {
+                    Circle()
+                        .fill(Theme.surfaceElevated)
+
+                    if let sport = SportDetector.detect(from: program) {
+                        Image(systemName: sport.sfSymbol)
+                            .font(.system(size: 32))
+                            .foregroundStyle(Theme.textSecondary)
+                    } else {
+                        Image(systemName: "tv")
+                            .font(.system(size: 32))
+                            .foregroundStyle(Theme.textTertiary)
+                    }
                 }
                 .frame(width: 80, height: 80)
-                .background(Theme.surfaceElevated)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
 
                 // Program info
                 VStack(alignment: .leading, spacing: Theme.spacingSM) {
