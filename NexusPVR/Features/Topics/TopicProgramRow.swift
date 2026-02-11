@@ -17,6 +17,7 @@ struct TopicProgramRow: View {
     var onRecordingChanged: (() -> Void)? = nil
 
     @State private var isScheduled = false
+    @State private var isRecording = false
     @State private var existingRecordingId: Int?
     @State private var isProcessing = false
     @State private var existingRecording: Recording?
@@ -43,20 +44,18 @@ struct TopicProgramRow: View {
 
             // Content area
             VStack(alignment: .leading, spacing: Theme.spacingXS) {
-                // Row 1: Program title
-                HStack {
-                    Text(program.name)
-                        .font(.headline)
-                        .foregroundStyle(Theme.textPrimary)
-                        .lineLimit(2)
-
-                    if program.isCurrentlyAiring {
-                        Spacer()
-                        Label("Live", systemImage: "circle.fill")
-                            .font(.caption)
-                            .foregroundStyle(Theme.accent)
-                    }
+                // Live indicator
+                if program.isCurrentlyAiring {
+                    Label("Live", systemImage: "circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(Theme.accent)
                 }
+
+                // Row 1: Program title
+                Text(program.name)
+                    .font(.headline)
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(2)
 
                 // Row 2: Channel name | Action button
                 HStack {
@@ -88,6 +87,12 @@ struct TopicProgramRow: View {
                                 if isProcessing {
                                     ProgressView()
                                         .scaleEffect(0.8)
+                                } else if isRecording {
+                                    Image(systemName: "record.circle")
+                                        .foregroundStyle(Theme.recording)
+                                    Text("Recording")
+                                        .font(.caption)
+                                        .foregroundStyle(Theme.recording)
                                 } else if isScheduled {
                                     Image(systemName: "checkmark.circle.fill")
                                         .foregroundStyle(Theme.success)
@@ -104,7 +109,7 @@ struct TopicProgramRow: View {
                             }
                             .padding(.horizontal, Theme.spacingSM)
                             .padding(.vertical, Theme.spacingXS)
-                            .background(isScheduled ? Theme.success.opacity(0.1) : Theme.accent.opacity(0.1))
+                            .background(isRecording ? Theme.recording.opacity(0.1) : isScheduled ? Theme.success.opacity(0.1) : Theme.accent.opacity(0.1))
                             .clipShape(Capsule())
                         }
                         .buttonStyle(.plain)
@@ -148,10 +153,11 @@ struct TopicProgramRow: View {
             let (completed, recording, scheduled) = try await client.getAllRecordings()
             let allRecordings = completed + recording + scheduled
 
-            // Check if this exact program is scheduled
-            if let recording = allRecordings.first(where: { $0.epgEventId == program.id }) {
+            // Check if this exact program is scheduled or recording
+            if let rec = allRecordings.first(where: { $0.epgEventId == program.id }) {
                 isScheduled = true
-                existingRecordingId = recording.id
+                isRecording = rec.recordingStatus == .recording
+                existingRecordingId = rec.id
             }
 
             // Check for existing completed recording with similar name
@@ -236,6 +242,7 @@ struct TopicProgramRowTV: View {
     var onShowDetails: (() -> Void)? = nil
 
     @State private var isScheduled = false
+    @State private var isRecording = false
     @State private var existingRecordingId: Int?
     @State private var isProcessing = false
     @State private var existingRecording: Recording?
@@ -244,6 +251,8 @@ struct TopicProgramRowTV: View {
     private var actionLabel: String {
         if existingRecording != nil {
             return "Watch Recording"
+        } else if isRecording {
+            return "Recording"
         } else if isScheduled {
             return "Scheduled"
         } else if program.hasEnded {
@@ -256,6 +265,8 @@ struct TopicProgramRowTV: View {
     private var actionIcon: String {
         if existingRecording != nil {
             return "play.circle.fill"
+        } else if isRecording {
+            return "record.circle"
         } else if isScheduled {
             return "checkmark.circle.fill"
         } else if program.hasEnded {
@@ -268,6 +279,8 @@ struct TopicProgramRowTV: View {
     private var actionColor: Color {
         if existingRecording != nil {
             return Theme.accent
+        } else if isRecording {
+            return Theme.recording
         } else if isScheduled {
             return Theme.success
         } else if program.hasEnded {
@@ -403,9 +416,10 @@ struct TopicProgramRowTV: View {
             let (completed, recording, scheduled) = try await client.getAllRecordings()
             let allRecordings = completed + recording + scheduled
 
-            if let recording = allRecordings.first(where: { $0.epgEventId == program.id }) {
+            if let rec = allRecordings.first(where: { $0.epgEventId == program.id }) {
                 isScheduled = true
-                existingRecordingId = recording.id
+                isRecording = rec.recordingStatus == .recording
+                existingRecordingId = rec.id
             }
 
             if let existing = completed.first(where: { recording in

@@ -7,6 +7,26 @@
 
 import SwiftUI
 
+// MARK: - Recording Progress Bar
+
+struct RecordingProgressBar: View {
+    let progress: Double // 0.0 to 1.0
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Theme.textTertiary.opacity(0.2))
+
+                Capsule()
+                    .fill(Theme.recording)
+                    .frame(width: geo.size.width * progress)
+            }
+        }
+        .frame(height: 4)
+    }
+}
+
 // MARK: - Watch Progress Circle
 
 struct WatchProgressCircle: View {
@@ -70,6 +90,15 @@ struct RecordingRow: View {
         SportDetector.detect(from: recording)
     }
 
+    private func recordingProgress(at date: Date) -> Double? {
+        guard recording.recordingStatus == .recording,
+              let startTime = recording.startTime,
+              let duration = recording.duration,
+              duration > 0 else { return nil }
+        let elapsed = date.timeIntervalSince1970 - Double(startTime)
+        return min(max(elapsed / Double(duration), 0), 1)
+    }
+
     var body: some View {
         HStack(alignment: .center, spacing: Theme.spacingMD) {
             // Left column: Status indicator (centered vertically)
@@ -102,7 +131,8 @@ struct RecordingRow: View {
                 // Row 3: Date + time range | Duration
                 HStack {
                     if let start = recording.startDate {
-                        if recording.recordingStatus.isScheduled, let end = recording.endDate {
+                        if (recording.recordingStatus.isScheduled || recording.recordingStatus == .recording),
+                           let end = recording.endDate {
                             Text("\(start.formatted(date: .abbreviated, time: .shortened)) – \(end.formatted(date: .omitted, time: .shortened))")
                                 .font(.caption)
                                 .foregroundStyle(Theme.textTertiary)
@@ -117,6 +147,15 @@ struct RecordingRow: View {
                         Text("\(duration) min")
                             .font(.caption)
                             .foregroundStyle(Theme.textTertiary)
+                    }
+                }
+
+                // Row 4: Recording progress bar
+                if recording.recordingStatus == .recording {
+                    TimelineView(.periodic(from: .now, by: 30)) { context in
+                        if let progress = recordingProgress(at: context.date) {
+                            RecordingProgressBar(progress: progress)
+                        }
                     }
                 }
             }
@@ -252,6 +291,15 @@ struct RecordingRowTV: View {
         SportDetector.detect(from: recording)
     }
 
+    private func recordingProgress(at date: Date) -> Double? {
+        guard recording.recordingStatus == .recording,
+              let startTime = recording.startTime,
+              let duration = recording.duration,
+              duration > 0 else { return nil }
+        let elapsed = date.timeIntervalSince1970 - Double(startTime)
+        return min(max(elapsed / Double(duration), 0), 1)
+    }
+
     private var actionColor: Color {
         switch recording.recordingStatus {
         case .ready:
@@ -313,7 +361,8 @@ struct RecordingRowTV: View {
 
                         if let start = recording.startDate {
                             Label {
-                                if recording.recordingStatus.isScheduled, let end = recording.endDate {
+                                if (recording.recordingStatus.isScheduled || recording.recordingStatus == .recording),
+                                   let end = recording.endDate {
                                     Text("\(start.formatted(date: .abbreviated, time: .shortened)) – \(end.formatted(date: .omitted, time: .shortened))")
                                 } else {
                                     Text(start, style: .date)
@@ -329,6 +378,15 @@ struct RecordingRowTV: View {
                     }
                     .font(.caption)
                     .foregroundStyle(Theme.textTertiary)
+
+                    // Recording progress bar
+                    if recording.recordingStatus == .recording {
+                        TimelineView(.periodic(from: .now, by: 30)) { context in
+                            if let progress = recordingProgress(at: context.date) {
+                                RecordingProgressBar(progress: progress)
+                            }
+                        }
+                    }
                 }
 
                 Spacer()
