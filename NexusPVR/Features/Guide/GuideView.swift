@@ -19,7 +19,7 @@ private struct HorizontalScrollOffsetPreferenceKey: PreferenceKey {
 
 // Helper struct to hold both program and channel for sheet presentation
 private struct ProgramDetail: Identifiable {
-    let id = UUID()
+    var id: Int { program.id }
     let program: Program
     let channel: Channel
 }
