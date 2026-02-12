@@ -11,9 +11,14 @@ struct TopicsView: View {
     @EnvironmentObject private var client: PVRClient
     @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel = TopicsViewModel()
-    @State private var selectedProgramDetail: (program: Program, channel: Channel)?
+    @State private var selectedProgramDetail: ProgramTopicDetail?
     @State private var selectedKeyword: String = ""
     @State private var refreshTrigger = UUID()
+    @State private var showingKeywordsEditor = false
+    #if os(tvOS)
+    @State private var newKeyword = ""
+    @State private var showingAddKeyword = false
+    #endif
 
     private var filteredPrograms: [MatchingProgram] {
         guard !selectedKeyword.isEmpty else { return viewModel.matchingPrograms }
@@ -25,15 +30,72 @@ struct TopicsView: View {
             VStack(spacing: 0) {
                 // Keyword tabs
                 if !viewModel.keywords.isEmpty {
-                    Picker("Topic", selection: $selectedKeyword) {
+                    #if os(tvOS)
+                    HStack(spacing: Theme.spacingMD) {
                         ForEach(viewModel.keywords, id: \.self) { keyword in
-                            Text(keyword).tag(keyword)
+                            Button {
+                                selectedKeyword = keyword
+                            } label: {
+                                Text(keyword)
+                                    .padding(.horizontal, Theme.spacingLG)
+                                    .padding(.vertical, Theme.spacingSM)
+                                    .background(selectedKeyword == keyword ? Theme.accent : Theme.surfaceElevated)
+                                    .foregroundStyle(selectedKeyword == keyword ? .white : Theme.textPrimary)
+                                    .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
+                            }
+                            .buttonStyle(.card)
+                        }
+
+                        Button {
+                            showingAddKeyword = true
+                        } label: {
+                            Image(systemName: "plus")
+                                .padding(Theme.spacingSM)
+                                .background(Theme.surfaceElevated)
+                                .foregroundStyle(Theme.accent)
+                                .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
+                        }
+                        .buttonStyle(.card)
+
+                        if !selectedKeyword.isEmpty {
+                            Button {
+                                removeKeyword(selectedKeyword)
+                            } label: {
+                                Image(systemName: "trash")
+                                    .padding(Theme.spacingSM)
+                                    .background(Theme.surfaceElevated)
+                                    .foregroundStyle(Theme.error)
+                                    .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
+                            }
+                            .buttonStyle(.card)
                         }
                     }
-                    .pickerStyle(.segmented)
+                    .padding(.horizontal, Theme.spacingXL)
+                    .padding(.top, Theme.spacingLG)
+                    .padding(.bottom, Theme.spacingSM)
+                    #else
+                    HStack {
+                        Picker("Topic", selection: $selectedKeyword) {
+                            ForEach(viewModel.keywords, id: \.self) { keyword in
+                                Text(keyword).tag(keyword)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+
+                        #if os(macOS)
+                        Spacer()
+                        Button {
+                            showingKeywordsEditor = true
+                        } label: {
+                            Image(systemName: "pencil")
+                        }
+                        #endif
+                    }
                     .padding(.horizontal)
                     .padding(.vertical, Theme.spacingSM)
                     .background(Theme.surface)
+                    #endif
                 }
 
                 // Content
@@ -51,10 +113,7 @@ struct TopicsView: View {
                     }
                 }
             }
-            .sheet(item: Binding(
-                get: { selectedProgramDetail.map { ProgramTopicDetail(program: $0.program, channel: $0.channel) } },
-                set: { selectedProgramDetail = $0.map { ($0.program, $0.channel) } }
-            ), onDismiss: {
+            .sheet(item: $selectedProgramDetail, onDismiss: {
                 // Refresh all rows to update recording status
                 refreshTrigger = UUID()
             }) { detail in
@@ -62,6 +121,23 @@ struct TopicsView: View {
                     .environmentObject(client)
                     .environmentObject(appState)
             }
+            #if os(tvOS)
+            .alert("Add Keyword", isPresented: $showingAddKeyword) {
+                TextField("Keyword", text: $newKeyword)
+                Button("Add") { addKeyword() }
+                Button("Cancel", role: .cancel) { newKeyword = "" }
+            }
+            #elseif os(iOS)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showingKeywordsEditor = true
+                    } label: {
+                        Image(systemName: "pencil")
+                    }
+                }
+            }
+            #endif
             .onChange(of: viewModel.keywords) {
                 if selectedKeyword.isEmpty, let first = viewModel.keywords.first {
                     selectedKeyword = first
@@ -69,6 +145,19 @@ struct TopicsView: View {
             }
         }
         .background(Theme.background)
+        #if !os(tvOS)
+        .sheet(isPresented: $showingKeywordsEditor) {
+            KeywordsEditorView()
+                .onDisappear {
+                    Task {
+                        await viewModel.loadData(using: client)
+                    }
+                }
+                #if os(macOS)
+                .frame(minWidth: 500, minHeight: 400)
+                #endif
+        }
+        #endif
         .task {
             await viewModel.loadData(using: client)
         }
@@ -82,10 +171,32 @@ struct TopicsView: View {
             Text("No Topics Configured")
                 .font(.headline)
                 .foregroundStyle(Theme.textPrimary)
-            Text("Add keywords in Settings to see matching programs")
+            Text("Add keywords to find matching programs")
                 .font(.subheadline)
                 .foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center)
+
+            #if os(tvOS)
+            Button {
+                showingAddKeyword = true
+            } label: {
+                HStack {
+                    Image(systemName: "plus.circle.fill")
+                    Text("Add Keyword")
+                }
+            }
+            .buttonStyle(AccentButtonStyle())
+            #else
+            Button {
+                showingKeywordsEditor = true
+            } label: {
+                HStack {
+                    Image(systemName: "pencil")
+                    Text("Edit Keywords")
+                }
+            }
+            .buttonStyle(AccentButtonStyle())
+            #endif
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -149,7 +260,7 @@ struct TopicsView: View {
                             refreshTrigger = UUID()
                         },
                         onShowDetails: {
-                            selectedProgramDetail = (program: item.program, channel: item.channel)
+                            selectedProgramDetail = ProgramTopicDetail(program: item.program, channel: item.channel)
                         }
                     )
                     .environmentObject(client)
@@ -172,7 +283,7 @@ struct TopicsView: View {
                 )
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    selectedProgramDetail = (program: item.program, channel: item.channel)
+                    selectedProgramDetail = ProgramTopicDetail(program: item.program, channel: item.channel)
                 }
                 .listRowBackground(Theme.surface)
                 .id("\(item.id)-\(refreshTrigger)")
@@ -184,11 +295,41 @@ struct TopicsView: View {
         }
         #endif
     }
+
+    #if os(tvOS)
+    private func addKeyword() {
+        let trimmed = newKeyword.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        var prefs = UserPreferences.load()
+        guard !prefs.keywords.contains(trimmed) else {
+            newKeyword = ""
+            return
+        }
+        prefs.keywords.append(trimmed)
+        prefs.save()
+        newKeyword = ""
+        Task {
+            await viewModel.loadData(using: client)
+        }
+    }
+
+    private func removeKeyword(_ keyword: String) {
+        var prefs = UserPreferences.load()
+        prefs.keywords.removeAll { $0 == keyword }
+        prefs.save()
+        if selectedKeyword == keyword {
+            selectedKeyword = prefs.keywords.first ?? ""
+        }
+        Task {
+            await viewModel.loadData(using: client)
+        }
+    }
+    #endif
 }
 
 // Helper struct for sheet binding
 private struct ProgramTopicDetail: Identifiable {
-    let id = UUID()
+    var id: String { "\(program.id)-\(channel.id)" }
     let program: Program
     let channel: Channel
 }

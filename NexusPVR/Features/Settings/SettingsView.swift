@@ -9,16 +9,10 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var client: PVRClient
-    @State private var showingKeywordsEditor = false
     @State private var showingUnlinkConfirm = false
     @State private var seekBackwardSeconds: Int = UserPreferences.load().seekBackwardSeconds
     @State private var seekForwardSeconds: Int = UserPreferences.load().seekForwardSeconds
 
-    #if os(tvOS)
-    @State private var preferences = UserPreferences.load()
-    @State private var newKeyword = ""
-    @State private var showingAddKeyword = false
-    #endif
 
     var body: some View {
         NavigationStack {
@@ -34,7 +28,6 @@ struct SettingsView: View {
             #else
             List {
                 serverSection
-                keywordsSection
                 playbackSection
                 playerStatsSection
             }
@@ -42,12 +35,6 @@ struct SettingsView: View {
             #if os(iOS)
             .listStyle(.insetGrouped)
             #endif
-            .sheet(isPresented: $showingKeywordsEditor) {
-                KeywordsEditorView()
-                    #if os(macOS)
-                    .frame(minWidth: 500, minHeight: 400)
-                    #endif
-            }
             #endif
         }
         .background(Theme.background)
@@ -99,58 +86,6 @@ struct SettingsView: View {
                     }
                 }
                 .focusSection()
-
-                // Topics Section
-                TVSettingsSection(
-                    title: "Topic Keywords",
-                    icon: "star.fill",
-                    footer: "Keywords are matched against program titles and descriptions"
-                ) {
-                    VStack(spacing: Theme.spacingMD) {
-                        if !preferences.keywords.isEmpty {
-                            ForEach(preferences.keywords, id: \.self) { keyword in
-                                HStack {
-                                    Text(keyword)
-                                        .foregroundStyle(Theme.textPrimary)
-                                    Spacer()
-                                    Button {
-                                        removeKeyword(keyword)
-                                    } label: {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .foregroundStyle(Theme.error)
-                                            .font(.title3)
-                                    }
-                                    .buttonStyle(.card)
-                                }
-                                .padding(.vertical, Theme.spacingXS)
-                            }
-
-                            Divider()
-                                .background(Theme.textTertiary)
-                        }
-
-                        Button {
-                            showingAddKeyword = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "plus.circle.fill")
-                                Text("Add")
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Theme.accent)
-                            .foregroundStyle(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
-                        }
-                        .buttonStyle(.card)
-                    }
-                }
-                .focusSection()
-                .alert("Add Keyword", isPresented: $showingAddKeyword) {
-                    TextField("Keyword", text: $newKeyword)
-                    Button("Add") { addKeyword() }
-                    Button("Cancel", role: .cancel) { newKeyword = "" }
-                }
 
                 // Playback Section
                 TVSettingsSection(
@@ -226,54 +161,7 @@ struct SettingsView: View {
         }
     }
 
-    private func addKeyword() {
-        let trimmed = newKeyword.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
-        guard !preferences.keywords.contains(trimmed) else {
-            newKeyword = ""
-            return
-        }
-
-        preferences.keywords.append(trimmed)
-        preferences.save()
-        newKeyword = ""
-    }
-
-    private func removeKeyword(_ keyword: String) {
-        preferences.keywords.removeAll { $0 == keyword }
-        preferences.save()
-    }
     #endif
-
-    private var keywordsSection: some View {
-        Section {
-            Button {
-                showingKeywordsEditor = true
-            } label: {
-                HStack {
-                    Label("Topic Keywords", systemImage: "star.fill")
-                        .foregroundStyle(Theme.textPrimary)
-                    Spacer()
-                    let prefs = UserPreferences.load()
-                    if !prefs.keywords.isEmpty {
-                        Text("\(prefs.keywords.count)")
-                            .foregroundStyle(Theme.textTertiary)
-                    }
-                    Image(systemName: "chevron.right")
-                        .foregroundStyle(Theme.textTertiary)
-                }
-            }
-            #if os(tvOS)
-            .buttonStyle(.card)
-            #else
-            .foregroundStyle(Theme.textPrimary)
-            #endif
-        } header: {
-            Text("Topics")
-        } footer: {
-            Text("Add keywords to find matching programs in the Topics tab")
-        }
-    }
 
     private var serverSection: some View {
         Section {
