@@ -226,6 +226,25 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         }
     }
 
+    /// Fetch all items from a paginated Dispatcharr endpoint
+    private func fetchAllPages<T: Decodable>(_ url: URL) async throws -> [T] {
+        var allItems = [T]()
+        var nextURL: URL? = url
+
+        while let currentURL = nextURL {
+            let response: DispatcharrListResponse<T> = try await authenticatedRequest(currentURL)
+            allItems.append(contentsOf: response.allItems)
+
+            if let next = response.next, let url = URL(string: next) {
+                nextURL = url
+            } else {
+                nextURL = nil
+            }
+        }
+
+        return allItems
+    }
+
     // MARK: - Channels
 
     func getChannels() async throws -> [Channel] {
@@ -233,8 +252,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
             throw PVRClientError.invalidResponse
         }
 
-        let response: DispatcharrListResponse<DispatcharrChannel> = try await authenticatedRequest(url)
-        let items = response.allItems
+        let items: [DispatcharrChannel] = try await fetchAllPages(url)
 
         // Build lookup maps for EPG, logo, and stream URL resolution
         tvgIdToChannelId = [:]
@@ -252,6 +270,22 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
             }
         }
 
+        // Resolve EPG data tvg_ids for channels where the channel's tvg_id
+        // differs from the EPG source's tvg_id (e.g. "CBCNews.ca" vs "CBCNewsNetwork.ca")
+        for ch in items {
+            guard let epgDataId = ch.epgDataId else { continue }
+            guard let epgURL = URL(string: "\(baseURL)/api/epg/epgdata/\(epgDataId)/") else { continue }
+            do {
+                let epgData: DispatcharrEPGData = try await authenticatedRequest(epgURL)
+                if let epgTvgId = epgData.tvgId, !epgTvgId.isEmpty,
+                   tvgIdToChannelId[epgTvgId] == nil {
+                    tvgIdToChannelId[epgTvgId] = ch.id
+                }
+            } catch {
+                // Non-critical — skip if EPG data lookup fails
+            }
+        }
+
         return items.map { $0.toChannel() }
     }
 
@@ -265,8 +299,8 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         // Find the tvg_id for this channel (reverse lookup)
         let tvgId = tvgIdToChannelId.first(where: { $0.value == channelId })?.key
 
-        let response: DispatcharrListResponse<DispatcharrProgram> = try await authenticatedRequest(url)
-        let programs = response.allItems
+        let allPrograms: [DispatcharrProgram] = try await fetchAllPages(url)
+        let programs = allPrograms
             .filter { program in
                 if let directId = program.channel, directId == channelId {
                     return true
@@ -289,10 +323,10 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
             throw PVRClientError.invalidResponse
         }
 
-        let response: DispatcharrListResponse<DispatcharrProgram> = try await authenticatedRequest(url)
+        let allPrograms: [DispatcharrProgram] = try await fetchAllPages(url)
         var result = [Int: [Program]]()
 
-        for program in response.allItems {
+        for program in allPrograms {
             // Resolve channel ID: try the direct channel field first,
             // then fall back to tvg_id → channel id mapping
             let channelId: Int?
@@ -319,8 +353,8 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
             throw PVRClientError.invalidResponse
         }
 
-        let response: DispatcharrListResponse<DispatcharrRecording> = try await authenticatedRequest(url)
-        let recordings = response.allItems.map { $0.toRecording() }
+        let items: [DispatcharrRecording] = try await fetchAllPages(url)
+        let recordings = items.map { $0.toRecording() }
 
         var completed: [Recording] = []
         var active: [Recording] = []
@@ -507,6 +541,7 @@ struct DispatcharrChannel: Decodable {
     let tvgId: String?
     let logoId: Int?
     let uuid: String?
+    let epgDataId: Int?
 
     enum CodingKeys: String, CodingKey {
         case id, name
@@ -514,6 +549,7 @@ struct DispatcharrChannel: Decodable {
         case tvgId = "tvg_id"
         case logoId = "logo_id"
         case uuid
+        case epgDataId = "epg_data_id"
     }
 
     func toChannel() -> Channel {
@@ -523,6 +559,16 @@ struct DispatcharrChannel: Decodable {
             number: Int(channelNumber ?? 0),
             hasIcon: logoId != nil
         )
+    }
+}
+
+private struct DispatcharrEPGData: Decodable {
+    let id: Int
+    let tvgId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case tvgId = "tvg_id"
     }
 }
 
