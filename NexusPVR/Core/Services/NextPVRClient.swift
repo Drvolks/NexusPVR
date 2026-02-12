@@ -70,6 +70,8 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
     // MARK: - Authentication
 
     func authenticate() async throws {
+        guard !config.isDemoMode else { isAuthenticated = true; return }
+
         guard config.isConfigured else {
             throw NextPVRError.notConfigured
         }
@@ -181,6 +183,7 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
     // MARK: - Channels
 
     func getChannels() async throws -> [Channel] {
+        guard !config.isDemoMode else { return DemoDataProvider.channels }
         let response: ChannelListResponse = try await request("channel.list")
         return response.channels ?? []
     }
@@ -188,11 +191,13 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
     // MARK: - EPG / Listings
 
     func getListings(channelId: Int) async throws -> [Program] {
+        guard !config.isDemoMode else { return DemoDataProvider.listings(for: channelId) }
         let response: ProgramListingsResponse = try await request("channel.listings", params: ["channel_id": String(channelId)])
         return response.listings ?? []
     }
 
     func getAllListings(for channels: [Channel]) async throws -> [Int: [Program]] {
+        guard !config.isDemoMode else { return DemoDataProvider.allListings(for: channels) }
         var result = [Int: [Program]]()
 
         // Ensure we're authenticated before starting batch requests
@@ -223,6 +228,7 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
     // MARK: - Recordings
 
     func getRecordings(filter: String = "ready") async throws -> [Recording] {
+        guard !config.isDemoMode else { return [] }
         let response: RecordingListResponse = try await request("recording.list", params: ["filter": filter])
         #if DEBUG
         print("NextPVR: Fetched \(response.recordings?.count ?? 0) recordings with filter '\(filter)'")
@@ -231,6 +237,7 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
     }
 
     func getAllRecordings() async throws -> (completed: [Recording], recording: [Recording], scheduled: [Recording]) {
+        guard !config.isDemoMode else { return DemoDataProvider.recordings() }
         async let ready = getRecordings(filter: "ready")
         async let inProgress = getRecordings(filter: "recording")
         async let pending = getRecordings(filter: "pending")
@@ -266,6 +273,7 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
     }
 
     func scheduleRecording(eventId: Int) async throws {
+        guard !config.isDemoMode else { DemoDataProvider.scheduleRecording(eventId: eventId); return }
         let response: APIResponse = try await request("recording.save", params: ["event_id": String(eventId)])
         if !response.isSuccess {
             throw NextPVRError.apiError("Failed to schedule recording")
@@ -273,6 +281,7 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
     }
 
     func cancelRecording(recordingId: Int) async throws {
+        guard !config.isDemoMode else { DemoDataProvider.cancelRecording(recordingId: recordingId); return }
         let response: APIResponse = try await request("recording.delete", params: ["recording_id": String(recordingId)])
         if !response.isSuccess {
             throw NextPVRError.apiError("Failed to cancel recording")
@@ -280,6 +289,7 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
     }
 
     func setRecordingPosition(recordingId: Int, positionSeconds: Int) async throws {
+        guard !config.isDemoMode else { return }
         let response: APIResponse = try await request("recording.watched.set", params: [
             "recording_id": String(recordingId),
             "position": String(positionSeconds)
@@ -294,6 +304,7 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
     // MARK: - Streaming URLs
 
     func liveStreamURL(channelId: Int) async throws -> URL {
+        guard !config.isDemoMode else { return DemoDataProvider.demoVideoURL }
         if !isAuthenticated {
             try await authenticate()
         }
@@ -325,6 +336,7 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
     }
 
     func recordingStreamURL(recordingId: Int) async throws -> URL {
+        guard !config.isDemoMode else { return DemoDataProvider.demoVideoURL }
         if !isAuthenticated {
             try await authenticate()
         }
@@ -336,6 +348,7 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
     }
 
     func channelIconURL(channelId: Int) -> URL? {
-        URL(string: "\(baseURL)/service?method=channel.icon&channel_id=\(channelId)")
+        guard !config.isDemoMode else { return DemoDataProvider.channelIconURL(channelId: channelId) }
+        return URL(string: "\(baseURL)/service?method=channel.icon&channel_id=\(channelId)")
     }
 }

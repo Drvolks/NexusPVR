@@ -50,6 +50,8 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
     // MARK: - Authentication
 
     func authenticate() async throws {
+        guard !config.isDemoMode else { isAuthenticated = true; return }
+
         guard config.isConfigured else {
             throw PVRClientError.notConfigured
         }
@@ -248,6 +250,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
     // MARK: - Channels
 
     func getChannels() async throws -> [Channel] {
+        guard !config.isDemoMode else { return DemoDataProvider.channels }
         guard let url = URL(string: "\(baseURL)/api/channels/channels/") else {
             throw PVRClientError.invalidResponse
         }
@@ -292,6 +295,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
     // MARK: - EPG / Listings
 
     func getListings(channelId: Int) async throws -> [Program] {
+        guard !config.isDemoMode else { return DemoDataProvider.listings(for: channelId) }
         guard let url = URL(string: "\(baseURL)/api/epg/grid/") else {
             throw PVRClientError.invalidResponse
         }
@@ -315,6 +319,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
     }
 
     func getAllListings(for channels: [Channel]) async throws -> [Int: [Program]] {
+        guard !config.isDemoMode else { return DemoDataProvider.allListings(for: channels) }
         if !isAuthenticated {
             try await authenticate()
         }
@@ -349,6 +354,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
     // MARK: - Recordings
 
     func getAllRecordings() async throws -> (completed: [Recording], recording: [Recording], scheduled: [Recording]) {
+        guard !config.isDemoMode else { return DemoDataProvider.recordings() }
         guard let url = URL(string: "\(baseURL)/api/channels/recordings/") else {
             throw PVRClientError.invalidResponse
         }
@@ -376,6 +382,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
     }
 
     func scheduleRecording(eventId: Int) async throws {
+        guard !config.isDemoMode else { DemoDataProvider.scheduleRecording(eventId: eventId); return }
         // In Dispatcharr, scheduling requires start_time, end_time, and channel
         // The eventId here is a program ID — we need to look up the program details
         guard let programURL = URL(string: "\(baseURL)/api/epg/programs/\(eventId)/") else {
@@ -422,6 +429,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
     }
 
     func cancelRecording(recordingId: Int) async throws {
+        guard !config.isDemoMode else { DemoDataProvider.cancelRecording(recordingId: recordingId); return }
         guard let url = URL(string: "\(baseURL)/api/channels/recordings/\(recordingId)/") else {
             throw PVRClientError.invalidResponse
         }
@@ -430,6 +438,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
     }
 
     func setRecordingPosition(recordingId: Int, positionSeconds: Int) async throws {
+        guard !config.isDemoMode else { return }
         // Dispatcharr doesn't natively support playback position tracking
         // Store locally in UserDefaults as a fallback
         UserDefaults.standard.set(positionSeconds, forKey: "recording_position_\(recordingId)")
@@ -438,6 +447,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
     // MARK: - Streaming URLs
 
     func liveStreamURL(channelId: Int) async throws -> URL {
+        guard !config.isDemoMode else { return DemoDataProvider.demoVideoURL }
         guard let uuid = channelIdToUUID[channelId] else {
             throw PVRClientError.apiError("No stream UUID for channel \(channelId)")
         }
@@ -455,6 +465,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
     }
 
     func recordingStreamURL(recordingId: Int) async throws -> URL {
+        guard !config.isDemoMode else { return DemoDataProvider.demoVideoURL }
         if !isAuthenticated {
             try await authenticate()
         }
@@ -467,6 +478,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
     }
 
     func channelIconURL(channelId: Int) -> URL? {
+        guard !config.isDemoMode else { return DemoDataProvider.channelIconURL(channelId: channelId) }
         guard let logoId = channelIdToLogoId[channelId],
               let token = accessToken else { return nil }
         return URL(string: "\(baseURL)/api/channels/logos/\(logoId)/cache/?token=\(token)")
@@ -475,6 +487,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
     // MARK: - Proxy Status
 
     func getProxyStatus() async throws -> ProxyStatusResponse {
+        guard !config.isDemoMode else { return ProxyStatusResponse(count: 0, channels: []) }
         guard let url = URL(string: "\(baseURL)/proxy/ts/status") else {
             throw PVRClientError.invalidResponse
         }

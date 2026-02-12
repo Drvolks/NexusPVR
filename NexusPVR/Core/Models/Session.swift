@@ -50,8 +50,13 @@ struct ServerConfig: Codable, Equatable {
         ServerConfig(host: "", port: Brand.defaultPort, pin: Brand.defaultPIN, username: "", password: "", useHTTPS: false)
     }
 
+    var isDemoMode: Bool {
+        host.lowercased() == "demo"
+            || (username.lowercased() == "demo" && password == "demo")
+    }
+
     var isConfigured: Bool {
-        !host.isEmpty
+        !host.isEmpty || isDemoMode
     }
 
     // Coding keys with defaults for backward compatibility
