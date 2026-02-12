@@ -11,7 +11,6 @@ protocol BrandConfig {
     // App identity
     static var appName: String { get }
     static var serverName: String { get }
-    static var subtitle: String { get }
     static var deviceName: String { get }
 
     // Network defaults
@@ -25,6 +24,9 @@ protocol BrandConfig {
     static var authFooter: String { get }
     static var connectionSuccessMessage: String { get }
     static var configureServerMessage: String { get }
+
+    // Discovery
+    static var discoveryProbePath: String { get }
 
     // Colors
     static var accent: Color { get }

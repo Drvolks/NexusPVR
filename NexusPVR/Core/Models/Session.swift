@@ -144,6 +144,12 @@ extension ServerConfig {
         }
     }
 
+    static func clear() {
+        ubiquitousStore.removeObject(forKey: storageKey)
+        ubiquitousStore.synchronize()
+        UserDefaults.standard.removeObject(forKey: storageKey)
+    }
+
     private static func saveToUserDefaults(_ config: ServerConfig) {
         if let data = try? JSONEncoder().encode(config) {
             UserDefaults.standard.set(data, forKey: storageKey)

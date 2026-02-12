@@ -9,35 +9,27 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var client: PVRClient
-    @State private var showingServerConfig = false
     @State private var showingKeywordsEditor = false
+    @State private var showingUnlinkConfirm = false
     @State private var seekBackwardSeconds: Int = UserPreferences.load().seekBackwardSeconds
     @State private var seekForwardSeconds: Int = UserPreferences.load().seekForwardSeconds
 
     #if os(tvOS)
-    @State private var serverConfig = ServerConfig.load()
-    @State private var savedConfig = ServerConfig.load()
-    @State private var isConnecting = false
-    @State private var connectionError: String?
     @State private var preferences = UserPreferences.load()
     @State private var newKeyword = ""
     @State private var showingAddKeyword = false
-
-    private var hasConfigChanges: Bool {
-        serverConfig != savedConfig
-    }
     #endif
 
     var body: some View {
         NavigationStack {
             #if os(tvOS)
             tvOSContent
-                .alert("Connection Error", isPresented: .constant(connectionError != nil)) {
-                    Button("OK") { connectionError = nil }
-                } message: {
-                    if let error = connectionError {
-                        Text(error)
+                .confirmationDialog("Unlink Server", isPresented: $showingUnlinkConfirm, titleVisibility: .visible) {
+                    Button("Unlink", role: .destructive) {
+                        unlinkServer()
                     }
+                } message: {
+                    Text("This will disconnect and forget the server. You'll need to set it up again.")
                 }
             #else
             List {
@@ -50,13 +42,6 @@ struct SettingsView: View {
             #if os(iOS)
             .listStyle(.insetGrouped)
             #endif
-            .sheet(isPresented: $showingServerConfig) {
-                ServerConfigView()
-                    .environmentObject(client)
-                    #if os(macOS)
-                    .frame(minWidth: 500, minHeight: 450)
-                    #endif
-            }
             .sheet(isPresented: $showingKeywordsEditor) {
                 KeywordsEditorView()
                     #if os(macOS)
@@ -77,19 +62,12 @@ struct SettingsView: View {
                     title: "\(Brand.serverName) Server",
                     icon: "server.rack",
                     statusView: {
-                        if client.isAuthenticated && !hasConfigChanges {
+                        if client.isAuthenticated {
                             HStack(spacing: 8) {
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundStyle(Theme.success)
                                 Text("Connected")
                                     .foregroundStyle(Theme.success)
-                            }
-                        } else if isConnecting {
-                            HStack(spacing: 8) {
-                                ProgressView()
-                                    .tint(Theme.accent)
-                                Text("Connecting...")
-                                    .foregroundStyle(Theme.textSecondary)
                             }
                         }
                     }
@@ -99,59 +77,25 @@ struct SettingsView: View {
                             Text("Host")
                                 .foregroundStyle(Theme.textSecondary)
                                 .frame(width: 80, alignment: .trailing)
-                            TVTextField(placeholder: "192.168.1.100", text: $serverConfig.host)
+                            Spacer()
+                            Text(verbatim: "\(client.config.host):\(client.config.port)")
+                                .foregroundStyle(Theme.textPrimary)
                         }
-
-                        HStack {
-                            Text("Port")
-                                .foregroundStyle(Theme.textSecondary)
-                                .frame(width: 80, alignment: .trailing)
-                            TVNumberField(placeholder: "\(Brand.defaultPort)", value: $serverConfig.port)
-                        }
-
-                        #if DISPATCHERPVR
-                        HStack {
-                            Text("User")
-                                .foregroundStyle(Theme.textSecondary)
-                                .frame(width: 80, alignment: .trailing)
-                            TVTextField(placeholder: "Username", text: $serverConfig.username)
-                        }
-
-                        HStack {
-                            Text("Pass")
-                                .foregroundStyle(Theme.textSecondary)
-                                .frame(width: 80, alignment: .trailing)
-                            TVTextField(placeholder: "Password", text: $serverConfig.password)
-                        }
-                        #else
-                        HStack {
-                            Text("PIN")
-                                .foregroundStyle(Theme.textSecondary)
-                                .frame(width: 80, alignment: .trailing)
-                            TVTextField(placeholder: "0000", text: $serverConfig.pin)
-                        }
-                        #endif
 
                         Button {
-                            saveAndConnect()
+                            showingUnlinkConfirm = true
                         } label: {
                             HStack {
-                                if isConnecting {
-                                    ProgressView()
-                                        .tint(.white)
-                                } else {
-                                    Image(systemName: "link")
-                                }
-                                Text(isConnecting ? "Connecting..." : "Connect")
+                                Image(systemName: "server.rack")
+                                Text("Unlink Server")
                             }
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(hasConfigChanges && serverConfig.isConfigured ? Theme.accent : Theme.surfaceElevated)
-                            .foregroundStyle(hasConfigChanges && serverConfig.isConfigured ? .white : Theme.textTertiary)
+                            .background(Theme.error)
+                            .foregroundStyle(.white)
                             .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
                         }
                         .buttonStyle(.card)
-                        .disabled(!hasConfigChanges || !serverConfig.isConfigured || isConnecting)
                     }
                 }
                 .focusSection()
@@ -282,28 +226,6 @@ struct SettingsView: View {
         }
     }
 
-
-    private func saveAndConnect() {
-        guard serverConfig.isConfigured else { return }
-
-        isConnecting = true
-        connectionError = nil
-
-        serverConfig.save()
-        client.updateConfig(serverConfig)
-
-        Task {
-            do {
-                try await client.authenticate()
-                isConnecting = false
-                savedConfig = serverConfig
-            } catch {
-                isConnecting = false
-                connectionError = error.localizedDescription
-            }
-        }
-    }
-
     private func addKeyword() {
         let trimmed = newKeyword.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
@@ -355,50 +277,60 @@ struct SettingsView: View {
 
     private var serverSection: some View {
         Section {
-            Button {
-                showingServerConfig = true
-            } label: {
-                HStack {
-                    Label("Server Configuration", systemImage: "server.rack")
-                        .foregroundStyle(Theme.textPrimary)
-                    Spacer()
-                    if client.isAuthenticated {
+            HStack {
+                Text("Host")
+                    .foregroundStyle(Theme.textSecondary)
+                Spacer()
+                Text(verbatim: "\(client.config.host):\(client.config.port)")
+                    .foregroundStyle(Theme.textPrimary)
+            }
+
+            HStack {
+                Text("Status")
+                    .foregroundStyle(Theme.textSecondary)
+                Spacer()
+                if client.isAuthenticated {
+                    HStack(spacing: 6) {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundStyle(Theme.success)
-                    } else if client.isConfigured {
+                        Text("Connected")
+                            .foregroundStyle(Theme.success)
+                    }
+                } else {
+                    HStack(spacing: 6) {
                         Image(systemName: "exclamationmark.circle.fill")
                             .foregroundStyle(Theme.warning)
+                        Text("Not Connected")
+                            .foregroundStyle(Theme.warning)
                     }
-                    Image(systemName: "chevron.right")
-                        .foregroundStyle(Theme.textTertiary)
                 }
             }
-            #if os(tvOS)
-            .buttonStyle(.card)
-            #else
-            .foregroundStyle(Theme.textPrimary)
-            #endif
 
-            if client.isAuthenticated {
+            Button(role: .destructive) {
+                showingUnlinkConfirm = true
+            } label: {
                 HStack {
-                    Text("Status")
-                        .foregroundStyle(Theme.textSecondary)
                     Spacer()
-                    Text("Connected")
-                        .foregroundStyle(Theme.success)
-                }
-            } else if client.isConfigured {
-                HStack {
-                    Text("Status")
-                        .foregroundStyle(Theme.textSecondary)
+                    Label("Unlink Server", systemImage: "server.rack")
                     Spacer()
-                    Text("Not Connected")
-                        .foregroundStyle(Theme.warning)
                 }
+            }
+            .confirmationDialog("Unlink Server", isPresented: $showingUnlinkConfirm, titleVisibility: .visible) {
+                Button("Unlink", role: .destructive) {
+                    unlinkServer()
+                }
+            } message: {
+                Text("This will disconnect and forget the server. You'll need to set it up again.")
             }
         } header: {
             Text("\(Brand.serverName) Server")
         }
+    }
+
+    private func unlinkServer() {
+        client.disconnect()
+        ServerConfig.clear()
+        client.updateConfig(.default)
     }
 
     private var playbackSection: some View {

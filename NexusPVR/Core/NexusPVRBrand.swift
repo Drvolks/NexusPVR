@@ -9,9 +9,8 @@ import SwiftUI
 
 enum NexusPVRBrand: BrandConfig {
     // App identity
-    static let appName = "NextPVR"
+    static let appName = "NextPVR Client"
     static let serverName = "NextPVR"
-    static let subtitle = "Apple Client"
     static let deviceName = "NextPVR-Apple"
 
     // Network defaults
@@ -25,6 +24,9 @@ enum NexusPVRBrand: BrandConfig {
     static let authFooter = "Enter your NextPVR PIN for authentication."
     static let connectionSuccessMessage = "Successfully connected to NextPVR server."
     static let configureServerMessage = "Configure your NextPVR server in Settings"
+
+    // Discovery
+    static let discoveryProbePath = "/services/service?method=session.initiate&ver=1.0&device=probe&format=json"
 
     // Colors
     static let accent = Color(hex: "#00a8e8")

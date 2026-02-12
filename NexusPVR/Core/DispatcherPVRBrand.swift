@@ -9,9 +9,8 @@ import SwiftUI
 
 enum DispatcherPVRBrand: BrandConfig {
     // App identity
-    static let appName = "Dispatcharr"
+    static let appName = "Dispatcharr Client"
     static let serverName = "Dispatcharr"
-    static let subtitle = "Apple Client"
     static let deviceName = "Dispatcharr-Apple"
 
     // Network defaults
@@ -25,6 +24,9 @@ enum DispatcherPVRBrand: BrandConfig {
     static let authFooter = "Enter your Dispatcharr username and password."
     static let connectionSuccessMessage = "Successfully connected to Dispatcharr server."
     static let configureServerMessage = "Configure your Dispatcharr server in Settings"
+
+    // Discovery
+    static let discoveryProbePath = "/proxy/ts/status"
 
     // Colors — teal palette derived from app icon (#438f7f)
     static let accent = Color(hex: "#438f7f")

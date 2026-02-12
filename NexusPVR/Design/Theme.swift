@@ -115,6 +115,7 @@ struct CardStyle: ViewModifier {
 
 struct AccentButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.isFocused) private var isFocused
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -123,8 +124,10 @@ struct AccentButtonStyle: ButtonStyle {
             .background(isEnabled ? Theme.accent : Theme.textTertiary)
             .foregroundStyle(.white)
             .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusMD))
-            .scaleEffect(configuration.isPressed ? 0.95 : 1)
-            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.95 : isFocused ? 1.05 : 1)
+            .shadow(color: isFocused ? Theme.accent.opacity(0.6) : .clear, radius: isFocused ? 12 : 0)
+            .animation(.easeInOut(duration: 0.15), value: configuration.isPressed)
+            .animation(.easeInOut(duration: 0.15), value: isFocused)
     }
 }
 

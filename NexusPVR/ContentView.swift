@@ -7,11 +7,34 @@
 
 import SwiftUI
 
+private struct SetupSheetConfig: Identifiable, Hashable {
+    let id = UUID()
+    let prefill: ServerConfig?
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+
+    static func == (lhs: SetupSheetConfig, rhs: SetupSheetConfig) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
 struct ContentView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var client: PVRClient
-    @State private var showingSetup = false
+    @StateObject private var discovery = ServerDiscoveryService()
+    @State private var sheetConfig: SetupSheetConfig?
     @State private var isCheckingCloud = true
+    #if os(tvOS)
+    @FocusState private var focusedServerId: String?
+    #endif
+    #if DISPATCHERPVR
+    @State private var discoveryUsername = ""
+    @State private var discoveryPassword = ""
+    @State private var hasStartedDiscovery = false
+    @FocusState private var findServersFocused: Bool
+    #endif
 
     var body: some View {
         Group {
@@ -20,16 +43,28 @@ struct ContentView: View {
             } else if client.isConfigured {
                 NavigationRouter()
             } else {
+                #if os(tvOS)
+                NavigationStack {
+                    setupPromptView
+                        .navigationDestination(item: $sheetConfig) { config in
+                            ServerConfigView(prefillConfig: config.prefill)
+                                .environmentObject(client)
+                        }
+                }
+                #else
                 setupPromptView
+                #endif
             }
         }
-        .sheet(isPresented: $showingSetup) {
-            ServerConfigView()
+        #if !os(tvOS)
+        .sheet(item: $sheetConfig) { config in
+            ServerConfigView(prefillConfig: config.prefill)
                 .environmentObject(client)
                 #if os(macOS)
                 .frame(minWidth: 500, minHeight: 450)
                 #endif
         }
+        #endif
         .task {
             // Give iCloud a moment to sync, then check for config
             try? await Task.sleep(for: .milliseconds(500))
@@ -46,6 +81,35 @@ struct ContentView: View {
             }
 
             isCheckingCloud = false
+
+            // Only scan if no config found (NextPVR auto-scans; Dispatcharr waits for credentials)
+            #if !DISPATCHERPVR
+            if !client.isConfigured {
+                discovery.startScan()
+            }
+            #endif
+        }
+        #if os(tvOS)
+        .onChange(of: discovery.discoveredServers) { _, servers in
+            if let first = servers.first, focusedServerId == nil {
+                focusedServerId = first.id
+            }
+        }
+        #endif
+        .onChange(of: client.isConfigured) { _, isConfigured in
+            if isConfigured {
+                discovery.stopScan()
+            } else {
+                // Server was unlinked — reset and restart discovery
+                sheetConfig = nil
+                #if DISPATCHERPVR
+                hasStartedDiscovery = false
+                discoveryUsername = ""
+                discoveryPassword = ""
+                #else
+                discovery.startScan()
+                #endif
+            }
         }
     }
 
@@ -62,48 +126,232 @@ struct ContentView: View {
                 Text(Brand.appName)
                     .font(.displayLarge)
                     .foregroundStyle(Theme.textPrimary)
-
-                Text(Brand.subtitle)
-                    .font(.title2)
-                    .foregroundStyle(Theme.textSecondary)
             }
+
+            #if DISPATCHERPVR
+            if hasStartedDiscovery {
+                // Discovered servers section (after credentials entered)
+                discoveredServersSection
+            } else {
+                // Credentials form before scanning
+                credentialsForm
+            }
+            #else
+            // Discovered servers section
+            discoveredServersSection
+            #endif
 
             Spacer()
 
-            // Setup prompt
-            VStack(spacing: Theme.spacingMD) {
-                Text("Welcome!")
-                    .font(.headline)
-                    .foregroundStyle(Theme.textPrimary)
-
-                Text(Brand.setupPrompt)
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.textSecondary)
-                    .multilineTextAlignment(.center)
-
-                Button {
-                    showingSetup = true
-                } label: {
-                    HStack {
-                        Image(systemName: "gear")
-                        Text("Configure Server")
-                    }
-                }
-                .buttonStyle(AccentButtonStyle())
-                .padding(.top, Theme.spacingMD)
+            #if DISPATCHERPVR
+            if hasStartedDiscovery {
+                manualConfigButton
             }
-            .padding()
-
+            #else
+            manualConfigButton
+            #endif
+            
             Spacer()
-
-            // Footer
-            Text("v1.0.0")
-                .font(.caption)
-                .foregroundStyle(Theme.textTertiary)
-                .padding(.bottom)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.background)
+    }
+
+    private var manualConfigButton: some View {
+        VStack(spacing: Theme.spacingMD) {
+            Button {
+                #if DISPATCHERPVR
+                sheetConfig = SetupSheetConfig(prefill: ServerConfig(
+                    host: "",
+                    port: Brand.defaultPort,
+                    pin: "",
+                    username: discoveryUsername,
+                    password: discoveryPassword,
+                    useHTTPS: false
+                ))
+                #else
+                sheetConfig = SetupSheetConfig(prefill: nil)
+                #endif
+            } label: {
+                HStack {
+                    Image(systemName: "gear")
+                    Text("Configure Server Manually")
+                }
+            }
+            .buttonStyle(AccentButtonStyle())
+        }
+        .padding()
+    }
+
+    #if DISPATCHERPVR
+    private var credentialsForm: some View {
+        VStack(spacing: Theme.spacingMD) {
+            Text("Enter your credentials to find servers on your network.")
+                .font(.subheadline)
+                .foregroundStyle(Theme.textSecondary)
+                .multilineTextAlignment(.center)
+
+            VStack(spacing: Theme.spacingSM) {
+                TextField("Username", text: $discoveryUsername)
+                    #if os(iOS)
+                    .autocapitalization(.none)
+                    #endif
+                    .textContentType(.username)
+                    #if !os(tvOS)
+                    .padding(Theme.spacingMD)
+                    .background(Theme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
+                    #endif
+
+                SecureField("Password", text: $discoveryPassword)
+                    .textContentType(.password)
+                    #if !os(tvOS)
+                    .padding(Theme.spacingMD)
+                    .background(Theme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
+                    #endif
+                    .onSubmit {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            findServersFocused = true
+                        }
+                    }
+            }
+            .frame(maxWidth: 400)
+
+            Button {
+                hasStartedDiscovery = true
+                discovery.startScan(username: discoveryUsername, password: discoveryPassword)
+            } label: {
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                    Text("Find Servers")
+                }
+            }
+            .focused($findServersFocused)
+            .buttonStyle(AccentButtonStyle())
+            .disabled(discoveryUsername.isEmpty || discoveryPassword.isEmpty)
+        }
+        .padding(.horizontal, Theme.spacingLG)
+    }
+    #endif
+
+    @ViewBuilder
+    private var discoveredServersSection: some View {
+        VStack(spacing: Theme.spacingSM) {
+            if discovery.isScanning && discovery.discoveredServers.isEmpty {
+                HStack(spacing: Theme.spacingSM) {
+                    ProgressView()
+                        .tint(Theme.accent)
+                        #if os(tvOS)
+                        .scaleEffect(0.8)
+                        #endif
+                    Text("Scanning local network...")
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                .padding(.top, Theme.spacingMD)
+            }
+
+            if !discovery.discoveredServers.isEmpty {
+                VStack(spacing: Theme.spacingSM) {
+                    HStack {
+                        Text("Servers Found")
+                            .font(.headline)
+                            .foregroundStyle(Theme.textPrimary)
+                        if discovery.isScanning {
+                            ProgressView()
+                                .tint(Theme.accent)
+                                .scaleEffect(0.6)
+                        }
+                    }
+
+                    ForEach(discovery.discoveredServers) { server in
+                        #if os(tvOS)
+                        Button {
+                            selectServer(server)
+                        } label: {
+                            serverRowContent(server)
+                        }
+                        .buttonStyle(.card)
+                        .focused($focusedServerId, equals: server.id)
+                        #else
+                        Button {
+                            selectServer(server)
+                        } label: {
+                            serverRowContent(server)
+                        }
+                        .buttonStyle(.plain)
+                        #endif
+                    }
+                }
+                .frame(maxWidth: 400)
+            }
+        }
+    }
+
+    private func serverRowContent(_ server: DiscoveredServer) -> some View {
+        HStack(spacing: Theme.spacingMD) {
+            Image(systemName: "server.rack")
+                .foregroundStyle(Theme.accent)
+                .font(.title2)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(server.serverName)
+                    .font(.headline)
+                    .foregroundStyle(Theme.textPrimary)
+                if server.requiresAuth {
+                    Text("Requires PIN")
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.warning)
+                } else {
+                    Text(verbatim: "\(server.host):\(server.port)")
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.textSecondary)
+                }
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .foregroundStyle(Theme.textTertiary)
+        }
+        .padding(Theme.spacingLG)
+        .background(Theme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusMD))
+    }
+
+    private func selectServer(_ server: DiscoveredServer) {
+        if server.requiresAuth {
+            // Server needs credentials — open config with host/port pre-filled
+            sheetConfig = SetupSheetConfig(prefill: ServerConfig(
+                host: server.host,
+                port: server.port,
+                pin: "",
+                useHTTPS: false
+            ))
+        } else {
+            // Credentials verified during discovery — auto-connect
+            #if DISPATCHERPVR
+            let config = ServerConfig(
+                host: server.host,
+                port: server.port,
+                pin: "",
+                username: discoveryUsername,
+                password: discoveryPassword,
+                useHTTPS: false
+            )
+            #else
+            let config = ServerConfig(
+                host: server.host,
+                port: server.port,
+                pin: Brand.defaultPIN,
+                useHTTPS: false
+            )
+            #endif
+            config.save()
+            client.updateConfig(config)
+
+            Task {
+                try? await client.authenticate()
+            }
+        }
     }
 }
 
