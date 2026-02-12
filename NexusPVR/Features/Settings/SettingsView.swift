@@ -29,7 +29,6 @@ struct SettingsView: View {
             List {
                 serverSection
                 playbackSection
-                playerStatsSection
             }
             .navigationTitle("Settings")
             #if os(iOS)
@@ -153,8 +152,6 @@ struct SettingsView: View {
                 }
                 .focusSection()
 
-                // Player Stats Section
-                playerStatsSection
             }
             .padding(.vertical)
             .padding(.horizontal, 40)
@@ -251,52 +248,6 @@ struct SettingsView: View {
         }
     }
 
-    #if os(tvOS)
-    private var playerStatsSection: some View {
-        let stats = PlayerStats.load()
-        return TVSettingsSection(
-            title: "Player Stats",
-            icon: "chart.bar",
-            footer: "From last played video"
-        ) {
-            VStack(spacing: Theme.spacingSM) {
-                statsRow(label: "Avg FPS", value: stats.avgFps > 0 ? String(format: "%.1f", stats.avgFps) : "--")
-                statsRow(label: "Avg Bitrate", value: stats.avgBitrateKbps > 0 ? String(format: "%.0f kbps", stats.avgBitrateKbps) : "--")
-                statsRow(label: "Max A/V Sync", value: stats.maxAvsync > 0 ? String(format: "%.3f s", stats.maxAvsync) : "--")
-                statsRow(label: "Dropped Frames", value: "\(stats.totalDroppedFrames)")
-                statsRow(label: "Decoder Dropped", value: "\(stats.totalDecoderDroppedFrames)")
-                statsRow(label: "VO Delayed", value: "\(stats.totalVoDelayedFrames)")
-            }
-        }
-    }
-    #else
-    private var playerStatsSection: some View {
-        let stats = PlayerStats.load()
-        return Section {
-            statsRow(label: "Avg FPS", value: stats.avgFps > 0 ? String(format: "%.1f", stats.avgFps) : "--")
-            statsRow(label: "Avg Bitrate", value: stats.avgBitrateKbps > 0 ? String(format: "%.0f kbps", stats.avgBitrateKbps) : "--")
-            statsRow(label: "Max A/V Sync", value: stats.maxAvsync > 0 ? String(format: "%.3f s", stats.maxAvsync) : "--")
-            statsRow(label: "Dropped Frames", value: "\(stats.totalDroppedFrames)")
-            statsRow(label: "Decoder Dropped", value: "\(stats.totalDecoderDroppedFrames)")
-            statsRow(label: "VO Delayed", value: "\(stats.totalVoDelayedFrames)")
-        } header: {
-            Text("Player Stats")
-        } footer: {
-            Text("From last played video")
-        }
-    }
-    #endif
-
-    private func statsRow(label: String, value: String) -> some View {
-        HStack {
-            Text(label)
-                .foregroundStyle(Theme.textSecondary)
-            Spacer()
-            Text(value)
-                .foregroundStyle(Theme.textPrimary)
-                .monospacedDigit()
-        }
-    }
 }
 
 #Preview {
