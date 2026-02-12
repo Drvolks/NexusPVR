@@ -965,20 +965,19 @@ struct GuideView: View {
     private func scrollToCurrentTime(proxy: ScrollViewProxy, isInitialLoad: Bool = false) {
         let calendar = Calendar.current
         let now = Date()
+        let isToday = calendar.isDate(viewModel.selectedDate, inSameDayAs: now)
 
-        // Only scroll to current time if viewing today
-        guard calendar.isDate(viewModel.selectedDate, inSameDayAs: now) else { return }
-
-        // Calculate the target scroll position using helper
-        let scrollTargetDate = GuideScrollHelper.calculateScrollTarget(currentTime: now)
+        // For today, scroll to current time; for other days, scroll to start of day
+        let targetTime = isToday ? now : viewModel.timelineStart
+        let scrollTargetDate = GuideScrollHelper.calculateScrollTarget(currentTime: targetTime)
 
         // Store scroll target for text padding calculation
         currentTimelineHour = scrollTargetDate
 
-        // Find the hour marker in hoursToShow and scroll to the appropriate :00 or :30 anchor
-        let currentHour = calendar.component(.hour, from: now)
-        if let targetHour = viewModel.hoursToShow.first(where: { calendar.component(.hour, from: $0) == currentHour }) {
-            let scrollId = GuideScrollHelper.calculateScrollId(currentTime: now, targetHour: targetHour)
+        // Find the hour marker in hoursToShow and scroll to the appropriate anchor
+        let targetHourComponent = calendar.component(.hour, from: targetTime)
+        if let targetHour = viewModel.hoursToShow.first(where: { calendar.component(.hour, from: $0) == targetHourComponent }) {
+            let scrollId = GuideScrollHelper.calculateScrollId(currentTime: targetTime, targetHour: targetHour)
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 withAnimation(isInitialLoad ? nil : .default) {
