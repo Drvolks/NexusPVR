@@ -45,13 +45,11 @@ class ServerDiscoveryService: ObservableObject {
             await performScan()
             if !Task.isCancelled {
                 // If no real servers found, offer the demo server
-                #if !DISPATCHERPVR
                 if discoveredServers.isEmpty {
                     discoveredServers.append(
                         DiscoveredServer(id: "demo", host: "demo", port: Brand.defaultPort, serverName: "Demo Server", requiresAuth: false)
                     )
                 }
-                #endif
                 isScanning = false
             }
         }
