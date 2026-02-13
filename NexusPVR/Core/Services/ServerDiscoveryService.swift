@@ -32,9 +32,26 @@ class ServerDiscoveryService: ObservableObject {
         isScanning = true
         credentials = (!username.isEmpty && !password.isEmpty) ? (username, password) : nil
 
+        // Demo credentials: show a fake server immediately, skip real network scan
+        if username.lowercased() == "demo" && password == "demo" {
+            discoveredServers = [
+                DiscoveredServer(id: "demo", host: "demo", port: Brand.defaultPort, serverName: "Demo Server", requiresAuth: false)
+            ]
+            isScanning = false
+            return
+        }
+
         scanTask = Task {
             await performScan()
             if !Task.isCancelled {
+                // If no real servers found, offer the demo server
+                #if !DISPATCHERPVR
+                if discoveredServers.isEmpty {
+                    discoveredServers.append(
+                        DiscoveredServer(id: "demo", host: "demo", port: Brand.defaultPort, serverName: "Demo Server", requiresAuth: false)
+                    )
+                }
+                #endif
                 isScanning = false
             }
         }
