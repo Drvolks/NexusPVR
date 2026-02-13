@@ -181,7 +181,7 @@ enum SportDetector {
                 let hasGenericSport = genresLower.contains(where: { genre in
                     genericSportGenres.contains(where: { genre.contains($0) })
                 })
-                result = hasGenericSport ? detectFromText(name: name, desc: desc) : detectFromText(name: name, desc: desc)
+                result = hasGenericSport ? detectFromText(name: name, desc: desc) : nil
             }
         } else {
             // No genres at all — check name + desc
