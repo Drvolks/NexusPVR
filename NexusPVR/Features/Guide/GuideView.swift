@@ -38,8 +38,8 @@ struct GuideView: View {
     @State private var streamError: String?
     @State private var inProgressProgram: (program: Program, channel: Channel, recordingId: Int)?
 
-    // Cache keywords to avoid disk I/O during rendering
-    @State private var cachedKeywords: [String] = []
+    // Keywords for pre-computing matches
+    @State private var keywords: [String] = []
 
     private let hourWidth: CGFloat = Theme.hourColumnWidth
     private let channelWidth: CGFloat = Theme.channelColumnWidth
@@ -84,8 +84,9 @@ struct GuideView: View {
                 streamErrorMessage
             }
             .task {
-                cachedKeywords = UserPreferences.load().keywords
+                keywords = UserPreferences.load().keywords
                 await viewModel.loadData(using: client)
+                viewModel.updateKeywordMatches(keywords: keywords)
             }
     }
 
@@ -318,7 +319,7 @@ struct GuideView: View {
             ScrollView(.vertical, showsIndicators: true) {
                 HStack(alignment: .top, spacing: 0) {
                     // Channel column (fixed horizontally, scrolls vertically)
-                    VStack(spacing: 1) {
+                    LazyVStack(spacing: 1) {
                         ForEach(viewModel.channels) { channel in
                             channelCell(channel)
                                 .frame(width: channelWidth, height: rowHeight)
@@ -329,7 +330,7 @@ struct GuideView: View {
                     // All programs in single horizontal scroll (scroll together)
                     ScrollViewReader { programProxy in
                         ScrollView(.horizontal, showsIndicators: false) {
-                            VStack(spacing: 1) {
+                            LazyVStack(spacing: 1) {
                                 // Invisible scroll anchors matching timeline header IDs
                                 HStack(spacing: 0) {
                                     ForEach(viewModel.hoursToShow, id: \.self) { hour in
@@ -801,7 +802,8 @@ struct GuideView: View {
                 let isScheduled = viewModel.isScheduledRecording(program)
                 let status = viewModel.recordingStatus(program)
                 let isRecording = isScheduled && program.isCurrentlyAiring && status == .recording
-                let matchesKeywords = matchesKeywords(program)
+                let matchesKeywords = viewModel.keywordMatchedProgramIds.contains(program.id)
+                let sport = viewModel.detectedSport(for: program)
                 // Calculate leading padding for live programs - push text to visible left edge (scroll target)
                 let leadingPad = GuideScrollHelper.calculateLeadingPadding(
                     programStart: program.startDate,
@@ -830,6 +832,7 @@ struct GuideView: View {
                         isScheduledRecording: isScheduled,
                         isCurrentlyRecording: isRecording,
                         matchesKeyword: matchesKeywords,
+                        detectedSport: sport,
                         leadingPadding: leadingPad
                     )
                 }
@@ -999,19 +1002,6 @@ struct GuideView: View {
         }
     }
 
-    private func matchesKeywords(_ program: Program) -> Bool {
-        guard !cachedKeywords.isEmpty else { return false }
-
-        let searchText = [
-            program.name,
-            program.subtitle ?? "",
-            program.desc ?? ""
-        ].joined(separator: " ").lowercased()
-
-        return cachedKeywords.contains { keyword in
-            searchText.contains(keyword.lowercased())
-        }
-    }
 }
 
 #Preview {

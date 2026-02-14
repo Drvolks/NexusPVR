@@ -46,14 +46,21 @@ final class ImageCache: @unchecked Sendable {
         cache.removeAllObjects()
     }
 
-    /// Preload multiple images in the background
-    func preload(urls: [URL]) {
+    /// Preload multiple images in the background with concurrency limit
+    func preload(urls: [URL], maxConcurrent: Int = 10) {
         Task.detached(priority: .utility) {
             await withTaskGroup(of: Void.self) { group in
+                var running = 0
                 for url in urls {
                     // Skip if already cached
                     if self.image(for: url) != nil { continue }
 
+                    if running >= maxConcurrent {
+                        await group.next()
+                        running -= 1
+                    }
+
+                    running += 1
                     group.addTask {
                         do {
                             let (data, _) = try await URLSession.shared.data(from: url)

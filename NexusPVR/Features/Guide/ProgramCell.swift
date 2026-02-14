@@ -8,16 +8,19 @@
 import SwiftUI
 
 struct ProgramCell: View {
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
     let program: Program
     let width: CGFloat
     var isScheduledRecording: Bool = false
     var isCurrentlyRecording: Bool = false
     var matchesKeyword: Bool = false
+    var detectedSport: Sport? = nil
     var leadingPadding: CGFloat = 0 // Padding for portion that's off-screen to the left
-
-    private var detectedSport: Sport? {
-        SportDetector.detect(from: program)
-    }
 
     private var showSportIcon: Bool {
         guard detectedSport != nil else { return false }
@@ -106,9 +109,7 @@ struct ProgramCell: View {
     }
 
     private var timeString: String {
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        return "\(formatter.string(from: program.startDate)) - \(formatter.string(from: program.endDate))"
+        "\(Self.timeFormatter.string(from: program.startDate)) - \(Self.timeFormatter.string(from: program.endDate))"
     }
 }
 

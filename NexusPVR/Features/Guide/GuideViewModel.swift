@@ -36,6 +36,12 @@ final class GuideViewModel: ObservableObject {
     // O(1) lookup for recording status by program ID
     private var recordingsByEventId: [Int: Recording] = [:]
 
+    // Cached sport detection results (avoids re-running regex per render)
+    private var sportCache: [Int: Sport?] = [:]
+
+    // Pre-computed keyword-matched program IDs (O(1) lookup per cell)
+    private(set) var keywordMatchedProgramIds: Set<Int> = []
+
     var timelineStart: Date {
         let calendar = Calendar.current
         // Start at midnight (00:00) of the selected day
@@ -71,6 +77,39 @@ final class GuideViewModel: ObservableObject {
         visibleProgramsByChannel = result
     }
 
+    /// Returns cached sport detection result for a program
+    func detectedSport(for program: Program) -> Sport? {
+        if let cached = sportCache[program.id] {
+            return cached
+        }
+        let sport = SportDetector.detect(from: program)
+        sportCache[program.id] = sport
+        return sport
+    }
+
+    /// Pre-compute keyword matches for all visible programs
+    func updateKeywordMatches(keywords: [String]) {
+        guard !keywords.isEmpty else {
+            keywordMatchedProgramIds = []
+            return
+        }
+        let lowercasedKeywords = keywords.map { $0.lowercased() }
+        var matched = Set<Int>()
+        for programs in visibleProgramsByChannel.values {
+            for program in programs {
+                let searchText = [
+                    program.name,
+                    program.subtitle ?? "",
+                    program.desc ?? ""
+                ].joined(separator: " ").lowercased()
+                if lowercasedKeywords.contains(where: { searchText.contains($0) }) {
+                    matched.insert(program.id)
+                }
+            }
+        }
+        keywordMatchedProgramIds = matched
+    }
+
     func loadData(using client: PVRClient) async {
         // Yield to allow the view to finish rendering before modifying state
         await Task.yield()
@@ -82,6 +121,7 @@ final class GuideViewModel: ObservableObject {
 
         isLoading = true
         error = nil
+        sportCache = [:]
 
         do {
             if !client.isAuthenticated {
@@ -95,17 +135,38 @@ final class GuideViewModel: ObservableObject {
             // Show channels immediately while loading listings
             channels = sortedChannels
 
-            // Preload channel icons in background
+            // Preload channel icons in background (throttled)
             let iconURLs = sortedChannels.compactMap { client.channelIconURL(channelId: $0.id) }
             ImageCache.shared.preload(urls: iconURLs)
 
-            // Load listings and recordings in parallel
-            async let listingsTask = client.getAllListings(for: sortedChannels)
-            async let recordingsTask = client.getAllRecordings()
+            // Load recordings in parallel with first batch of listings
+            let recordingsTask = Task {
+                try await client.getAllRecordings()
+            }
 
-            let (loadedListings, (completed, recording, scheduled)) = try await (listingsTask, recordingsTask)
+            // Fetch listings progressively in batches
+            let batchSize = 50
+            for batchStart in stride(from: 0, to: sortedChannels.count, by: batchSize) {
+                let batchEnd = min(batchStart + batchSize, sortedChannels.count)
+                let batch = Array(sortedChannels[batchStart..<batchEnd])
 
-            // Update recordings (didSet rebuilds O(1) lookup index)
+                let batchListings = try await client.getAllListings(for: batch)
+
+                // Merge batch results into listings and update visible programs
+                for (channelId, programs) in batchListings {
+                    listings[channelId] = programs
+                }
+                updateVisiblePrograms()
+
+                // After first batch, mark as loaded so UI shows content
+                if !hasLoaded {
+                    hasLoaded = true
+                    isLoading = false
+                }
+            }
+
+            // Await recordings
+            let (completed, recording, scheduled) = try await recordingsTask.value
             recordings = completed + recording + scheduled
             #if DEBUG
             for r in recordings {
@@ -113,8 +174,6 @@ final class GuideViewModel: ObservableObject {
             }
             #endif
 
-            listings = loadedListings
-            updateVisiblePrograms()
             isLoading = false
             hasLoaded = true
         } catch {
