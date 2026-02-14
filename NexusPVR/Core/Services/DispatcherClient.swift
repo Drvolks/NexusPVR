@@ -229,13 +229,23 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
     }
 
     /// Fetch all items from a paginated Dispatcharr endpoint
-    private func fetchAllPages<T: Decodable>(_ url: URL) async throws -> [T] {
+    /// - Parameter maxPages: Maximum number of pages to fetch (0 = unlimited). Prevents unbounded memory usage for large datasets.
+    private func fetchAllPages<T: Decodable>(_ url: URL, maxPages: Int = 0) async throws -> [T] {
         var allItems = [T]()
         var nextURL: URL? = url
+        var pageCount = 0
 
         while let currentURL = nextURL {
             let response: DispatcharrListResponse<T> = try await authenticatedRequest(currentURL)
             allItems.append(contentsOf: response.allItems)
+            pageCount += 1
+
+            if maxPages > 0 && pageCount >= maxPages {
+                #if DEBUG
+                print("Dispatcharr: Reached page limit (\(maxPages)), stopping pagination with \(allItems.count) items")
+                #endif
+                break
+            }
 
             if let next = response.next, let url = URL(string: next) {
                 nextURL = url
@@ -303,7 +313,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         // Find the tvg_id for this channel (reverse lookup)
         let tvgId = tvgIdToChannelId.first(where: { $0.value == channelId })?.key
 
-        let allPrograms: [DispatcharrProgram] = try await fetchAllPages(url)
+        let allPrograms: [DispatcharrProgram] = try await fetchAllPages(url, maxPages: 50)
         let programs = allPrograms
             .filter { program in
                 if let directId = program.channel, directId == channelId {
@@ -314,7 +324,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
                 }
                 return false
             }
-            .map { $0.toProgram(channelId: channelId) }
+            .compactMap { $0.toProgram(channelId: channelId) }
         return programs
     }
 
@@ -328,7 +338,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
             throw PVRClientError.invalidResponse
         }
 
-        let allPrograms: [DispatcharrProgram] = try await fetchAllPages(url)
+        let allPrograms: [DispatcharrProgram] = try await fetchAllPages(url, maxPages: 50)
         var result = [Int: [Program]]()
 
         for program in allPrograms {
@@ -344,7 +354,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
             }
 
             guard let resolvedId = channelId else { continue }
-            let p = program.toProgram(channelId: resolvedId)
+            guard let p = program.toProgram(channelId: resolvedId) else { continue }
             result[resolvedId, default: []].append(p)
         }
 
@@ -565,6 +575,46 @@ struct DispatcharrChannel: Decodable {
         case epgDataId = "epg_data_id"
     }
 
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        // id can be Int or String
+        if let intId = try? container.decode(Int.self, forKey: .id) {
+            id = intId
+        } else if let stringId = try? container.decode(String.self, forKey: .id),
+                  let parsed = Int(stringId) {
+            id = parsed
+        } else {
+            let raw = try container.decode(String.self, forKey: .id)
+            id = abs(raw.hashValue)
+        }
+
+        name = try container.decode(String.self, forKey: .name)
+        channelNumber = try container.decodeIfPresent(Double.self, forKey: .channelNumber)
+        tvgId = try container.decodeIfPresent(String.self, forKey: .tvgId)
+        uuid = try container.decodeIfPresent(String.self, forKey: .uuid)
+
+        // logo_id can be Int or String
+        if let intLogo = try? container.decode(Int.self, forKey: .logoId) {
+            logoId = intLogo
+        } else if let stringLogo = try? container.decodeIfPresent(String.self, forKey: .logoId),
+                  let parsed = Int(stringLogo) {
+            logoId = parsed
+        } else {
+            logoId = nil
+        }
+
+        // epg_data_id can be Int or String
+        if let intEpg = try? container.decode(Int.self, forKey: .epgDataId) {
+            epgDataId = intEpg
+        } else if let stringEpg = try? container.decodeIfPresent(String.self, forKey: .epgDataId),
+                  let parsed = Int(stringEpg) {
+            epgDataId = parsed
+        } else {
+            epgDataId = nil
+        }
+    }
+
     func toChannel() -> Channel {
         Channel(
             id: id,
@@ -606,12 +656,52 @@ struct DispatcharrProgram: Decodable {
         case channel
     }
 
-    func toProgram(channelId: Int? = nil) -> Program {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        // id can be Int or String from Dispatcharr
+        if let intId = try? container.decode(Int.self, forKey: .id) {
+            id = intId
+        } else if let stringId = try? container.decode(String.self, forKey: .id),
+                  let parsed = Int(stringId) {
+            id = parsed
+        } else {
+            // Use hash of the string value as fallback
+            let raw = try container.decode(String.self, forKey: .id)
+            id = abs(raw.hashValue)
+        }
+
+        startTime = try container.decode(String.self, forKey: .startTime)
+        endTime = try container.decode(String.self, forKey: .endTime)
+        title = try container.decode(String.self, forKey: .title)
+        subTitle = try container.decodeIfPresent(String.self, forKey: .subTitle)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        tvgId = try container.decodeIfPresent(String.self, forKey: .tvgId)
+
+        // channel can also be Int or String
+        if let intCh = try? container.decode(Int.self, forKey: .channel) {
+            channel = intCh
+        } else if let stringCh = try? container.decodeIfPresent(String.self, forKey: .channel),
+                  let parsed = Int(stringCh) {
+            channel = parsed
+        } else {
+            channel = nil
+        }
+    }
+
+    func toProgram(channelId: Int? = nil) -> Program? {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let fallbackFormatter = ISO8601DateFormatter()
 
-        let startDate = formatter.date(from: startTime) ?? ISO8601DateFormatter().date(from: startTime) ?? Date()
-        let endDate = formatter.date(from: endTime) ?? ISO8601DateFormatter().date(from: endTime) ?? Date()
+        guard let startDate = formatter.date(from: startTime) ?? fallbackFormatter.date(from: startTime),
+              let endDate = formatter.date(from: endTime) ?? fallbackFormatter.date(from: endTime),
+              endDate > startDate else {
+            #if DEBUG
+            print("Dispatcharr: Skipping program '\(title)' — invalid dates: start=\(startTime) end=\(endTime)")
+            #endif
+            return nil
+        }
 
         return Program(
             id: id,
@@ -641,6 +731,34 @@ struct DispatcharrRecording: Decodable {
         case channel
         case taskId = "task_id"
         case customProperties = "custom_properties"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        if let intId = try? container.decode(Int.self, forKey: .id) {
+            id = intId
+        } else if let stringId = try? container.decode(String.self, forKey: .id),
+                  let parsed = Int(stringId) {
+            id = parsed
+        } else {
+            let raw = try container.decode(String.self, forKey: .id)
+            id = abs(raw.hashValue)
+        }
+
+        startTime = try container.decode(String.self, forKey: .startTime)
+        endTime = try container.decode(String.self, forKey: .endTime)
+        taskId = try container.decodeIfPresent(String.self, forKey: .taskId)
+        customProperties = try container.decodeIfPresent(DispatcharrCustomProperties.self, forKey: .customProperties)
+
+        if let intCh = try? container.decode(Int.self, forKey: .channel) {
+            channel = intCh
+        } else if let stringCh = try? container.decode(String.self, forKey: .channel),
+                  let parsed = Int(stringCh) {
+            channel = parsed
+        } else {
+            channel = 0
+        }
     }
 
     func toRecording() -> Recording {
