@@ -96,6 +96,7 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
 
     @State private var loadedImage: PlatformImage?
     @State private var isLoading = false
+    @State private var loadFailed = false
 
     init(
         url: URL?,
@@ -115,11 +116,16 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
                 #else
                 content(Image(uiImage: image))
                 #endif
-            } else {
+            } else if url != nil && !loadFailed {
                 placeholder()
                     .onAppear {
                         loadImage()
                     }
+            } else {
+                // No URL provided — show static fallback instead of an infinite spinner
+                Image(systemName: "tv")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -144,10 +150,16 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
                         loadedImage = image
                         isLoading = false
                     }
+                } else {
+                    await MainActor.run {
+                        isLoading = false
+                        loadFailed = true
+                    }
                 }
             } catch {
                 await MainActor.run {
                     isLoading = false
+                    loadFailed = true
                 }
             }
         }

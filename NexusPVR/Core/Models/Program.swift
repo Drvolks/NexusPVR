@@ -44,6 +44,7 @@ struct Program: Identifiable, Decodable, Hashable {
 
     func progress(at date: Date = Date()) -> Double {
         guard isCurrentlyAiring else { return hasEnded ? 1.0 : 0.0 }
+        guard duration > 0 else { return 0 }
         let elapsed = date.timeIntervalSince(startDate)
         return min(max(elapsed / duration, 0), 1)
     }
