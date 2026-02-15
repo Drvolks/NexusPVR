@@ -12,6 +12,7 @@ enum Tab: String, Identifiable {
     case guide = "Guide"
     case recordings = "Recordings"
     case topics = "Topics"
+    case search = "Search"
     #if DISPATCHERPVR
     case stats = "Status"
     #endif
@@ -23,6 +24,7 @@ enum Tab: String, Identifiable {
         switch self {
         case .guide: return "calendar"
         case .topics: return "star.fill"
+        case .search: return "magnifyingglass"
         case .recordings: return "recordingtape"
         #if DISPATCHERPVR
         case .stats: return "chart.bar.fill"
@@ -34,7 +36,7 @@ enum Tab: String, Identifiable {
     var label: String { rawValue }
 
     static var allCases: [Tab] {
-        var cases: [Tab] = [.guide, .recordings, .topics]
+        var cases: [Tab] = [.guide, .recordings, .topics, .search]
         #if DISPATCHERPVR
         cases.append(.stats)
         #endif

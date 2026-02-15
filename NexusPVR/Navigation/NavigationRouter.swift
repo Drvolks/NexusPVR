@@ -45,6 +45,8 @@ struct IOSNavigation: View {
                 GuideView()
             case .topics:
                 TopicsView()
+            case .search:
+                SearchView()
             case .recordings:
                 RecordingsListView()
             #if DISPATCHERPVR
@@ -147,6 +149,8 @@ struct TVOSNavigation: View {
                     RecordingsListView()
                 case .topics:
                     TopicsView()
+                case .search:
+                    SearchView()
                 #if DISPATCHERPVR
                 case .stats:
                     StatsView()
@@ -317,6 +321,8 @@ struct MacOSNavigation: View {
                         GuideView()
                     case .topics:
                         TopicsView()
+                    case .search:
+                        SearchView()
                     case .recordings:
                         RecordingsListView()
                     #if DISPATCHERPVR
