@@ -113,8 +113,11 @@ function generateShowName(genre, channelName) {
 
 function generateEPG(channels) {
   const now = new Date();
-  const windowStart = new Date(now.getTime() - 60 * 60 * 1000);
-  const windowEnd = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const dayMs = 24 * 60 * 60 * 1000;
+  // Start at midnight yesterday, end at midnight 7 days from now
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const windowStart = new Date(todayMidnight.getTime() - dayMs);
+  const windowEnd = new Date(todayMidnight.getTime() + 7 * dayMs);
   const programs = [];
   let programId = 1;
 
