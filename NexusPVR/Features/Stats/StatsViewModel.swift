@@ -12,6 +12,7 @@ import Combine
 @MainActor
 final class StatsViewModel: ObservableObject {
     @Published var channels: [ProxyChannelStatus] = []
+    @Published var m3uAccounts: [M3UAccount] = []
     @Published var activeCount = 0
     @Published var isLoading = false
     @Published var error: String?
@@ -34,7 +35,7 @@ final class StatsViewModel: ObservableObject {
     }
 
     func refresh(client: DispatcherClient, appState: AppState) async {
-        if channels.isEmpty {
+        if channels.isEmpty && m3uAccounts.isEmpty {
             isLoading = true
         }
         error = nil
@@ -46,6 +47,19 @@ final class StatsViewModel: ObservableObject {
             appState.activeStreamCount = activeCount
         } catch {
             self.error = error.localizedDescription
+        }
+
+        do {
+            let accounts = try await client.getM3UAccounts()
+            #if DEBUG
+            print("Dispatcharr: Fetched \(accounts.count) M3U accounts, \(accounts.filter { $0.isActive }.count) active")
+            #endif
+            m3uAccounts = accounts.filter { $0.isActive && !$0.locked }
+            appState.hasM3UErrors = m3uAccounts.contains { $0.status != "success" }
+        } catch {
+            #if DEBUG
+            print("Dispatcharr: Failed to fetch M3U accounts: \(error)")
+            #endif
         }
 
         isLoading = false

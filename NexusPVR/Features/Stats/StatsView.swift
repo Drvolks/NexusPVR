@@ -30,7 +30,7 @@ struct StatsView: View {
                 header
                     .padding(.horizontal)
 
-                if vm.isLoading && vm.channels.isEmpty {
+                if vm.isLoading && vm.channels.isEmpty && vm.m3uAccounts.isEmpty {
                     ProgressView()
                         .frame(maxWidth: .infinity, minHeight: 200)
                 } else if let error = vm.error, vm.channels.isEmpty {
@@ -44,6 +44,12 @@ struct StatsView: View {
                         }
                     }
                     .padding(.horizontal)
+                }
+
+                // M3U Accounts section
+                if !vm.m3uAccounts.isEmpty {
+                    m3uAccountsSection
+                        .padding(.horizontal)
                 }
             }
             .padding(.vertical)
@@ -67,7 +73,7 @@ struct StatsView: View {
                 header
                     .padding(.horizontal, 80)
 
-                if vm.isLoading && vm.channels.isEmpty {
+                if vm.isLoading && vm.channels.isEmpty && vm.m3uAccounts.isEmpty {
                     ProgressView()
                         .frame(maxWidth: .infinity, minHeight: 300)
                 } else if let error = vm.error, vm.channels.isEmpty {
@@ -83,6 +89,12 @@ struct StatsView: View {
                         }
                     }
                     .padding(.horizontal, 80)
+                }
+
+                // M3U Accounts section
+                if !vm.m3uAccounts.isEmpty {
+                    m3uAccountsSection
+                        .padding(.horizontal, 80)
                 }
             }
             .padding(.vertical, 40)
@@ -131,6 +143,18 @@ struct StatsView: View {
         .frame(maxWidth: .infinity, minHeight: 200)
     }
 
+    private var m3uAccountsSection: some View {
+        VStack(alignment: .leading, spacing: Theme.spacingSM) {
+            Text("M3U Accounts")
+                .font(.displayMedium)
+                .foregroundStyle(Theme.textPrimary)
+
+            ForEach(vm.m3uAccounts) { account in
+                M3UAccountRow(account: account)
+            }
+        }
+    }
+
     private var emptyView: some View {
         VStack(spacing: Theme.spacingSM) {
             Image(systemName: "waveform.slash")
@@ -148,6 +172,76 @@ struct StatsView: View {
     }
 }
 
+// MARK: - M3U Account Row
+
+struct M3UAccountRow: View {
+    let account: M3UAccount
+
+    private var statusColor: Color {
+        switch account.status {
+        case "success": return Theme.success
+        case "error": return Theme.error
+        default: return Theme.warning
+        }
+    }
+
+    private var accountTypeBadge: String {
+        switch account.accountType?.lowercased() {
+        case "xtream_codes": return "XC"
+        default: return "STD"
+        }
+    }
+
+    private var formattedDate: String? {
+        guard let dateString = account.updatedAt else { return nil }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let fallback = ISO8601DateFormatter()
+
+        guard let date = formatter.date(from: dateString) ?? fallback.date(from: dateString) else { return nil }
+
+        let relative = RelativeDateTimeFormatter()
+        relative.unitsStyle = .abbreviated
+        return relative.localizedString(for: date, relativeTo: Date())
+    }
+
+    var body: some View {
+        HStack(spacing: Theme.spacingSM) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(account.name)
+                        .font(.headline)
+                        .foregroundStyle(Theme.textPrimary)
+                    Text(accountTypeBadge)
+                        .font(.caption2)
+                        .foregroundStyle(Theme.textTertiary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Theme.surfaceHighlight)
+                        .clipShape(Capsule())
+                }
+                Text(account.serverUrl)
+                    .font(.caption)
+                    .foregroundStyle(Theme.textTertiary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                StateBadge(state: account.status)
+                if let date = formattedDate {
+                    Text(date)
+                        .font(.caption2)
+                        .foregroundStyle(Theme.textTertiary)
+                }
+            }
+        }
+        .padding()
+        .background(Theme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusMD))
+    }
+}
+
 // MARK: - Channel Status Card
 
 struct ChannelStatusCard: View {
@@ -155,18 +249,11 @@ struct ChannelStatusCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.spacingMD) {
-            // Header: name + profile + state badge
+            // Header: name [profile] + state badge
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(channel.streamName)
-                        .font(.headline)
-                        .foregroundStyle(Theme.textPrimary)
-                    if let profile = channel.m3uProfileName {
-                        Text("(\(profile))")
-                            .font(.caption)
-                            .foregroundStyle(Theme.textTertiary)
-                    }
-                }
+                Text(displayName)
+                    .font(.headline)
+                    .foregroundStyle(Theme.textPrimary)
                 Spacer()
                 StateBadge(state: channel.state)
             }
@@ -221,6 +308,15 @@ struct ChannelStatusCard: View {
         if let bytes = channel.totalBytes {
             StatRow(label: "Total Data", value: formatBytes(bytes))
         }
+    }
+
+    private var displayName: String {
+        guard let profile = channel.m3uProfileName else { return channel.streamName }
+        let shortProfile = profile
+            .replacingOccurrences(of: "Default", with: "")
+            .trimmingCharacters(in: .whitespaces)
+        if shortProfile.isEmpty { return channel.streamName }
+        return "\(channel.streamName) [\(shortProfile)]"
     }
 
     private var codecString: String {
@@ -282,7 +378,7 @@ struct StateBadge: View {
 
     private var color: Color {
         switch state {
-        case "streaming": return Theme.success
+        case "streaming", "success", "active": return Theme.success
         case "error": return Theme.error
         default: return Theme.warning
         }

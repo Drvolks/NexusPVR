@@ -64,6 +64,8 @@ final class AppState: ObservableObject {
     #if DISPATCHERPVR
     // Active stream count for badge
     @Published var activeStreamCount = 0
+    // M3U account error indicator for badge
+    @Published var hasM3UErrors = false
     private var streamCountTask: Task<Void, Never>?
 
     func startStreamCountPolling(client: DispatcherClient) {
@@ -75,6 +77,13 @@ final class AppState: ObservableObject {
                     activeStreamCount = status.count ?? status.channels?.count ?? 0
                 } catch {
                     // Silently ignore - badge just won't update
+                }
+                do {
+                    let accounts = try await client.getM3UAccounts()
+                    let activeAccounts = accounts.filter { $0.isActive && !$0.locked }
+                    hasM3UErrors = activeAccounts.contains { $0.status != "success" }
+                } catch {
+                    // Silently ignore
                 }
                 try? await Task.sleep(for: .seconds(10))
             }

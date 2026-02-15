@@ -97,15 +97,25 @@ struct IOSNavigation: View {
     @ViewBuilder
     private func tabBadge(for tab: Tab) -> some View {
         #if DISPATCHERPVR
-        if tab == .stats && appState.activeStreamCount > 0 {
-            Text("\(appState.activeStreamCount)")
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 4)
-                .padding(.vertical, 1)
-                .background(Theme.accent)
-                .clipShape(Capsule())
-                .offset(x: 8, y: -6)
+        if tab == .stats {
+            ZStack {
+                if appState.activeStreamCount > 0 {
+                    Text("\(appState.activeStreamCount)")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Theme.accent)
+                        .clipShape(Capsule())
+                        .offset(x: 8, y: -6)
+                }
+                if appState.hasM3UErrors {
+                    Circle()
+                        .fill(Theme.error)
+                        .frame(width: 8, height: 8)
+                        .offset(x: appState.activeStreamCount > 0 ? -4 : 8, y: -8)
+                }
+            }
         }
         #endif
     }
@@ -211,6 +221,11 @@ struct TVOSNavigation: View {
                                 .background(Theme.accent)
                                 .clipShape(Capsule())
                         }
+                        if tab == .stats && appState.hasM3UErrors {
+                            Circle()
+                                .fill(Theme.error)
+                                .frame(width: 10, height: 10)
+                        }
                         #endif
                     }
                     .padding(.horizontal, 28)
@@ -274,15 +289,22 @@ struct MacOSNavigation: View {
                         HStack {
                             Label(tab.label, systemImage: tab.icon)
                             #if DISPATCHERPVR
-                            if tab == .stats && appState.activeStreamCount > 0 {
+                            if tab == .stats {
                                 Spacer()
-                                Text("\(appState.activeStreamCount)")
-                                    .font(.caption2.bold())
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(Theme.accent)
-                                    .clipShape(Capsule())
+                                if appState.hasM3UErrors {
+                                    Circle()
+                                        .fill(Theme.error)
+                                        .frame(width: 8, height: 8)
+                                }
+                                if appState.activeStreamCount > 0 {
+                                    Text("\(appState.activeStreamCount)")
+                                        .font(.caption2.bold())
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Theme.accent)
+                                        .clipShape(Capsule())
+                                }
                             }
                             #endif
                         }
