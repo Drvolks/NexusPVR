@@ -113,13 +113,18 @@ struct TopicsView: View {
                     }
                 }
             }
-            .sheet(item: $selectedProgramDetail, onDismiss: {
-                // Refresh all rows to update recording status
-                refreshTrigger = UUID()
-            }) { detail in
-                ProgramDetailView(program: detail.program, channel: detail.channel)
-                    .environmentObject(client)
-                    .environmentObject(appState)
+            .sheet(item: $selectedProgramDetail) { detail in
+                ProgramDetailView(
+                    program: detail.program,
+                    channel: detail.channel,
+                    initialRecordingId: detail.recordingId,
+                    initialCompletedRecording: detail.completedRecording,
+                    onRecordingChanged: {
+                        refreshTrigger = UUID()
+                    }
+                )
+                .environmentObject(client)
+                .environmentObject(appState)
             }
             #if os(tvOS)
             .alert("Add Keyword", isPresented: $showingAddKeyword) {
@@ -279,12 +284,17 @@ struct TopicsView: View {
                     matchedKeyword: item.matchedKeyword,
                     onRecordingChanged: {
                         refreshTrigger = UUID()
+                    },
+                    onShowDetails: { recordingId, completedRecording in
+                        selectedProgramDetail = ProgramTopicDetail(
+                            program: item.program,
+                            channel: item.channel,
+                            recordingId: recordingId,
+                            completedRecording: completedRecording
+                        )
                     }
                 )
                 .contentShape(Rectangle())
-                .onTapGesture {
-                    selectedProgramDetail = ProgramTopicDetail(program: item.program, channel: item.channel)
-                }
                 .listRowBackground(Theme.surface)
                 .id("\(item.id)-\(refreshTrigger)")
             }
@@ -332,6 +342,8 @@ private struct ProgramTopicDetail: Identifiable {
     var id: String { "\(program.id)-\(channel.id)" }
     let program: Program
     let channel: Channel
+    var recordingId: Int? = nil
+    var completedRecording: Recording? = nil
 }
 
 #Preview {

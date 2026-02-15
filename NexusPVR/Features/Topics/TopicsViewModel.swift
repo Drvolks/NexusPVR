@@ -9,7 +9,7 @@ import SwiftUI
 import Combine
 
 struct MatchingProgram: Identifiable {
-    let id = UUID()
+    var id: String { "\(program.id)-\(channel.id)" }
     let program: Program
     let channel: Channel
     let matchedKeyword: String

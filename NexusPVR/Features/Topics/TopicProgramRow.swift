@@ -15,6 +15,7 @@ struct TopicProgramRow: View {
     let channel: Channel
     let matchedKeyword: String
     var onRecordingChanged: (() -> Void)? = nil
+    var onShowDetails: ((Int?, Recording?) -> Void)? = nil
 
     @State private var isScheduled = false
     @State private var isRecording = false
@@ -137,6 +138,10 @@ struct TopicProgramRow: View {
             }
         }
         .padding(.vertical, Theme.spacingSM)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onShowDetails?(existingRecordingId, existingRecording)
+        }
         .task {
             await checkIfScheduled()
         }

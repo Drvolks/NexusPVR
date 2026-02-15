@@ -127,9 +127,13 @@ struct GuideView: View {
     }
 
     private func programDetailSheet(_ detail: ProgramDetail) -> some View {
-        ProgramDetailView(program: detail.program, channel: detail.channel)
-            .environmentObject(client)
-            .environmentObject(appState)
+        ProgramDetailView(
+            program: detail.program,
+            channel: detail.channel,
+            initialRecordingId: viewModel.recordingId(for: detail.program)
+        )
+        .environmentObject(client)
+        .environmentObject(appState)
     }
 
     private func onDismissDetail() {

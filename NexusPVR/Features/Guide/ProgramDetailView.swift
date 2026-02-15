@@ -17,8 +17,21 @@ struct ProgramDetailView: View {
 
     @State private var isScheduling = false
     @State private var scheduleError: String?
-    @State private var isScheduled = false
+    @State private var isScheduled: Bool
     @State private var existingRecordingId: Int?
+    @State private var completedRecording: Recording?
+    @State private var didChangeRecording = false
+
+    var onRecordingChanged: (() -> Void)? = nil
+
+    init(program: Program, channel: Channel, initialRecordingId: Int? = nil, initialCompletedRecording: Recording? = nil, onRecordingChanged: (() -> Void)? = nil) {
+        self.program = program
+        self.channel = channel
+        self.onRecordingChanged = onRecordingChanged
+        _isScheduled = State(initialValue: initialRecordingId != nil)
+        _existingRecordingId = State(initialValue: initialRecordingId)
+        _completedRecording = State(initialValue: initialCompletedRecording)
+    }
 
     var body: some View {
         #if os(tvOS)
@@ -144,6 +157,19 @@ struct ProgramDetailView: View {
 
                     // Action buttons
                     VStack(spacing: Theme.spacingMD) {
+                        if let recording = completedRecording {
+                            Button {
+                                playRecording(recording)
+                            } label: {
+                                HStack {
+                                    Image(systemName: "play.circle.fill")
+                                    Text("Watch Recording")
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(AccentButtonStyle())
+                        }
+
                         if program.isCurrentlyAiring {
                             Button {
                                 watchLive()
@@ -166,6 +192,9 @@ struct ProgramDetailView: View {
                                         if isScheduling {
                                             ProgressView()
                                                 .tint(.white)
+                                        } else if completedRecording != nil {
+                                            Image(systemName: "trash")
+                                            Text("Remove Recording")
                                         } else {
                                             Image(systemName: "xmark.circle")
                                             Text("Cancel Recording")
@@ -334,6 +363,19 @@ struct ProgramDetailView: View {
 
     private var actionSection: some View {
         VStack(spacing: Theme.spacingMD) {
+            if let recording = completedRecording {
+                Button {
+                    playRecording(recording)
+                } label: {
+                    HStack {
+                        Image(systemName: "play.circle.fill")
+                        Text("Watch Recording")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(AccentButtonStyle())
+            }
+
             if program.isCurrentlyAiring {
                 Button {
                     watchLive()
@@ -356,6 +398,9 @@ struct ProgramDetailView: View {
                             if isScheduling {
                                 ProgressView()
                                     .tint(.white)
+                            } else if completedRecording != nil {
+                                Image(systemName: "trash")
+                                Text("Remove Recording")
                             } else {
                                 Image(systemName: "xmark.circle")
                                 Text("Cancel Recording")
@@ -390,6 +435,23 @@ struct ProgramDetailView: View {
         #endif
     }
 
+    private func playRecording(_ recording: Recording) {
+        Task {
+            do {
+                let url = try await client.recordingStreamURL(recordingId: recording.id)
+                appState.playStream(
+                    url: url,
+                    title: recording.name,
+                    recordingId: recording.id,
+                    resumePosition: recording.playbackPosition
+                )
+                dismiss()
+            } catch {
+                scheduleError = error.localizedDescription
+            }
+        }
+    }
+
     private func watchLive() {
         // Use the direct stream URL from channel if available
         if let urlString = channel.streamURL, let url = URL(string: urlString) {
@@ -411,14 +473,21 @@ struct ProgramDetailView: View {
 
     private func checkIfScheduled() async {
         do {
-            // Load all recordings to check if this program is scheduled
             let (completed, recording, scheduled) = try await client.getAllRecordings()
             let allRecordings = completed + recording + scheduled
 
-            // Find if there's a recording for this program
             if let recording = allRecordings.first(where: { $0.epgEventId == program.id }) {
                 isScheduled = true
                 existingRecordingId = recording.id
+            }
+
+            // Check for a completed recording with the same name
+            let programName = program.name.lowercased().trimmingCharacters(in: .whitespaces)
+            if let existing = completed.first(where: {
+                $0.recordingStatus == .ready &&
+                $0.name.lowercased().trimmingCharacters(in: .whitespaces) == programName
+            }) {
+                completedRecording = existing
             }
         } catch {
             // Silently fail - if we can't check, assume not scheduled
@@ -443,6 +512,8 @@ struct ProgramDetailView: View {
                     // Reload to get the recording ID
                     await checkIfScheduled()
                 }
+                didChangeRecording = true
+                onRecordingChanged?()
                 isScheduling = false
             } catch {
                 scheduleError = error.localizedDescription
