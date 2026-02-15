@@ -76,8 +76,18 @@ struct ContentView: View {
             }
 
             // Authenticate before showing main UI to avoid race with GuideView
+            // Retry a few times on failure — macOS network may not be ready on cold launch
             if client.isConfigured && !client.isAuthenticated {
-                try? await client.authenticate()
+                for attempt in 1...3 {
+                    do {
+                        try await client.authenticate()
+                        break
+                    } catch {
+                        if attempt < 3 {
+                            try? await Task.sleep(for: .seconds(1))
+                        }
+                    }
+                }
             }
 
             isCheckingCloud = false
