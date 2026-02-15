@@ -45,12 +45,8 @@ final class TopicsViewModel: ObservableObject {
     func loadData(using client: PVRClient) async {
         await Task.yield()
 
-        // Load keywords from preferences; seed with demo defaults if empty in demo mode
         let prefs = UserPreferences.load()
         keywords = prefs.keywords
-        if keywords.isEmpty && client.config.isDemoMode {
-            keywords = DemoDataProvider.keywords
-        }
 
         guard !keywords.isEmpty else {
             matchingPrograms = []

@@ -17,7 +17,7 @@ struct TopicsView: View {
     @State private var showingKeywordsEditor = false
     #if os(tvOS)
     @State private var newKeyword = ""
-    @State private var showingAddKeyword = false
+    private let manageTag = "__manage__"
     #endif
 
     private var filteredPrograms: [MatchingProgram] {
@@ -29,51 +29,20 @@ struct TopicsView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 // Keyword tabs
-                if !viewModel.keywords.isEmpty {
-                    #if os(tvOS)
-                    HStack(spacing: Theme.spacingMD) {
-                        ForEach(viewModel.keywords, id: \.self) { keyword in
-                            Button {
-                                selectedKeyword = keyword
-                            } label: {
-                                Text(keyword)
-                                    .padding(.horizontal, Theme.spacingLG)
-                                    .padding(.vertical, Theme.spacingSM)
-                                    .background(selectedKeyword == keyword ? Theme.accent : Theme.surfaceElevated)
-                                    .foregroundStyle(selectedKeyword == keyword ? .white : Theme.textPrimary)
-                                    .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
-                            }
-                            .buttonStyle(.card)
-                        }
-
-                        Button {
-                            showingAddKeyword = true
-                        } label: {
-                            Image(systemName: "plus")
-                                .padding(Theme.spacingSM)
-                                .background(Theme.surfaceElevated)
-                                .foregroundStyle(Theme.accent)
-                                .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
-                        }
-                        .buttonStyle(.card)
-
-                        if !selectedKeyword.isEmpty {
-                            Button {
-                                removeKeyword(selectedKeyword)
-                            } label: {
-                                Image(systemName: "trash")
-                                    .padding(Theme.spacingSM)
-                                    .background(Theme.surfaceElevated)
-                                    .foregroundStyle(Theme.error)
-                                    .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
-                            }
-                            .buttonStyle(.card)
-                        }
+                #if os(tvOS)
+                Picker("Topic", selection: $selectedKeyword) {
+                    ForEach(viewModel.keywords, id: \.self) { keyword in
+                        Text(keyword).tag(keyword)
                     }
-                    .padding(.horizontal, Theme.spacingXL)
-                    .padding(.top, Theme.spacingLG)
-                    .padding(.bottom, Theme.spacingSM)
-                    #else
+                    Text("Manage").tag(manageTag)
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("keyword-tabs")
+                .padding(.horizontal)
+                .padding(.vertical, Theme.spacingSM)
+                .background(Theme.background)
+                #else
+                if !viewModel.keywords.isEmpty {
                     HStack {
                         Picker("Topic", selection: $selectedKeyword) {
                             ForEach(viewModel.keywords, id: \.self) { keyword in
@@ -82,6 +51,7 @@ struct TopicsView: View {
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
+                        .accessibilityIdentifier("keyword-tabs")
 
                         #if os(macOS)
                         Spacer()
@@ -90,27 +60,18 @@ struct TopicsView: View {
                         } label: {
                             Image(systemName: "pencil")
                         }
+                        .accessibilityIdentifier("edit-keywords-button")
                         #endif
                     }
                     .padding(.horizontal)
                     .padding(.vertical, Theme.spacingSM)
                     .background(Theme.surface)
-                    #endif
                 }
+                #endif
 
                 // Content
                 Group {
-                    if viewModel.keywords.isEmpty {
-                        emptyKeywordsView
-                    } else if viewModel.isLoading && viewModel.matchingPrograms.isEmpty {
-                        loadingView
-                    } else if let error = viewModel.error {
-                        errorView(error)
-                    } else if filteredPrograms.isEmpty {
-                        noMatchesView
-                    } else {
-                        programsList
-                    }
+                    contentView
                 }
             }
             .sheet(item: $selectedProgramDetail) { detail in
@@ -126,13 +87,7 @@ struct TopicsView: View {
                 .environmentObject(client)
                 .environmentObject(appState)
             }
-            #if os(tvOS)
-            .alert("Add Keyword", isPresented: $showingAddKeyword) {
-                TextField("Keyword", text: $newKeyword)
-                Button("Add") { addKeyword() }
-                Button("Cancel", role: .cancel) { newKeyword = "" }
-            }
-            #elseif os(iOS)
+            #if os(iOS)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -140,13 +95,22 @@ struct TopicsView: View {
                     } label: {
                         Image(systemName: "pencil")
                     }
+                    .accessibilityIdentifier("edit-keywords-button")
                 }
             }
             #endif
             .onChange(of: viewModel.keywords) {
+                #if os(tvOS)
+                if selectedKeyword.isEmpty {
+                    selectedKeyword = viewModel.keywords.first ?? manageTag
+                } else if selectedKeyword != manageTag && !viewModel.keywords.contains(selectedKeyword) {
+                    selectedKeyword = viewModel.keywords.first ?? manageTag
+                }
+                #else
                 if selectedKeyword.isEmpty, let first = viewModel.keywords.first {
                     selectedKeyword = first
                 }
+                #endif
             }
         }
         .background(Theme.background)
@@ -168,6 +132,35 @@ struct TopicsView: View {
         }
     }
 
+    @ViewBuilder
+    private var contentView: some View {
+        #if os(tvOS)
+        if selectedKeyword == manageTag {
+            manageKeywordsView
+        } else if viewModel.isLoading && viewModel.matchingPrograms.isEmpty {
+            loadingView
+        } else if let error = viewModel.error {
+            errorView(error)
+        } else if filteredPrograms.isEmpty {
+            noMatchesView
+        } else {
+            programsList
+        }
+        #else
+        if viewModel.keywords.isEmpty {
+            emptyKeywordsView
+        } else if viewModel.isLoading && viewModel.matchingPrograms.isEmpty {
+            loadingView
+        } else if let error = viewModel.error {
+            errorView(error)
+        } else if filteredPrograms.isEmpty {
+            noMatchesView
+        } else {
+            programsList
+        }
+        #endif
+    }
+
     private var emptyKeywordsView: some View {
         VStack(spacing: Theme.spacingMD) {
             Image(systemName: "star.fill")
@@ -181,17 +174,6 @@ struct TopicsView: View {
                 .foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center)
 
-            #if os(tvOS)
-            Button {
-                showingAddKeyword = true
-            } label: {
-                HStack {
-                    Image(systemName: "plus.circle.fill")
-                    Text("Add Keyword")
-                }
-            }
-            .buttonStyle(AccentButtonStyle())
-            #else
             Button {
                 showingKeywordsEditor = true
             } label: {
@@ -201,7 +183,6 @@ struct TopicsView: View {
                 }
             }
             .buttonStyle(AccentButtonStyle())
-            #endif
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -307,6 +288,51 @@ struct TopicsView: View {
     }
 
     #if os(tvOS)
+    private var manageKeywordsView: some View {
+        ScrollView {
+            VStack(spacing: Theme.spacingLG) {
+                ForEach(viewModel.keywords, id: \.self) { keyword in
+                    Button {
+                        removeKeyword(keyword)
+                    } label: {
+                        HStack {
+                            Text(keyword)
+                                .font(.tvHeadline)
+                            Spacer()
+                            Text("Delete")
+                                .font(.tvBody)
+                                .foregroundStyle(Theme.error)
+                        }
+                        .padding(.horizontal, Theme.spacingLG)
+                        .padding(.vertical, Theme.spacingMD)
+                    }
+                    .buttonStyle(.card)
+                }
+
+                HStack(spacing: Theme.spacingMD) {
+                    TextField("New keyword", text: $newKeyword)
+                        .textFieldStyle(.plain)
+                        .padding(Theme.spacingMD)
+                        .background(Theme.surfaceElevated)
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
+                        .accessibilityIdentifier("keyword-text-field")
+                        .onSubmit { addKeyword() }
+
+                    Button {
+                        addKeyword()
+                    } label: {
+                        Text("Add")
+                    }
+                    .buttonStyle(AccentButtonStyle())
+                    .disabled(newKeyword.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .accessibilityIdentifier("add-keyword-button")
+                }
+            }
+            .padding(Theme.spacingXL)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     private func addKeyword() {
         let trimmed = newKeyword.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
@@ -318,6 +344,7 @@ struct TopicsView: View {
         prefs.keywords.append(trimmed)
         prefs.save()
         newKeyword = ""
+        selectedKeyword = trimmed
         Task {
             await viewModel.loadData(using: client)
         }
@@ -328,7 +355,7 @@ struct TopicsView: View {
         prefs.keywords.removeAll { $0 == keyword }
         prefs.save()
         if selectedKeyword == keyword {
-            selectedKeyword = prefs.keywords.first ?? ""
+            selectedKeyword = prefs.keywords.first ?? manageTag
         }
         Task {
             await viewModel.loadData(using: client)

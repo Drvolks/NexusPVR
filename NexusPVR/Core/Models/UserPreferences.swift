@@ -71,7 +71,12 @@ struct UserPreferences: Codable {
     private static let storageKey = "UserPreferences"
     private static let ubiquitousStore = NSUbiquitousKeyValueStore.default
 
+    /// In-memory store for demo mode — when set, load/save bypass persistence
+    static var demoStore: UserPreferences?
+
     static func load() -> UserPreferences {
+        if let demo = demoStore { return demo }
+
         // Try iCloud first
         if let data = ubiquitousStore.data(forKey: storageKey),
            let prefs = try? JSONDecoder().decode(UserPreferences.self, from: data) {
@@ -90,6 +95,10 @@ struct UserPreferences: Codable {
     }
 
     func save() {
+        if Self.demoStore != nil {
+            Self.demoStore = self
+            return
+        }
         if let data = try? JSONEncoder().encode(self) {
             // Save to iCloud for sync
             Self.ubiquitousStore.set(data, forKey: Self.storageKey)

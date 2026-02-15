@@ -13,6 +13,17 @@ struct PVRApp: App {
     @StateObject private var client = PVRClient()
 
     init() {
+        // Check for --demo-mode launch argument (used by UI tests)
+        if ProcessInfo.processInfo.arguments.contains("--demo-mode") {
+            let demoConfig = ServerConfig(host: "demo", port: 8866, pin: "", useHTTPS: false)
+            demoConfig.save()
+
+            // Use in-memory preferences seeded with demo keywords
+            var demoPrefs = UserPreferences()
+            demoPrefs.keywords = DemoDataProvider.keywords
+            UserPreferences.demoStore = demoPrefs
+        }
+
         // Trigger iCloud sync on startup to pull latest data
         NSUbiquitousKeyValueStore.default.synchronize()
 
