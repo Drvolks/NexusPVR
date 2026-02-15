@@ -478,7 +478,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = NexusPVR/NexusPVR.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 29;
 				DEVELOPMENT_TEAM = 654X66AK24;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -500,6 +500,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = YES;
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "NexusPVR needs to connect to your local NextPVR server for streaming TV and managing recordings.";
 				"INFOPLIST_KEY_NSLocalNetworkUsageDescription[sdk=iphoneos*]" = "NexusPVR needs to connect to your local NextPVR server for streaming TV and managing recordings.";
 				"INFOPLIST_KEY_NSLocalNetworkUsageDescription[sdk=iphonesimulator*]" = "NexusPVR needs to connect to your local NextPVR server for streaming TV and managing recordings.";
@@ -547,7 +548,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = NexusPVR/NexusPVR.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 29;
 				DEVELOPMENT_TEAM = 654X66AK24;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -569,6 +570,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = YES;
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "NexusPVR needs to connect to your local NextPVR server for streaming TV and managing recordings.";
 				"INFOPLIST_KEY_NSLocalNetworkUsageDescription[sdk=iphoneos*]" = "NexusPVR needs to connect to your local NextPVR server for streaming TV and managing recordings.";
 				"INFOPLIST_KEY_NSLocalNetworkUsageDescription[sdk=iphonesimulator*]" = "NexusPVR needs to connect to your local NextPVR server for streaming TV and managing recordings.";
@@ -611,7 +613,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 29;
 				DEVELOPMENT_TEAM = 654X66AK24;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
@@ -637,7 +639,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 29;
 				DEVELOPMENT_TEAM = 654X66AK24;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
@@ -662,7 +664,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 29;
 				DEVELOPMENT_TEAM = 654X66AK24;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
@@ -688,7 +690,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 29;
 				DEVELOPMENT_TEAM = 654X66AK24;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
@@ -720,7 +722,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = DispatcherPVR/DispatcherPVR.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 29;
 				DEVELOPMENT_TEAM = 654X66AK24;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -742,6 +744,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = YES;
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "DispatcherPVR needs to connect to your local Dispatcharr server for streaming TV and managing recordings.";
 				"INFOPLIST_KEY_NSLocalNetworkUsageDescription[sdk=iphoneos*]" = "DispatcherPVR needs to connect to your local Dispatcharr server for streaming TV and managing recordings.";
 				"INFOPLIST_KEY_NSLocalNetworkUsageDescription[sdk=iphonesimulator*]" = "DispatcherPVR needs to connect to your local Dispatcharr server for streaming TV and managing recordings.";
@@ -790,7 +793,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = DispatcherPVR/DispatcherPVR.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 29;
 				DEVELOPMENT_TEAM = 654X66AK24;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -812,6 +815,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = YES;
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "DispatcherPVR needs to connect to your local Dispatcharr server for streaming TV and managing recordings.";
 				"INFOPLIST_KEY_NSLocalNetworkUsageDescription[sdk=iphoneos*]" = "DispatcherPVR needs to connect to your local Dispatcharr server for streaming TV and managing recordings.";
 				"INFOPLIST_KEY_NSLocalNetworkUsageDescription[sdk=iphonesimulator*]" = "DispatcherPVR needs to connect to your local Dispatcharr server for streaming TV and managing recordings.";
