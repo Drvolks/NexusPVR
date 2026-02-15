@@ -74,24 +74,5 @@
    <ArchiveAction
       buildConfiguration = "Release"
       revealArchiveInOrganizer = "YES">
-      <PreActions>
-         <ExecutionAction
-            ActionType = "Xcode.IDEStandardExecutionActionsCore.ExecutionActionType.ShellScriptAction">
-            <ActionContent
-               title = "Increment Build Number"
-               scriptText = "cd &quot;${SRCROOT}&quot;&#10;xcrun agvtool next-version -all&#10;"
-               shellToInvoke = "/bin/sh">
-               <EnvironmentBuildable>
-                  <BuildableReference
-                     BuildableIdentifier = "primary"
-                     BlueprintIdentifier = "6E74158B2F315368001FE083"
-                     BuildableName = "NexusPVR.app"
-                     BlueprintName = "NexusPVR"
-                     ReferencedContainer = "container:NexusPVR.xcodeproj">
-                  </BuildableReference>
-               </EnvironmentBuildable>
-            </ActionContent>
-         </ExecutionAction>
-      </PreActions>
    </ArchiveAction>
 </Scheme>

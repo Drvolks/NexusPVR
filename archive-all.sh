@@ -32,6 +32,14 @@ AUTH_FLAGS=(-allowProvisioningUpdates \
 
 rm -rf "$EXPORT_DIR"
 
+# --- Bump build number once for all archives ---
+
+cd "$SCRIPT_DIR"
+CURRENT_BUILD=$(agvtool what-version -terse)
+NEW_BUILD=$((CURRENT_BUILD + 1))
+echo "=== Bumping build number: $CURRENT_BUILD → $NEW_BUILD ==="
+agvtool new-version -all "$NEW_BUILD" > /dev/null
+
 # --- Archive ---
 
 for SCHEME in "${SCHEMES[@]}"; do
