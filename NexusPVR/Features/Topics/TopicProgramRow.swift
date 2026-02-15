@@ -7,6 +7,19 @@
 
 import SwiftUI
 
+private func normalizeProgramName(_ name: String) -> String {
+    name
+        .replacingOccurrences(of: " ᴺᵉʷ", with: "")
+        .lowercased()
+        .split(separator: " ")
+        .joined(separator: " ")
+        .trimmingCharacters(in: .whitespaces)
+}
+
+private func programNamesAreEqual(_ name1: String, _ name2: String) -> Bool {
+    normalizeProgramName(name1) == normalizeProgramName(name2)
+}
+
 struct TopicProgramRow: View {
     @EnvironmentObject private var client: PVRClient
     @EnvironmentObject private var appState: AppState
@@ -68,19 +81,7 @@ struct TopicProgramRow: View {
                     Spacer()
 
                     // Action button
-                    if let existing = existingRecording {
-                        Button {
-                            playExistingRecording(existing)
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "play.circle.fill")
-                                Text("Watch")
-                                    .font(.caption)
-                            }
-                            .foregroundStyle(Theme.accent)
-                        }
-                        .buttonStyle(.plain)
-                    } else if !program.hasEnded {
+                    if !program.hasEnded {
                         Button {
                             toggleRecording()
                         } label: {
@@ -118,7 +119,7 @@ struct TopicProgramRow: View {
                     }
                 }
 
-                // Row 3: Date | Earlier scheduled info
+                // Row 3: Date | Already recorded / Earlier scheduled info
                 HStack {
                     Text("\(program.startDate, style: .date) at \(program.startDate, style: .time)")
                         .font(.caption)
@@ -126,7 +127,14 @@ struct TopicProgramRow: View {
 
                     Spacer()
 
-                    if let earlier = earlierScheduled {
+                    if let existing = existingRecording {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.circle")
+                            Text("Already recorded \(existing.startDate ?? Date(), style: .time)")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(Theme.warning)
+                    } else if let earlier = earlierScheduled {
                         HStack(spacing: 4) {
                             Image(systemName: "clock.badge.checkmark")
                             Text("Scheduled \(earlier.startDate ?? Date(), style: .time)")
@@ -147,11 +155,6 @@ struct TopicProgramRow: View {
         }
     }
 
-    private func namesAreEqual(_ name1: String, _ name2: String) -> Bool {
-        let n1 = name1.lowercased().trimmingCharacters(in: .whitespaces)
-        let n2 = name2.lowercased().trimmingCharacters(in: .whitespaces)
-        return n1 == n2
-    }
 
     private func checkIfScheduled() async {
         do {
@@ -167,14 +170,14 @@ struct TopicProgramRow: View {
 
             // Check for existing completed recording with similar name
             if let existing = completed.first(where: { recording in
-                namesAreEqual(recording.name, program.name) &&
+                programNamesAreEqual(recording.name, program.name) &&
                 recording.recordingStatus == .ready
             }) {
                 existingRecording = existing
             }
 
             if let earlier = scheduled.first(where: { recording in
-                namesAreEqual(recording.name, program.name) &&
+                programNamesAreEqual(recording.name, program.name) &&
                 recording.epgEventId != program.id &&  // Exclude current program
                 (recording.startTime ?? 0) < program.start &&
                 recording.recordingStatus == .pending
@@ -254,42 +257,36 @@ struct TopicProgramRowTV: View {
     @State private var earlierScheduled: Recording?
 
     private var actionLabel: String {
-        if existingRecording != nil {
-            return "Watch Recording"
-        } else if isRecording {
+        if isRecording {
             return "Recording"
         } else if isScheduled {
             return "Scheduled"
         } else if program.hasEnded {
-            return "Ended"
+            return existingRecording != nil ? "Watch Recording" : "Ended"
         } else {
             return "Record"
         }
     }
 
     private var actionIcon: String {
-        if existingRecording != nil {
-            return "play.circle.fill"
-        } else if isRecording {
+        if isRecording {
             return "record.circle"
         } else if isScheduled {
             return "checkmark.circle.fill"
         } else if program.hasEnded {
-            return "clock"
+            return existingRecording != nil ? "play.circle.fill" : "clock"
         } else {
             return "record.circle"
         }
     }
 
     private var actionColor: Color {
-        if existingRecording != nil {
-            return Theme.accent
-        } else if isRecording {
+        if isRecording {
             return Theme.recording
         } else if isScheduled {
             return Theme.success
         } else if program.hasEnded {
-            return Theme.textTertiary
+            return existingRecording != nil ? Theme.accent : Theme.textTertiary
         } else {
             return Theme.accent
         }
@@ -359,8 +356,15 @@ struct TopicProgramRowTV: View {
                         .foregroundStyle(Theme.textTertiary)
                     }
 
-                    // Already scheduled info (if another airing is scheduled)
-                    if let earlier = earlierScheduled {
+                    // Already recorded info (prioritized over already scheduled)
+                    if let existing = existingRecording {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.circle")
+                            Text("Already recorded \(existing.startDate ?? Date(), style: .time)")
+                        }
+                        .font(.caption2)
+                        .foregroundStyle(Theme.warning)
+                    } else if let earlier = earlierScheduled {
                         HStack(spacing: 4) {
                             Image(systemName: "clock.badge.checkmark")
                             Text("Already scheduled at \(earlier.startDate ?? Date(), style: .time) on \(earlier.startDate ?? Date(), style: .date)")
@@ -403,18 +407,13 @@ struct TopicProgramRowTV: View {
     }
 
     private func performAction() {
-        if let existing = existingRecording {
-            playExistingRecording(existing)
-        } else if !program.hasEnded {
+        if !program.hasEnded {
             toggleRecording()
+        } else if let existing = existingRecording {
+            playExistingRecording(existing)
         }
     }
 
-    private func namesAreEqual(_ name1: String, _ name2: String) -> Bool {
-        let n1 = name1.lowercased().trimmingCharacters(in: .whitespaces)
-        let n2 = name2.lowercased().trimmingCharacters(in: .whitespaces)
-        return n1 == n2
-    }
 
     private func checkIfScheduled() async {
         do {
@@ -428,13 +427,13 @@ struct TopicProgramRowTV: View {
             }
 
             if let existing = completed.first(where: { recording in
-                namesAreEqual(recording.name, program.name) && recording.recordingStatus == .ready
+                programNamesAreEqual(recording.name, program.name) && recording.recordingStatus == .ready
             }) {
                 existingRecording = existing
             }
 
             if let earlier = scheduled.first(where: { recording in
-                namesAreEqual(recording.name, program.name) &&
+                programNamesAreEqual(recording.name, program.name) &&
                 recording.epgEventId != program.id &&
                 (recording.startTime ?? 0) < program.start &&
                 recording.recordingStatus == .pending
