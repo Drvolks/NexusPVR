@@ -241,3 +241,25 @@ back = create_radial_gradient(400, 240, center_color, edge_color)
 front = create_front_layer(400, 240)
 middle = Image.new('RGBA', (400, 240), (0, 0, 0, 0))
 ```
+
+## UI Tests
+### Setup
+Use the demo server
+### Target
+Both apps and 3 platforms
+### Test plan
+- Click on a channel open the player (macos, ios)
+- Click on a current program open the player (tvos)
+- Click on a future program open the program details
+  - Click on the record button
+    - The program cell will indicate is it scheduled to be recorded
+    - Navigate to the recordings page and confirm we see the scheduled recording
+- Click on the recording page and confirm we see existing recordings
+  - click on one recording to show program details (macos, ios)
+  - click on one recording open the player (tvos)
+- Click on the topic page and add a topic having a keyword of the program we've scheduled recording
+  - we now see this program and it is identified as scheduled
+- Click on the search page and search for program we've scheduled recording
+  - program is in the search result
+- Click on the settings page and unlink the server
+- end

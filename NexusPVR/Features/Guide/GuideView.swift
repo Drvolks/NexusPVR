@@ -787,6 +787,7 @@ struct GuideView: View {
             .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("guide-channel-\(channel.id)")
         #endif
     }
 
@@ -948,6 +949,7 @@ struct GuideView: View {
                     }
                 }
                 #endif
+                .accessibilityIdentifier("guide-program-\(program.id)")
                 .offset(x: viewModel.programOffset(for: program, hourWidth: hourWidth, startTime: timelineStart))
             }
 

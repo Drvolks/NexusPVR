@@ -77,6 +77,7 @@ struct IOSNavigation: View {
                         .foregroundStyle(appState.selectedTab == tab ? Theme.accent : Theme.textSecondary)
                         .frame(maxWidth: .infinity)
                     }
+                    .accessibilityIdentifier("tab-\(tab.rawValue)")
                 }
             }
             .padding(.top, 8)

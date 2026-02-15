@@ -67,7 +67,7 @@ struct DemoDataProvider {
         1001: [
             ("Morning Sports Roundup", nil, "All the highlights from last night's games.", ["Sports"], 60),
             ("The Debate: Should Pineapple Be on Pizza?", "Special Edition", "Athletes weigh in on the most controversial topic in food.", ["Sports", "Entertainment"], 30),
-            ("Extreme Ironing Championship", "Season 4", "The world's most intense ironing competition goes international.", ["Sports"], 90),
+            ("Extreme Ironing World Cup", "Season 4", "The world's most intense ironing competition goes international.", ["Sports"], 90),
             ("Top 10 Plays of the Week", nil, "Countdown of the most jaw-dropping athletic feats.", ["Sports"], 30),
             ("Sideline Stories", "Episode 12", "Behind-the-scenes moments you missed during the big games.", ["Sports"], 60),
             ("Fantasy Draft Live", nil, "Expert analysis for your fantasy league picks.", ["Sports"], 120),
@@ -78,7 +78,7 @@ struct DemoDataProvider {
         1002: [
             ("Early Morning Briefing", nil, "Your essential news to start the day.", ["News"], 60),
             ("World Report", nil, "International news coverage from our global correspondents.", ["News"], 60),
-            ("Evening News with Anderson Scooper", nil, "In-depth reporting on the stories that matter most.", ["News"], 60),
+            ("Breaking News Live", nil, "In-depth reporting on the stories that matter most.", ["News"], 60),
             ("The Weather Hour", nil, "Extended weather forecasts and climate analysis.", ["News", "Weather"], 60),
             ("Tech & Science Today", nil, "Latest breakthroughs in technology and scientific research.", ["News", "Science"], 30),
             ("Political Roundtable", nil, "Analysts debate the week's biggest political developments.", ["News", "Politics"], 90),

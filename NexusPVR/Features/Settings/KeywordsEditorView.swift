@@ -27,6 +27,7 @@ struct KeywordsEditorView: View {
                             .onSubmit {
                                 addKeyword()
                             }
+                            .accessibilityIdentifier("keyword-text-field")
 
                         Button {
                             addKeyword()
@@ -36,6 +37,7 @@ struct KeywordsEditorView: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(newKeyword.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .accessibilityIdentifier("add-keyword-confirm")
                     }
                 } header: {
                     Text("Add Keyword")
@@ -73,6 +75,7 @@ struct KeywordsEditorView: View {
                     Button("Done") {
                         dismiss()
                     }
+                    .accessibilityIdentifier("keywords-done-button")
                 }
             }
             #endif

@@ -116,6 +116,7 @@ struct ProgramDetailView: View {
                         .font(.title2)
                         .fontWeight(.bold)
                         .foregroundStyle(Theme.textPrimary)
+                        .accessibilityIdentifier("program-detail-name")
 
                     // Row 3: Date | Start time - End time | Duration
                     HStack {
@@ -204,6 +205,7 @@ struct ProgramDetailView: View {
                                 }
                                 .buttonStyle(SecondaryButtonStyle())
                                 .disabled(isScheduling)
+                                .accessibilityIdentifier("cancel-recording-button")
                             } else {
                                 Button {
                                     scheduleRecording()
@@ -221,6 +223,7 @@ struct ProgramDetailView: View {
                                 }
                                 .buttonStyle(AccentButtonStyle())
                                 .disabled(isScheduling)
+                                .accessibilityIdentifier("record-button")
                             }
                         }
                     }
@@ -290,6 +293,7 @@ struct ProgramDetailView: View {
                 #endif
                 .fontWeight(.bold)
                 .foregroundStyle(Theme.textPrimary)
+                .accessibilityIdentifier("program-detail-name")
 
             if let subtitle = program.subtitle, !subtitle.isEmpty {
                 Text(subtitle)
@@ -387,6 +391,7 @@ struct ProgramDetailView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(AccentButtonStyle())
+                .accessibilityIdentifier("watch-live-button")
             }
 
             if !program.hasEnded {
@@ -410,6 +415,7 @@ struct ProgramDetailView: View {
                     }
                     .buttonStyle(SecondaryButtonStyle())
                     .disabled(isScheduling)
+                    .accessibilityIdentifier("cancel-recording-button")
                 } else {
                     Button {
                         scheduleRecording()
@@ -427,6 +433,7 @@ struct ProgramDetailView: View {
                     }
                     .buttonStyle(AccentButtonStyle())
                     .disabled(isScheduling)
+                    .accessibilityIdentifier("record-button")
                 }
             }
         }

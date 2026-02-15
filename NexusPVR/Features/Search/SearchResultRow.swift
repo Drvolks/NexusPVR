@@ -149,6 +149,7 @@ struct SearchResultRow: View {
         }
         .padding(.vertical, Theme.spacingSM)
         .contentShape(Rectangle())
+        .accessibilityIdentifier("search-result-\(program.id)")
         .onTapGesture {
             onShowDetails?(existingRecordingId, existingRecording)
         }

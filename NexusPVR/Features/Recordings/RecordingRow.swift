@@ -161,6 +161,7 @@ struct RecordingRow: View {
             }
         }
         .padding(.vertical, Theme.spacingSM)
+        .accessibilityIdentifier("recording-row-\(recording.id)")
     }
 
     @ViewBuilder

@@ -101,6 +101,7 @@ struct TopicProgramRow: View {
                                     Text("Scheduled")
                                         .font(.caption)
                                         .foregroundStyle(Theme.textSecondary)
+                                        .accessibilityIdentifier("scheduled-indicator")
                                 } else {
                                     Image(systemName: "record.circle")
                                         .foregroundStyle(Theme.accent)

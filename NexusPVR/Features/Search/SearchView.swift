@@ -182,6 +182,7 @@ struct SearchView: View {
             }
         }
         .listStyle(.plain)
+        .accessibilityIdentifier("search-results")
         #endif
     }
 }

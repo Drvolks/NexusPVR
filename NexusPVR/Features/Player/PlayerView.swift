@@ -132,6 +132,28 @@ struct PlayerView: View {
                     ProgressView()
                         .scaleEffect(1.5)
                         .tint(.white)
+                    #if !os(tvOS)
+                    // Close button always available, even while loading
+                    VStack {
+                        HStack {
+                            Button {
+                                savePlaybackPosition()
+                                appState.stopPlayback()
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.title2)
+                                    .foregroundStyle(.white)
+                                    .padding()
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("player-close-button")
+                            Spacer()
+                        }
+                        .padding(.top, 8)
+                        .padding(.leading, 8)
+                        Spacer()
+                    }
+                    #endif
                 }
                 .ignoresSafeArea()
             }
@@ -156,39 +178,38 @@ struct PlayerView: View {
 
             #if os(macOS)
             // Hidden buttons for keyboard shortcuts
-            Button("") {
-                savePlaybackPosition()
-                appState.stopPlayback()
-            }
-            .keyboardShortcut(.escape, modifiers: [])
-            .opacity(0)
-            .frame(width: 0, height: 0)
-
-            Button("") {
-                isPlaying.toggle()
-            }
-            .keyboardShortcut(.space, modifiers: [])
-            .opacity(0)
-            .frame(width: 0, height: 0)
-
-            if !isLiveStream {
+            // Hidden buttons for keyboard shortcuts — must have non-zero frame to receive events
+            VStack {
                 Button("") {
-                    seekBackward?()
+                    savePlaybackPosition()
+                    appState.stopPlayback()
                 }
-                .keyboardShortcut(.leftArrow, modifiers: [])
-                .opacity(0)
-                .frame(width: 0, height: 0)
+                .keyboardShortcut(.escape, modifiers: [])
 
                 Button("") {
-                    seekForward?()
+                    isPlaying.toggle()
                 }
-                .keyboardShortcut(.rightArrow, modifiers: [])
-                .opacity(0)
-                .frame(width: 0, height: 0)
+                .keyboardShortcut(.space, modifiers: [])
+
+                if !isLiveStream {
+                    Button("") {
+                        seekBackward?()
+                    }
+                    .keyboardShortcut(.leftArrow, modifiers: [])
+
+                    Button("") {
+                        seekForward?()
+                    }
+                    .keyboardShortcut(.rightArrow, modifiers: [])
+                }
             }
+            .frame(width: 1, height: 1)
+            .opacity(0.01)
+            .allowsHitTesting(false)
             #endif
         }
         .background(Color.black)
+        .accessibilityIdentifier("player-view")
         .onAppear {
             scheduleHideControls()
             #if !os(macOS)
@@ -438,6 +459,7 @@ struct PlayerView: View {
                     .padding()
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("player-close-button")
             #endif
 
             Text(title)

@@ -18,10 +18,12 @@ struct SettingsView: View {
         NavigationStack {
             #if os(tvOS)
             tvOSContent
-                .confirmationDialog("Unlink Server", isPresented: $showingUnlinkConfirm, titleVisibility: .visible) {
+                .alert("Unlink Server", isPresented: $showingUnlinkConfirm) {
                     Button("Unlink", role: .destructive) {
                         unlinkServer()
                     }
+                    .accessibilityIdentifier("confirm-unlink-button")
+                    Button("Cancel", role: .cancel) {}
                 } message: {
                     Text("This will disconnect and forget the server. You'll need to set it up again.")
                 }
@@ -82,6 +84,7 @@ struct SettingsView: View {
                             .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
                         }
                         .buttonStyle(.card)
+                        .accessibilityIdentifier("unlink-server-button")
                     }
                 }
                 .focusSection()
@@ -200,10 +203,12 @@ struct SettingsView: View {
                     Spacer()
                 }
             }
+            .accessibilityIdentifier("unlink-server-button")
             .confirmationDialog("Unlink Server", isPresented: $showingUnlinkConfirm, titleVisibility: .visible) {
                 Button("Unlink", role: .destructive) {
                     unlinkServer()
                 }
+                .accessibilityIdentifier("confirm-unlink-button")
             } message: {
                 Text("This will disconnect and forget the server. You'll need to set it up again.")
             }

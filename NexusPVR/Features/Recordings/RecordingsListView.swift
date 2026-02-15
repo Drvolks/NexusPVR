@@ -53,6 +53,7 @@ private struct RecordingsListContentView: View {
                     Text("Scheduled").tag(RecordingsFilter.scheduled)
                 }
                 .pickerStyle(.segmented)
+                .accessibilityIdentifier("recordings-filter")
                 .padding(.horizontal)
                 .padding(.vertical, Theme.spacingSM)
                 .background(Theme.background)
