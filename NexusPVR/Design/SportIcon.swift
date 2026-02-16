@@ -188,12 +188,6 @@ enum SportDetector {
             result = detectFromText(name: name, desc: desc)
         }
 
-        #if DEBUG
-        if let sport = result {
-            print("SportDetector: \"\(name)\" → \(sport) | genres: \(genres ?? [])")
-        }
-        #endif
-
         return result
     }
 

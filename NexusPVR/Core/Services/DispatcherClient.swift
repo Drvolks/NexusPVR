@@ -171,26 +171,21 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
                 }
             }
 
-            #if DEBUG
-            if let jsonString = String(data: data, encoding: .utf8) {
-                print("Dispatcharr API Response for \(url.path):")
-                print(jsonString.prefix(1000))
-            }
-            #endif
-
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            return try decoder.decode(T.self, from: data)
+            return try await Self.decodeOffMainActor(data)
         } catch let error as PVRClientError {
             throw error
-        } catch let error as DecodingError {
-            #if DEBUG
-            print("Dispatcharr Decoding Error: \(error)")
-            #endif
+        } catch is DecodingError {
             throw PVRClientError.invalidResponse
         } catch {
             throw PVRClientError.networkError(error)
         }
+    }
+
+    /// Decode JSON off the main actor to avoid blocking the UI
+    private nonisolated static func decodeOffMainActor<T: Decodable>(_ data: Data) async throws -> T {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(T.self, from: data)
     }
 
     private func authenticatedRequestNoContent(_ url: URL, method: String = "DELETE") async throws {
@@ -241,9 +236,6 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
             pageCount += 1
 
             if maxPages > 0 && pageCount >= maxPages {
-                #if DEBUG
-                print("Dispatcharr: Reached page limit (\(maxPages)), stopping pagination with \(allItems.count) items")
-                #endif
                 break
             }
 
@@ -261,11 +253,14 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
 
     func getChannels() async throws -> [Channel] {
         guard !config.isDemoMode else { return DemoDataProvider.channels }
-        guard let url = URL(string: "\(baseURL)/api/channels/channels/") else {
+        // Request large page to minimize pagination round-trips
+        guard let url = URL(string: "\(baseURL)/api/channels/channels/?page_size=10000") else {
             throw PVRClientError.invalidResponse
         }
 
+        let channelsStart = CFAbsoluteTimeGetCurrent()
         let items: [DispatcharrChannel] = try await fetchAllPages(url)
+        print("[Dispatcharr] Fetched \(items.count) channels in \(String(format: "%.0f", (CFAbsoluteTimeGetCurrent() - channelsStart) * 1000))ms")
 
         // Build lookup maps for EPG, logo, and stream URL resolution
         tvgIdToChannelId = [:]
@@ -283,21 +278,50 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
             }
         }
 
-        // Resolve EPG data tvg_ids for channels where the channel's tvg_id
+        // Resolve EPG data tvg_ids concurrently for channels where the channel's tvg_id
         // differs from the EPG source's tvg_id (e.g. "CBCNews.ca" vs "CBCNewsNetwork.ca")
-        for ch in items {
-            guard let epgDataId = ch.epgDataId else { continue }
-            guard let epgURL = URL(string: "\(baseURL)/api/epg/epgdata/\(epgDataId)/") else { continue }
-            do {
-                let epgData: DispatcharrEPGData = try await authenticatedRequest(epgURL)
-                if let epgTvgId = epgData.tvgId, !epgTvgId.isEmpty,
-                   tvgIdToChannelId[epgTvgId] == nil {
-                    tvgIdToChannelId[epgTvgId] = ch.id
+        let epgResolveStart = CFAbsoluteTimeGetCurrent()
+        let channelsNeedingResolve = items.filter { $0.epgDataId != nil }
+        let concurrencyLimit = 20
+        let resolvedMappings = await withTaskGroup(of: (Int, String?).self) { group in
+            var results = [(Int, String?)]()
+            var index = 0
+
+            for ch in channelsNeedingResolve {
+                guard let epgDataId = ch.epgDataId else { continue }
+                guard let epgURL = URL(string: "\(baseURL)/api/epg/epgdata/\(epgDataId)/") else { continue }
+
+                if index >= concurrencyLimit {
+                    if let result = await group.next() {
+                        results.append(result)
+                    }
                 }
-            } catch {
-                // Non-critical — skip if EPG data lookup fails
+
+                let channelId = ch.id
+                group.addTask { [weak self] in
+                    guard let self else { return (channelId, nil) }
+                    do {
+                        let epgData: DispatcharrEPGData = try await self.authenticatedRequest(epgURL)
+                        return (channelId, epgData.tvgId)
+                    } catch {
+                        return (channelId, nil)
+                    }
+                }
+                index += 1
+            }
+
+            for await result in group {
+                results.append(result)
+            }
+            return results
+        }
+        for (channelId, epgTvgId) in resolvedMappings {
+            if let epgTvgId, !epgTvgId.isEmpty,
+               tvgIdToChannelId[epgTvgId] == nil {
+                tvgIdToChannelId[epgTvgId] = channelId
             }
         }
+        print("[Dispatcharr] Resolved \(channelsNeedingResolve.count) EPG data mappings in \(String(format: "%.0f", (CFAbsoluteTimeGetCurrent() - epgResolveStart) * 1000))ms")
 
         return items.map { $0.toChannel() }
     }
@@ -306,7 +330,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
 
     func getListings(channelId: Int) async throws -> [Program] {
         guard !config.isDemoMode else { return DemoDataProvider.listings(for: channelId) }
-        guard let url = URL(string: "\(baseURL)/api/epg/grid/") else {
+        guard let url = URL(string: "\(baseURL)/api/epg/grid/?page_size=50000") else {
             throw PVRClientError.invalidResponse
         }
 
@@ -334,29 +358,31 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
             try await authenticate()
         }
 
-        guard let url = URL(string: "\(baseURL)/api/epg/grid/") else {
+        guard let url = URL(string: "\(baseURL)/api/epg/grid/?page_size=50000") else {
             throw PVRClientError.invalidResponse
         }
 
         let allPrograms: [DispatcharrProgram] = try await fetchAllPages(url, maxPages: 50)
-        var result = [Int: [Program]]()
 
-        for program in allPrograms {
-            // Resolve channel ID: try the direct channel field first,
-            // then fall back to tvg_id → channel id mapping
-            let channelId: Int?
-            if let directId = program.channel {
-                channelId = directId
-            } else if let tvgId = program.tvgId, !tvgId.isEmpty {
-                channelId = tvgIdToChannelId[tvgId]
-            } else {
-                channelId = nil
+        // Process programs off the main actor to avoid blocking the UI
+        let tvgMap = tvgIdToChannelId
+        let result = await Task.detached(priority: .userInitiated) {
+            var mapped = [Int: [Program]]()
+            for program in allPrograms {
+                let channelId: Int?
+                if let directId = program.channel {
+                    channelId = directId
+                } else if let tvgId = program.tvgId, !tvgId.isEmpty {
+                    channelId = tvgMap[tvgId]
+                } else {
+                    channelId = nil
+                }
+                guard let resolvedId = channelId else { continue }
+                guard let p = program.toProgram(channelId: resolvedId) else { continue }
+                mapped[resolvedId, default: []].append(p)
             }
-
-            guard let resolvedId = channelId else { continue }
-            guard let p = program.toProgram(channelId: resolvedId) else { continue }
-            result[resolvedId, default: []].append(p)
-        }
+            return mapped
+        }.value
 
         return result
     }
@@ -466,10 +492,6 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         guard let url = URL(string: "\(baseURL)/proxy/ts/stream/\(uuid)") else {
             throw PVRClientError.invalidResponse
         }
-
-        #if DEBUG
-        print("Live stream URL: \(url.absoluteString)")
-        #endif
 
         return url
     }
@@ -708,9 +730,6 @@ struct DispatcharrProgram: Decodable {
         guard let startDate = formatter.date(from: startTime) ?? fallbackFormatter.date(from: startTime),
               let endDate = formatter.date(from: endTime) ?? fallbackFormatter.date(from: endTime),
               endDate > startDate else {
-            #if DEBUG
-            print("Dispatcharr: Skipping program '\(title)' — invalid dates: start=\(startTime) end=\(endTime)")
-            #endif
             return nil
         }
 

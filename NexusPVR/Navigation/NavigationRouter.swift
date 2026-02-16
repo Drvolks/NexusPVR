@@ -344,4 +344,5 @@ struct MacOSNavigation: View {
     NavigationRouter()
         .environmentObject(AppState())
         .environmentObject(PVRClient())
+        .environmentObject(EPGCache())
 }

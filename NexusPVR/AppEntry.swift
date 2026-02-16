@@ -11,6 +11,7 @@ import SwiftUI
 struct PVRApp: App {
     @StateObject private var appState = AppState()
     @StateObject private var client = PVRClient()
+    @StateObject private var epgCache = EPGCache()
 
     init() {
         // Check for --demo-mode launch argument (used by UI tests)
@@ -39,14 +40,18 @@ struct PVRApp: App {
             ContentView()
                 .environmentObject(appState)
                 .environmentObject(client)
+                .environmentObject(epgCache)
                 .preferredColorScheme(.dark)
                 .tint(Theme.accent)
+                #if !os(macOS)
                 .ignoresSafeArea()
+                #endif
                 .onReceive(NotificationCenter.default.publisher(for: NSUbiquitousKeyValueStore.didChangeExternallyNotification)) { _ in
                     // Reload server config if it changed from iCloud
                     let newConfig = ServerConfig.load()
                     if newConfig.isConfigured && newConfig != client.config {
                         client.updateConfig(newConfig)
+                        epgCache.invalidate()
                     }
                 }
         }

@@ -10,6 +10,7 @@ import SwiftUI
 struct SearchView: View {
     @EnvironmentObject private var client: PVRClient
     @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var epgCache: EPGCache
     @StateObject private var viewModel = SearchViewModel()
     @State private var selectedProgramDetail: ProgramSearchDetail?
     @State private var refreshTrigger = UUID()
@@ -17,7 +18,7 @@ struct SearchView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if viewModel.isLoading {
+                if !epgCache.hasLoaded {
                     loadingView
                 } else if let error = viewModel.error {
                     errorView(error)
@@ -51,10 +52,8 @@ struct SearchView: View {
             }
         }
         .background(Theme.background)
-        .task {
-            viewModel.isLoading = true
-            await viewModel.loadData(using: client)
-            viewModel.isLoading = false
+        .onAppear {
+            viewModel.epgCache = epgCache
         }
     }
 
@@ -199,5 +198,6 @@ private struct ProgramSearchDetail: Identifiable {
     SearchView()
         .environmentObject(PVRClient())
         .environmentObject(AppState())
+        .environmentObject(EPGCache())
         .preferredColorScheme(.dark)
 }

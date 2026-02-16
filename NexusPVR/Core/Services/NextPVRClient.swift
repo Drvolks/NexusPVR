@@ -160,20 +160,10 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
                 return try await request(method, params: params)
             }
 
-            #if DEBUG
-            if let jsonString = String(data: data, encoding: .utf8) {
-                print("NextPVR API Response for \(method):")
-                print(jsonString.prefix(1000))
-            }
-            #endif
-
             return try JSONDecoder().decode(T.self, from: data)
         } catch let error as NextPVRError {
             throw error
-        } catch let error as DecodingError {
-            #if DEBUG
-            print("NextPVR Decoding Error: \(error)")
-            #endif
+        } catch is DecodingError {
             throw NextPVRError.invalidResponse
         } catch {
             throw NextPVRError.networkError(error)
@@ -230,9 +220,6 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
     func getRecordings(filter: String = "ready") async throws -> [Recording] {
         guard !config.isDemoMode else { return [] }
         let response: RecordingListResponse = try await request("recording.list", params: ["filter": filter])
-        #if DEBUG
-        print("NextPVR: Fetched \(response.recordings?.count ?? 0) recordings with filter '\(filter)'")
-        #endif
         return response.recordings ?? []
     }
 
@@ -294,11 +281,7 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
             "recording_id": String(recordingId),
             "position": String(positionSeconds)
         ])
-        if !response.isSuccess {
-            #if DEBUG
-            print("NextPVR: Failed to set recording position (non-fatal)")
-            #endif
-        }
+        // Non-fatal — ignore failures
     }
 
     // MARK: - Streaming URLs
@@ -323,14 +306,6 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
         guard let url = URL(string: urlFormats[0]) else {
             throw NextPVRError.invalidResponse
         }
-
-        #if DEBUG
-        print("Live stream URL: \(url.absoluteString)")
-        print("Alternative URLs to try:")
-        for (i, fmt) in urlFormats.enumerated() {
-            print("  [\(i)]: \(fmt)")
-        }
-        #endif
 
         return url
     }

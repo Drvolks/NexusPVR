@@ -22,6 +22,7 @@ final class TopicsViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var error: String?
 
+    weak var epgCache: EPGCache?
     private var syncObserver: NSObjectProtocol?
 
     init() {
@@ -42,7 +43,7 @@ final class TopicsViewModel: ObservableObject {
         }
     }
 
-    func loadData(using client: PVRClient) async {
+    func loadData() async {
         await Task.yield()
 
         let prefs = UserPreferences.load()
@@ -53,67 +54,16 @@ final class TopicsViewModel: ObservableObject {
             return
         }
 
-        guard client.isConfigured else {
-            error = "Server not configured"
+        guard let cache = epgCache, cache.hasLoaded else {
+            error = "EPG data not loaded"
             return
         }
 
         isLoading = true
         error = nil
 
-        do {
-            if !client.isAuthenticated {
-                try await client.authenticate()
-            }
-
-            // Load channels and their listings
-            let channels = try await client.getChannels()
-            let listings = try await client.getAllListings(for: channels)
-
-            // Find all programs that match keywords
-            var matches: [MatchingProgram] = []
-            let now = Date()
-
-            for channel in channels {
-                guard let programs = listings[channel.id] else { continue }
-
-                for program in programs {
-                    // Only include upcoming programs (not ended)
-                    guard program.endDate > now else { continue }
-
-                    // Check if program matches any keyword
-                    if let matchedKeyword = matchesKeyword(program: program) {
-                        matches.append(MatchingProgram(
-                            program: program,
-                            channel: channel,
-                            matchedKeyword: matchedKeyword
-                        ))
-                    }
-                }
-            }
-
-            // Sort by start date
-            matchingPrograms = matches.sorted { $0.program.startDate < $1.program.startDate }
-            isLoading = false
-        } catch {
-            self.error = error.localizedDescription
-            isLoading = false
-        }
-    }
-
-    private func matchesKeyword(program: Program) -> String? {
-        let searchText = [
-            program.name,
-            program.subtitle ?? "",
-            program.desc ?? ""
-        ].joined(separator: " ").lowercased()
-
-        for keyword in keywords {
-            if searchText.contains(keyword.lowercased()) {
-                return keyword
-            }
-        }
-
-        return nil
+        let matches = await cache.matchingPrograms(keywords: keywords)
+        matchingPrograms = matches
+        isLoading = false
     }
 }

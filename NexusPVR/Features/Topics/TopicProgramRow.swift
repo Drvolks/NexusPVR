@@ -187,9 +187,6 @@ struct TopicProgramRow: View {
             }
         } catch {
             // Silently fail
-            #if DEBUG
-            print("TopicProgramRow: Error checking recordings: \(error)")
-            #endif
         }
     }
 
