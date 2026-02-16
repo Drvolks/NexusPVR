@@ -169,10 +169,12 @@ struct TopicProgramRow: View {
                 existingRecordingId = rec.id
             }
 
-            // Check for existing completed recording with similar name
+            // Check for existing completed recording with similar name (within 48h)
+            let cutoff = Date().addingTimeInterval(-48 * 3600)
             if let existing = completed.first(where: { recording in
                 programNamesAreEqual(recording.name, program.name) &&
-                recording.recordingStatus == .ready
+                recording.recordingStatus == .ready &&
+                (recording.startDate ?? .distantPast) > cutoff
             }) {
                 existingRecording = existing
             }

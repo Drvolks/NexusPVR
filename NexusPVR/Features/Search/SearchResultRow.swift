@@ -169,9 +169,11 @@ struct SearchResultRow: View {
                 existingRecordingId = rec.id
             }
 
+            let cutoff = Date().addingTimeInterval(-48 * 3600)
             if let existing = completed.first(where: { recording in
                 programNamesAreEqual(recording.name, program.name) &&
-                recording.recordingStatus == .ready
+                recording.recordingStatus == .ready &&
+                (recording.startDate ?? .distantPast) > cutoff
             }) {
                 existingRecording = existing
             }
@@ -391,8 +393,10 @@ struct SearchResultRowTV: View {
                 existingRecordingId = rec.id
             }
 
+            let cutoff2 = Date().addingTimeInterval(-48 * 3600)
             if let existing = completed.first(where: { recording in
-                programNamesAreEqual(recording.name, program.name) && recording.recordingStatus == .ready
+                programNamesAreEqual(recording.name, program.name) && recording.recordingStatus == .ready &&
+                (recording.startDate ?? .distantPast) > cutoff2
             }) {
                 existingRecording = existing
             }
