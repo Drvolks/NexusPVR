@@ -41,6 +41,8 @@ private struct RecordingsListContentView: View {
         self._viewModel = StateObject(wrappedValue: RecordingsViewModel(client: client))
     }
 
+    @Environment(\.scenePhase) private var scenePhase
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -108,6 +110,11 @@ private struct RecordingsListContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .recordingsDidChange)) { _ in
             Task {
                 await viewModel.loadRecordings()
+            }
+        }
+        .onChange(of: scenePhase) {
+            if scenePhase == .active {
+                Task { await viewModel.loadRecordings() }
             }
         }
     }
