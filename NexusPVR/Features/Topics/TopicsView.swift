@@ -10,6 +10,7 @@ import SwiftUI
 struct TopicsView: View {
     @EnvironmentObject private var client: PVRClient
     @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var epgCache: EPGCache
     @StateObject private var viewModel = TopicsViewModel()
     @State private var selectedProgramDetail: ProgramTopicDetail?
     @State private var selectedKeyword: String = ""
@@ -119,7 +120,7 @@ struct TopicsView: View {
             KeywordsEditorView()
                 .onDisappear {
                     Task {
-                        await viewModel.loadData(using: client)
+                        await viewModel.loadData()
                     }
                 }
                 #if os(macOS)
@@ -128,7 +129,8 @@ struct TopicsView: View {
         }
         #endif
         .task {
-            await viewModel.loadData(using: client)
+            viewModel.epgCache = epgCache
+            await viewModel.loadData()
         }
     }
 
@@ -282,7 +284,7 @@ struct TopicsView: View {
         }
         .listStyle(.plain)
         .refreshable {
-            await viewModel.loadData(using: client)
+            await viewModel.loadData()
         }
         #endif
     }
@@ -346,7 +348,7 @@ struct TopicsView: View {
         newKeyword = ""
         selectedKeyword = trimmed
         Task {
-            await viewModel.loadData(using: client)
+            await viewModel.loadData()
         }
     }
 
@@ -358,7 +360,7 @@ struct TopicsView: View {
             selectedKeyword = prefs.keywords.first ?? manageTag
         }
         Task {
-            await viewModel.loadData(using: client)
+            await viewModel.loadData()
         }
     }
     #endif
@@ -377,5 +379,6 @@ private struct ProgramTopicDetail: Identifiable {
     TopicsView()
         .environmentObject(PVRClient())
         .environmentObject(AppState())
+        .environmentObject(EPGCache())
         .preferredColorScheme(.dark)
 }

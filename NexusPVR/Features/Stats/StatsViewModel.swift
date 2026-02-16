@@ -51,15 +51,10 @@ final class StatsViewModel: ObservableObject {
 
         do {
             let accounts = try await client.getM3UAccounts()
-            #if DEBUG
-            print("Dispatcharr: Fetched \(accounts.count) M3U accounts, \(accounts.filter { $0.isActive }.count) active")
-            #endif
             m3uAccounts = accounts.filter { $0.isActive && !$0.locked }
             appState.hasM3UErrors = m3uAccounts.contains { $0.status != "success" }
         } catch {
-            #if DEBUG
-            print("Dispatcharr: Failed to fetch M3U accounts: \(error)")
-            #endif
+            // Non-critical — M3U status is informational only
         }
 
         isLoading = false

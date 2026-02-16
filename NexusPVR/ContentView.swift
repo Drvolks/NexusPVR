@@ -23,6 +23,7 @@ private struct SetupSheetConfig: Identifiable, Hashable {
 struct ContentView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var client: PVRClient
+    @EnvironmentObject private var epgCache: EPGCache
     @StateObject private var discovery = ServerDiscoveryService()
     @State private var sheetConfig: SetupSheetConfig?
     @State private var isCheckingCloud = true
@@ -103,6 +104,11 @@ struct ContentView: View {
 
             isCheckingCloud = false
 
+            // Load EPG cache once authenticated
+            if client.isConfigured {
+                await epgCache.loadData(using: client)
+            }
+
             // Only scan if no config found (NextPVR auto-scans; Dispatcharr waits for credentials)
             #if !DISPATCHERPVR
             if !client.isConfigured {
@@ -120,8 +126,11 @@ struct ContentView: View {
         .onChange(of: client.isConfigured) { _, isConfigured in
             if isConfigured {
                 discovery.stopScan()
+                // Load EPG cache for newly configured server
+                Task { await epgCache.loadData(using: client) }
             } else {
                 // Server was unlinked — reset and restart discovery
+                epgCache.invalidate()
                 sheetConfig = nil
                 #if DISPATCHERPVR
                 hasStartedDiscovery = false
@@ -380,6 +389,7 @@ struct ContentView: View {
     ContentView()
         .environmentObject(AppState())
         .environmentObject(PVRClient(config: ServerConfig(host: "192.168.1.100", port: 8866, pin: "1234", useHTTPS: false)))
+        .environmentObject(EPGCache())
         .preferredColorScheme(.dark)
 }
 
@@ -387,5 +397,6 @@ struct ContentView: View {
     ContentView()
         .environmentObject(AppState())
         .environmentObject(PVRClient())
+        .environmentObject(EPGCache())
         .preferredColorScheme(.dark)
 }

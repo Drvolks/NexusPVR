@@ -638,16 +638,20 @@ final class NexusPVREndToEndTests: XCTestCase {
 
         // Start from 2/3 through the list (later = more likely future)
         let startIndex = (count * 2) / 3
-        for i in startIndex..<min(startIndex + 15, count) {
+        for i in startIndex..<min(startIndex + 30, count) {
             let button = allPrograms.element(boundBy: i)
             guard button.exists else { continue }
 
-            // Skip buttons that aren't hittable (off-screen) to avoid hitting wrong elements
+            // Use coordinate-based tapping — isHittable can crash for elements
+            // in off-screen rows of a combined horizontal+vertical ScrollView
             #if os(macOS)
             button.click()
             #else
-            guard button.isHittable else { continue }
-            button.tap()
+            let frame = button.frame
+            guard frame.width > 1, frame.height > 1,
+                  frame.midX.isFinite, frame.midY.isFinite,
+                  frame.midX > 0, frame.midY > 0 else { continue }
+            button.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
             #endif
             Thread.sleep(forTimeInterval: 1)
 

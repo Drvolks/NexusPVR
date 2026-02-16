@@ -185,9 +185,7 @@ struct SearchResultRow: View {
                 earlierScheduled = earlier
             }
         } catch {
-            #if DEBUG
-            print("SearchResultRow: Error checking recordings: \(error)")
-            #endif
+            // Silently fail
         }
     }
 

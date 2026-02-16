@@ -22,9 +22,7 @@ final class SearchViewModel: ObservableObject {
     @Published var error: String?
     @Published var hasSearched = false
 
-    private var channels: [Channel] = []
-    private var listings: [Int: [Program]] = [:]
-    private var dataLoaded = false
+    weak var epgCache: EPGCache?
     private var searchTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
 
@@ -42,30 +40,6 @@ final class SearchViewModel: ObservableObject {
         #endif
     }
 
-    func loadData(using client: PVRClient) async {
-        guard client.isConfigured else {
-            error = "Server not configured"
-            return
-        }
-
-        do {
-            if !client.isAuthenticated {
-                try await client.authenticate()
-            }
-
-            channels = try await client.getChannels()
-            listings = try await client.getAllListings(for: channels)
-            dataLoaded = true
-
-            // If there's already a search query, run the search
-            if searchText.count >= 2 {
-                search()
-            }
-        } catch {
-            self.error = error.localizedDescription
-        }
-    }
-
     func search() {
         guard searchText.count >= 2 else {
             results = []
@@ -73,52 +47,17 @@ final class SearchViewModel: ObservableObject {
             return
         }
 
-        guard dataLoaded else { return }
+        guard let cache = epgCache, cache.hasLoaded else { return }
 
         hasSearched = true
 
-        // Cancel any in-flight search
         searchTask?.cancel()
 
-        let query = searchText.lowercased()
-        let channels = self.channels
-        let listings = self.listings
-
-        searchTask = Task.detached(priority: .userInitiated) {
-            var matches: [SearchResult] = []
-
-            for channel in channels {
-                guard !Task.isCancelled else { return }
-                guard let programs = listings[channel.id] else { continue }
-
-                for program in programs {
-                    let text = [
-                        program.name,
-                        program.subtitle ?? "",
-                        program.desc ?? ""
-                    ].joined(separator: " ").lowercased()
-
-                    if text.contains(query) {
-                        matches.append(SearchResult(program: program, channel: channel))
-                    }
-                }
-            }
-
-            guard !Task.isCancelled else { return }
-
-            // Sort: upcoming first (by start date), then past
-            let now = Date()
-            let sorted = matches.sorted { a, b in
-                let aUpcoming = a.program.endDate > now
-                let bUpcoming = b.program.endDate > now
-                if aUpcoming != bUpcoming {
-                    return aUpcoming
-                }
-                return a.program.startDate < b.program.startDate
-            }
-
-            await MainActor.run {
-                self.results = sorted
+        let query = searchText
+        searchTask = Task {
+            let matches = await cache.searchPrograms(query: query)
+            if !Task.isCancelled {
+                results = matches
             }
         }
     }

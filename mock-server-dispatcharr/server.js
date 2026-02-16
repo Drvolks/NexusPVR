@@ -422,16 +422,28 @@ function handleRequest(req, res) {
     return json(res, { id, tvg_id: ch.tvg_id });
   }
 
-  // EPG grid — matches real Dispatcharr: returns programs from -1h to +24h, non-paginated
+  // EPG grid — returns programs for a time window, non-paginated
+  // Supports optional start_date and end_date query params (ISO 8601)
+  // Defaults to -1h to +24h if not specified (matches real Dispatcharr)
   if (path === "/api/epg/grid/") {
-    const now = Date.now();
-    const oneHourAgo = now - 60 * 60 * 1000;
-    const twentyFourHoursLater = now + 24 * 60 * 60 * 1000;
+    const startParam = url.searchParams.get("start_date");
+    const endParam = url.searchParams.get("end_date");
+
+    let windowStart, windowEnd;
+    if (startParam && endParam) {
+      windowStart = new Date(startParam).getTime();
+      windowEnd = new Date(endParam).getTime();
+    } else {
+      const now = Date.now();
+      windowStart = now - 60 * 60 * 1000;
+      windowEnd = now + 24 * 60 * 60 * 1000;
+    }
+
     const allPrograms = [...PROGRAMS, ...EDGE_CASES];
     const filtered = allPrograms.filter((p) => {
       const end = new Date(p.end_time).getTime();
       const start = new Date(p.start_time).getTime();
-      return end > oneHourAgo && start < twentyFourHoursLater;
+      return end > windowStart && start < windowEnd;
     });
     return json(res, { data: filtered });
   }
@@ -529,7 +541,7 @@ const server = http.createServer((req, res) => {
   }
 });
 
-server.listen(PORT, "0.0.0.0", () => {
+server.listen(PORT, "::", () => {
   console.log(`\nMock Dispatcharr server running on http://0.0.0.0:${PORT}`);
   console.log(`  Channels:  ${CHANNELS.length}`);
   console.log(`  Programs:  ${PROGRAMS.length + EDGE_CASES.length}`);

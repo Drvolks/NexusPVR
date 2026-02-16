@@ -27,6 +27,7 @@ private struct ProgramDetail: Identifiable {
 struct GuideView: View {
     @EnvironmentObject private var client: PVRClient
     @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var epgCache: EPGCache
     @StateObject private var viewModel = GuideViewModel()
 
     #if os(tvOS)
@@ -85,7 +86,13 @@ struct GuideView: View {
             }
             .task {
                 keywords = UserPreferences.load().keywords
-                await viewModel.loadData(using: client)
+                await viewModel.loadData(using: client, epgCache: epgCache)
+                viewModel.updateKeywordMatches(keywords: keywords)
+            }
+            .onChange(of: viewModel.channelSearchText) {
+                viewModel.updateKeywordMatches(keywords: keywords)
+            }
+            .onChange(of: epgCache.isFullyLoaded) {
                 viewModel.updateKeywordMatches(keywords: keywords)
             }
     }
@@ -103,7 +110,7 @@ struct GuideView: View {
             #endif
 
             Group {
-                if (viewModel.isLoading || !viewModel.hasLoaded) && viewModel.channels.isEmpty {
+                if !epgCache.isFullyLoaded {
                     loadingView
                 } else if let error = viewModel.error, viewModel.channels.isEmpty {
                     errorView(error)
@@ -152,9 +159,6 @@ struct GuideView: View {
     private func playLiveChannel(_ channel: Channel) {
         // Use the direct stream URL from channelDetails if available
         if let urlString = channel.streamURL, let url = URL(string: urlString) {
-            #if DEBUG
-            print("Playing channel stream: \(url.absoluteString)")
-            #endif
             appState.playStream(url: url, title: channel.name)
         } else {
             // Fall back to API call (required for Dispatcharr which uses UUID-based proxy URLs)
@@ -171,37 +175,62 @@ struct GuideView: View {
 
     #if !os(tvOS)
     private var iOSNavigationBar: some View {
-        HStack(spacing: Theme.spacingMD) {
-            Button {
-                viewModel.previousDay()
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(Theme.accent)
-                    .frame(width: 36, height: 36)
-                    .background(Theme.surfaceElevated)
-                    .clipShape(Circle())
+        VStack(spacing: 0) {
+            HStack(spacing: Theme.spacingMD) {
+                Button {
+                    viewModel.previousDay()
+                    Task { await viewModel.navigateToDate(using: client) }
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(Theme.accent)
+                        .frame(width: 36, height: 36)
+                        .background(Theme.surfaceElevated)
+                        .clipShape(Circle())
+                }
+
+                Text(viewModel.selectedDate, format: .dateTime.month(.abbreviated).day())
+                    .font(.headline)
+                    .foregroundStyle(Theme.textPrimary)
+                    .frame(minWidth: 80)
+
+                Button {
+                    viewModel.nextDay()
+                    Task { await viewModel.navigateToDate(using: client) }
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(Theme.accent)
+                        .frame(width: 36, height: 36)
+                        .background(Theme.surfaceElevated)
+                        .clipShape(Circle())
+                }
             }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, Theme.spacingSM)
+            .background(Theme.surface)
 
-            Text(viewModel.selectedDate, format: .dateTime.month(.abbreviated).day())
-                .font(.headline)
-                .foregroundStyle(Theme.textPrimary)
-                .frame(minWidth: 80)
-
-            Button {
-                viewModel.nextDay()
-            } label: {
-                Image(systemName: "chevron.right")
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(Theme.accent)
-                    .frame(width: 36, height: 36)
-                    .background(Theme.surfaceElevated)
-                    .clipShape(Circle())
+            if viewModel.showChannelSearch {
+                HStack(spacing: Theme.spacingSM) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(Theme.textTertiary)
+                    TextField("Filter channels", text: $viewModel.channelSearchText)
+                        .textFieldStyle(.plain)
+                    if !viewModel.channelSearchText.isEmpty {
+                        Button {
+                            viewModel.channelSearchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(Theme.textTertiary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, Theme.spacingMD)
+                .padding(.vertical, Theme.spacingSM)
+                .background(Theme.surface)
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Theme.spacingSM)
-        .background(Theme.surface)
     }
     #endif
 
@@ -229,7 +258,7 @@ struct GuideView: View {
                 .foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center)
             Button("Try Again") {
-                Task { await viewModel.loadData(using: client) }
+                Task { await viewModel.loadData(using: client, epgCache: epgCache) }
             }
             .buttonStyle(AccentButtonStyle())
         }
@@ -256,6 +285,7 @@ struct GuideView: View {
     @State private var scrollProxy: ScrollViewProxy?
     @State private var currentTimelineHour: Date?
     @State private var scrollTargetId: String?
+    @State private var gridHorizontalOffset: CGFloat = 0
     @Environment(\.scenePhase) private var scenePhase
 
     #if os(tvOS)
@@ -263,12 +293,7 @@ struct GuideView: View {
     @State private var focusedRow: Int = 0
     @State private var focusedColumn: Int = 0
     @State private var timeOffset: Int = 0  // 30-minute increments from now
-
-    // Visible time window: 3 hours
-    private let visibleHours: Double = 3.0
-    private var visibleMinutes: Double { visibleHours * 60 }
-
-    private var guideStartTime: Date {
+    @State private var guideStartTime: Date = {
         // Start from current time, rounded down to nearest 30 minutes
         let now = Date()
         let calendar = Calendar.current
@@ -278,7 +303,11 @@ struct GuideView: View {
                             minute: roundedMinute,
                             second: 0,
                             of: now) ?? now
-    }
+    }()
+
+    // Visible time window: 3 hours
+    private let visibleHours: Double = 3.0
+    private var visibleMinutes: Double { visibleHours * 60 }
 
     private var visibleStart: Date {
         guideStartTime.addingTimeInterval(Double(timeOffset * 30 * 60))
@@ -298,16 +327,18 @@ struct GuideView: View {
     }
 
     #if !os(tvOS)
+    @State private var leadingSafeArea: CGFloat = 0
+
     private var iOSMacOSGuideContent: some View {
         VStack(spacing: 0) {
-            // Timeline header (with spacer for channel column)
-            HStack(spacing: 0) {
-                Rectangle()
-                    .fill(Theme.surfaceElevated)
-                    .frame(width: channelWidth, height: 30)
+            // Timeline header — channel label pinned left, hours scroll with grid
+            ZStack(alignment: .leading) {
                 ScrollViewReader { proxy in
                     ScrollView(.horizontal, showsIndicators: false) {
-                        timelineHeaderContent
+                        HStack(spacing: 0) {
+                            Color.clear.frame(width: channelWidth + leadingSafeArea, height: 30)
+                            timelineHeaderContent
+                        }
                     }
                     .onAppear {
                         scrollProxy = proxy
@@ -317,66 +348,82 @@ struct GuideView: View {
                         scrollToCurrentTime(proxy: proxy)
                     }
                 }
+                // Pinned header corner (accounts for safe area on macOS)
+                Rectangle()
+                    .fill(Theme.surfaceElevated)
+                    .frame(width: channelWidth + leadingSafeArea, height: 30)
             }
+            .frame(height: 30)
 
-            // Main grid
-            ScrollView(.vertical, showsIndicators: true) {
-                HStack(alignment: .top, spacing: 0) {
-                    // Channel column (fixed horizontally, scrolls vertically)
+            // Main grid — single LazyVStack for guaranteed lazy rendering
+            // Channel cells pinned to left edge by counteracting horizontal scroll
+            ScrollViewReader { programProxy in
+                ScrollView([.horizontal, .vertical], showsIndicators: true) {
                     LazyVStack(spacing: 1) {
-                        ForEach(viewModel.channels) { channel in
-                            channelCell(channel)
-                                .frame(width: channelWidth, height: rowHeight)
-                        }
-                    }
-                    .frame(width: channelWidth)
-
-                    // All programs in single horizontal scroll (scroll together)
-                    ScrollViewReader { programProxy in
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            LazyVStack(spacing: 1) {
-                                // Invisible scroll anchors matching timeline header IDs
+                        // Invisible scroll anchors for scroll-to-time
+                        HStack(spacing: 0) {
+                            Color.clear.frame(width: channelWidth + leadingSafeArea, height: 1)
+                            ForEach(viewModel.hoursToShow, id: \.self) { hour in
                                 HStack(spacing: 0) {
-                                    ForEach(viewModel.hoursToShow, id: \.self) { hour in
-                                        HStack(spacing: 0) {
-                                            Color.clear
-                                                .frame(width: hourWidth / 2, height: 1)
-                                                .id("scroll-\(hour.timeIntervalSince1970)")
-                                            Color.clear
-                                                .frame(width: hourWidth / 2, height: 1)
-                                                .id("scroll-\(hour.timeIntervalSince1970 + 1800)")
-                                        }
-                                    }
+                                    Color.clear
+                                        .frame(width: hourWidth / 2, height: 1)
+                                        .id("scroll-\(hour.timeIntervalSince1970)")
+                                    Color.clear
+                                        .frame(width: hourWidth / 2, height: 1)
+                                        .id("scroll-\(hour.timeIntervalSince1970 + 1800)")
                                 }
-                                .frame(height: 0)
+                            }
+                        }
+                        .frame(height: 0)
 
-                                ForEach(viewModel.channels) { channel in
+                        ForEach(viewModel.channels) { channel in
+                            ZStack(alignment: .leading) {
+                                // Programs (scroll with content)
+                                HStack(spacing: 0) {
+                                    Color.clear.frame(width: channelWidth + leadingSafeArea, height: rowHeight)
                                     programsRow(channel)
                                         .frame(height: rowHeight)
                                         .background(Theme.surface)
                                 }
-                            }
-                        }
-                        .onAppear {
-                            // Initial scroll to current time for programs
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                                if let targetId = scrollTargetId {
-                                    programProxy.scrollTo(targetId, anchor: UnitPoint(x: 0, y: 0))
-                                }
-                            }
-                        }
-                        .onChange(of: scrollTargetId) { _, newValue in
-                            if let targetId = newValue {
-                                programProxy.scrollTo(targetId, anchor: UnitPoint(x: 0, y: 0))
+
+                                // Channel cell pinned to visible left edge (after safe area)
+                                channelCell(channel)
+                                    .frame(width: channelWidth, height: rowHeight)
+                                    .offset(x: gridHorizontalOffset + leadingSafeArea)
+                                    .zIndex(1)
                             }
                         }
                     }
                 }
+                .onScrollGeometryChange(for: CGFloat.self) { geo in
+                    geo.contentOffset.x
+                } action: { _, new in
+                    gridHorizontalOffset = new
+                }
+                .onAppear {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        if let targetId = scrollTargetId {
+                            programProxy.scrollTo(targetId, anchor: UnitPoint(x: 0, y: 0))
+                        }
+                    }
+                }
+                .onChange(of: scrollTargetId) { _, newValue in
+                    if let targetId = newValue {
+                        programProxy.scrollTo(targetId, anchor: UnitPoint(x: 0, y: 0))
+                    }
+                }
             }
         }
+        .background(GeometryReader { geo in
+            Color.clear.onAppear {
+                leadingSafeArea = geo.safeAreaInsets.leading
+            }
+            .onChange(of: geo.safeAreaInsets.leading) { _, new in
+                leadingSafeArea = new
+            }
+        })
         .onChange(of: scenePhase) {
             if scenePhase == .active {
-                // When app becomes active, scroll to current time
                 viewModel.scrollToNow()
                 if let proxy = scrollProxy {
                     scrollToCurrentTime(proxy: proxy)
@@ -412,7 +459,7 @@ struct GuideView: View {
                                         pxPerMinute: pxPerMinute
                                     )
                                     .id(rowIndex)
-                                }
+                                    }
                             }
                         }
                         .onChange(of: focusedRow) { _, newRow in
@@ -618,19 +665,25 @@ struct GuideView: View {
             if focusedColumn > 0 {
                 focusedColumn -= 1
             } else if timeOffset > 0 {
-                // Scroll back in time
+                // Scroll back in time — focus on last program in new window
                 timeOffset -= 1
-                // Keep focus on first visible program
-                focusedColumn = 0
+                let newPrograms = tvOSVisiblePrograms(for: channels[focusedRow])
+                focusedColumn = max(0, newPrograms.count - 1)
             }
         case .right:
             let programs = tvOSVisiblePrograms(for: channels[focusedRow])
             if focusedColumn < programs.count - 1 {
                 focusedColumn += 1
             } else if timeOffset < 36 {  // Max 18 hours ahead (36 x 30min)
-                // Scroll forward in time
+                // Scroll forward in time — focus on first program after the current one
+                let lastProgram = programs[focusedColumn]
                 timeOffset += 1
-                focusedColumn = 0
+                let newPrograms = tvOSVisiblePrograms(for: channels[focusedRow])
+                if let nextIndex = newPrograms.firstIndex(where: { $0.startDate > lastProgram.startDate }) {
+                    focusedColumn = nextIndex
+                } else {
+                    focusedColumn = max(0, newPrograms.count - 1)
+                }
             }
         @unknown default:
             break
@@ -1014,5 +1067,6 @@ struct GuideView: View {
     GuideView()
         .environmentObject(PVRClient())
         .environmentObject(AppState())
+        .environmentObject(EPGCache())
         .preferredColorScheme(.dark)
 }

@@ -10,8 +10,6 @@ import Combine
 
 @MainActor
 final class GuideViewModel: ObservableObject {
-    @Published var channels: [Channel] = []
-    @Published var listings = [Int: [Program]]()
     @Published var recordings: [Recording] = [] {
         didSet {
             recordingsByEventId = Dictionary(
@@ -24,14 +22,10 @@ final class GuideViewModel: ObservableObject {
     @Published var hasLoaded = false
     @Published var error: String?
 
-    @Published var selectedDate = Date() {
-        didSet {
-            updateVisiblePrograms()
-        }
-    }
+    @Published var selectedDate = Date()
 
-    // Pre-computed visible programs for current date (O(1) lookup per channel)
-    @Published private(set) var visibleProgramsByChannel: [Int: [Program]] = [:]
+    @Published var showChannelSearch: Bool = false
+    @Published var channelSearchText: String = ""
 
     // O(1) lookup for recording status by program ID
     private var recordingsByEventId: [Int: Recording] = [:]
@@ -39,16 +33,26 @@ final class GuideViewModel: ObservableObject {
     // Cached sport detection results (avoids re-running regex per render)
     private var sportCache: [Int: Sport?] = [:]
 
-    // Pre-computed keyword-matched program IDs (O(1) lookup per cell)
+    // Keyword-matched program IDs (O(1) lookup per cell)
     private(set) var keywordMatchedProgramIds: Set<Int> = []
+
+    // Reference to EPGCache (set during loadData)
+    weak var epgCache: EPGCache?
 
     var timelineStart: Date {
         let calendar = Calendar.current
-        // Start at midnight (00:00) of the selected day
         return calendar.startOfDay(for: selectedDate)
     }
 
-    init() {
+    /// Channels to display in the guide (reads from EPGCache, filtered by search)
+    /// Uses visibleChannels which starts with first 20, expands to all after EPG loads
+    var channels: [Channel] {
+        guard let cache = epgCache else { return [] }
+        if channelSearchText.isEmpty {
+            return cache.visibleChannels
+        } else {
+            return cache.filteredChannels(matching: channelSearchText)
+        }
     }
 
     var hoursToShow: [Date] {
@@ -63,20 +67,6 @@ final class GuideViewModel: ObservableObject {
         return hours
     }
 
-    /// Pre-compute visible programs for all channels for the current date
-    private func updateVisiblePrograms() {
-        let start = timelineStart
-        let end = start.addingTimeInterval(24 * 3600)
-
-        var result: [Int: [Program]] = [:]
-        for (channelId, programs) in listings {
-            result[channelId] = programs.filter { program in
-                program.endDate > start && program.startDate < end
-            }
-        }
-        visibleProgramsByChannel = result
-    }
-
     /// Returns cached sport detection result for a program
     func detectedSport(for program: Program) -> Sport? {
         if let cached = sportCache[program.id] {
@@ -87,16 +77,16 @@ final class GuideViewModel: ObservableObject {
         return sport
     }
 
-    /// Pre-compute keyword matches for all visible programs
+    /// Compute keyword matches for programs of a specific channel
     func updateKeywordMatches(keywords: [String]) {
-        guard !keywords.isEmpty else {
+        guard !keywords.isEmpty, let cache = epgCache else {
             keywordMatchedProgramIds = []
             return
         }
         let lowercasedKeywords = keywords.map { $0.lowercased() }
         var matched = Set<Int>()
-        for programs in visibleProgramsByChannel.values {
-            for program in programs {
+        for channel in channels {
+            for program in cache.programs(for: channel.id, on: selectedDate) {
                 let searchText = [
                     program.name,
                     program.subtitle ?? "",
@@ -110,9 +100,10 @@ final class GuideViewModel: ObservableObject {
         keywordMatchedProgramIds = matched
     }
 
-    func loadData(using client: PVRClient) async {
-        // Yield to allow the view to finish rendering before modifying state
+    func loadData(using client: PVRClient, epgCache: EPGCache) async {
         await Task.yield()
+
+        self.epgCache = epgCache
 
         guard client.isConfigured else {
             error = "Server not configured"
@@ -123,56 +114,26 @@ final class GuideViewModel: ObservableObject {
         error = nil
         sportCache = [:]
 
+        // Wait for EPGCache channels to be ready (may already be loaded by ContentView)
+        while !epgCache.hasLoaded && epgCache.error == nil {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+
+        if let cacheError = epgCache.error {
+            self.error = cacheError
+            isLoading = false
+            hasLoaded = true
+            return
+        }
+
+        showChannelSearch = epgCache.channels.count > 25
+
         do {
-            if !client.isAuthenticated {
-                try await client.authenticate()
-            }
-
-            // Load channels first (required for listings)
-            let loadedChannels = try await client.getChannels()
-            let sortedChannels = loadedChannels.sorted { $0.number < $1.number }
-
-            // Show channels immediately while loading listings
-            channels = sortedChannels
-
-            // Preload channel icons in background (throttled)
-            let iconURLs = sortedChannels.compactMap { client.channelIconURL(channelId: $0.id) }
-            ImageCache.shared.preload(urls: iconURLs)
-
-            // Load recordings in parallel with first batch of listings
-            let recordingsTask = Task {
-                try await client.getAllRecordings()
-            }
-
-            // Fetch listings progressively in batches
-            let batchSize = 50
-            for batchStart in stride(from: 0, to: sortedChannels.count, by: batchSize) {
-                let batchEnd = min(batchStart + batchSize, sortedChannels.count)
-                let batch = Array(sortedChannels[batchStart..<batchEnd])
-
-                let batchListings = try await client.getAllListings(for: batch)
-
-                // Merge batch results into listings and update visible programs
-                for (channelId, programs) in batchListings {
-                    listings[channelId] = programs
-                }
-                updateVisiblePrograms()
-
-                // After first batch, mark as loaded so UI shows content
-                if !hasLoaded {
-                    hasLoaded = true
-                    isLoading = false
-                }
-            }
-
-            // Await recordings
-            let (completed, recording, scheduled) = try await recordingsTask.value
+            // Load recordings
+            let recordingsStart = CFAbsoluteTimeGetCurrent()
+            let (completed, recording, scheduled) = try await client.getAllRecordings()
             recordings = completed + recording + scheduled
-            #if DEBUG
-            for r in recordings {
-                print("GuideVM: Recording id=\(r.id) name=\(r.name) status=\(r.status ?? "nil") epgEventId=\(r.epgEventId.map(String.init) ?? "nil") channelId=\(r.channelId.map(String.init) ?? "nil")")
-            }
-            #endif
+            print("[Guide] Loaded \(recordings.count) recordings in \(String(format: "%.0f", (CFAbsoluteTimeGetCurrent() - recordingsStart) * 1000))ms")
 
             isLoading = false
             hasLoaded = true
@@ -183,13 +144,25 @@ final class GuideViewModel: ObservableObject {
         }
     }
 
-    func programs(for channel: Channel) -> [Program] {
-        listings[channel.id] ?? []
+    /// Handle date navigation — ensure EPG data is cached for the new date
+    func navigateToDate(using client: PVRClient) async {
+        guard let cache = epgCache else { return }
+        sportCache = [:]
+        await cache.ensureDay(selectedDate, using: client)
+        // Prefetch adjacent days in background
+        Task {
+            await cache.prefetchAdjacentDays(around: selectedDate, using: client)
+        }
     }
 
-    /// Returns cached visible programs for the current date (O(1) lookup)
+    func programs(for channel: Channel) -> [Program] {
+        epgCache?.epg[channel.id] ?? []
+    }
+
+    /// Lazily look up programs for a channel on the selected date from the cache
     func visiblePrograms(for channel: Channel) -> [Program] {
-        visibleProgramsByChannel[channel.id] ?? []
+        guard let cache = epgCache else { return [] }
+        return cache.programs(for: channel.id, on: selectedDate)
     }
 
     func programWidth(for program: Program, hourWidth: CGFloat, startTime: Date) -> CGFloat {
@@ -226,36 +199,20 @@ final class GuideViewModel: ObservableObject {
     }
 
     func recordingId(for program: Program) -> Int? {
-        // Try direct event ID match first
         if let id = recordingsByEventId[program.id]?.id {
             return id
         }
-        // Fallback: find a recording on the same channel that overlaps this program's time
         guard let channelId = program.channelId else { return nil }
         return findOverlappingRecording(channelId: channelId, programStart: program.startDate, programEnd: program.endDate)?.id
     }
 
-    /// Check if a program has a recording, including fallback by channel/time overlap
     func activeRecordingId(for program: Program, channelId: Int) -> Int? {
         if let id = recordingsByEventId[program.id]?.id {
-            #if DEBUG
-            print("GuideVM: activeRecordingId matched by epgEventId for '\(program.name)' -> \(id)")
-            #endif
             return id
         }
-        let match = findOverlappingRecording(channelId: channelId, programStart: program.startDate, programEnd: program.endDate)
-        #if DEBUG
-        if let m = match {
-            print("GuideVM: activeRecordingId matched by channel/time for '\(program.name)' -> \(m.id)")
-        } else {
-            let inProgress = recordings.filter { $0.recordingStatus == .recording }
-            print("GuideVM: activeRecordingId NO match for '\(program.name)' programId=\(program.id) channelId=\(channelId) isAiring=\(program.isCurrentlyAiring) recordingsWithRecordingStatus=\(inProgress.count) totalRecordings=\(recordings.count)")
-        }
-        #endif
-        return match?.id
+        return findOverlappingRecording(channelId: channelId, programStart: program.startDate, programEnd: program.endDate)?.id
     }
 
-    /// Find a recording in progress that overlaps the given time range on the given channel
     private func findOverlappingRecording(channelId: Int, programStart: Date, programEnd: Date) -> Recording? {
         for r in recordings {
             guard r.channelId == channelId else { continue }
