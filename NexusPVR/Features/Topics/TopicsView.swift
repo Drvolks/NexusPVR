@@ -16,6 +16,7 @@ struct TopicsView: View {
     @State private var selectedKeyword: String = ""
     @State private var refreshTrigger = UUID()
     @State private var showingKeywordsEditor = false
+    @Environment(\.scenePhase) private var scenePhase
     #if os(tvOS)
     @State private var newKeyword = ""
     private let manageTag = "__manage__"
@@ -131,6 +132,11 @@ struct TopicsView: View {
         .task {
             viewModel.epgCache = epgCache
             await viewModel.loadData()
+        }
+        .onChange(of: scenePhase) {
+            if scenePhase == .active {
+                Task { await viewModel.loadData() }
+            }
         }
     }
 

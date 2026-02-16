@@ -95,6 +95,11 @@ struct GuideView: View {
             .onChange(of: epgCache.isFullyLoaded) {
                 viewModel.updateKeywordMatches(keywords: keywords)
             }
+            .onChange(of: scenePhase) {
+                if scenePhase == .active {
+                    Task { await refreshRecordings() }
+                }
+            }
     }
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
