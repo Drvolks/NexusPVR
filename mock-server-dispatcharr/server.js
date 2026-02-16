@@ -357,16 +357,17 @@ function hslToRgb(h, s, l) {
 // Pagination
 // ---------------------------------------------------------------------------
 
-function paginate(items, page, baseUrl) {
+function paginate(items, page, baseUrl, pageSize = PAGE_SIZE) {
   const total = items.length;
-  const start = (page - 1) * PAGE_SIZE;
-  const end = start + PAGE_SIZE;
+  const start = (page - 1) * pageSize;
+  const end = start + pageSize;
   const pageItems = items.slice(start, end);
 
+  const params = pageSize !== PAGE_SIZE ? `page_size=${pageSize}&` : "";
   return {
     count: total,
-    next: end < total ? `${baseUrl}?page=${page + 1}` : null,
-    previous: page > 1 ? `${baseUrl}?page=${page - 1}` : null,
+    next: end < total ? `${baseUrl}?${params}page=${page + 1}` : null,
+    previous: page > 1 ? `${baseUrl}?${params}page=${page - 1}` : null,
     results: pageItems,
   };
 }
@@ -379,6 +380,7 @@ function handleRequest(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const path = url.pathname;
   const page = parseInt(url.searchParams.get("page") || "1", 10);
+  const pageSize = parseInt(url.searchParams.get("page_size") || String(PAGE_SIZE), 10);
 
   // CORS headers for testing
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -408,7 +410,7 @@ function handleRequest(req, res) {
   // Channels
   if (path === "/api/channels/channels/") {
     const baseUrl = `http://${req.headers.host}${path}`;
-    return json(res, paginate(CHANNELS, page, baseUrl));
+    return json(res, paginate(CHANNELS, page, baseUrl, pageSize));
   }
 
   // EPG data lookup
@@ -420,11 +422,18 @@ function handleRequest(req, res) {
     return json(res, { id, tvg_id: ch.tvg_id });
   }
 
-  // EPG grid
+  // EPG grid — matches real Dispatcharr: returns programs from -1h to +24h, non-paginated
   if (path === "/api/epg/grid/") {
+    const now = Date.now();
+    const oneHourAgo = now - 60 * 60 * 1000;
+    const twentyFourHoursLater = now + 24 * 60 * 60 * 1000;
     const allPrograms = [...PROGRAMS, ...EDGE_CASES];
-    const baseUrl = `http://${req.headers.host}${path}`;
-    return json(res, paginate(allPrograms, page, baseUrl));
+    const filtered = allPrograms.filter((p) => {
+      const end = new Date(p.end_time).getTime();
+      const start = new Date(p.start_time).getTime();
+      return end > oneHourAgo && start < twentyFourHoursLater;
+    });
+    return json(res, { data: filtered });
   }
 
   // Recordings
