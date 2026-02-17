@@ -444,7 +444,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         let recordingRequest = DispatcharrRecordingRequest(
             startTime: program.startTime,
             endTime: program.endTime,
-            channel: channelId,
+            channel: String(channelId),
             customProperties: DispatcharrCustomProperties(
                 program: DispatcharrProgramRef(
                     id: program.id,
@@ -984,7 +984,7 @@ struct ProxyClientInfo: Decodable, Identifiable {
 private struct DispatcharrRecordingRequest: Encodable {
     let startTime: String
     let endTime: String
-    let channel: Int
+    let channel: String
     let customProperties: DispatcharrCustomProperties
 
     enum CodingKeys: String, CodingKey {
