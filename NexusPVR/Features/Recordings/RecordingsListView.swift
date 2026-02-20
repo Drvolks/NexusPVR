@@ -329,7 +329,9 @@ private struct RecordingsListContentView: View {
                 let url = try await client.liveStreamURL(channelId: channelId)
                 appState.playStream(
                     url: url,
-                    title: recording.name
+                    title: recording.name,
+                    channelId: channelId,
+                    channelName: recording.channel ?? "Channel \(channelId)"
                 )
             } catch {
                 deleteError = error.localizedDescription

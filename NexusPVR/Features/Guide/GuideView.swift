@@ -164,13 +164,13 @@ struct GuideView: View {
     private func playLiveChannel(_ channel: Channel) {
         // Use the direct stream URL from channelDetails if available
         if let urlString = channel.streamURL, let url = URL(string: urlString) {
-            appState.playStream(url: url, title: channel.name)
+            appState.playStream(url: url, title: channel.name, channelId: channel.id, channelName: channel.name)
         } else {
             // Fall back to API call (required for Dispatcharr which uses UUID-based proxy URLs)
             Task {
                 do {
                     let url = try await client.liveStreamURL(channelId: channel.id)
-                    appState.playStream(url: url, title: channel.name)
+                    appState.playStream(url: url, title: channel.name, channelId: channel.id, channelName: channel.name)
                 } catch {
                     streamError = error.localizedDescription
                 }

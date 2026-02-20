@@ -2,7 +2,7 @@
 //  ContentProvider.swift
 //  DispatcherPVR TopShelf
 //
-//  Provides recent recordings for the tvOS Top Shelf.
+//  Provides recent recordings and live programs for the tvOS Top Shelf.
 //
 
 import TVServices
@@ -29,114 +29,207 @@ private enum TileColors {
     static let surfaceElevated = UIColor(hex: "242428")
     static let textPrimary = UIColor(hex: "f0f0f2")
     static let textSecondary = UIColor(hex: "b0b0b8")
+    static let liveRed = UIColor(hex: "d94848")
 }
 
 class ContentProvider: TVTopShelfContentProvider {
+
+    private let urlScheme = "dispatcharr"
+    private lazy var cacheDir: URL = {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("topshelf_images", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }()
 
     override func loadTopShelfContent() async -> (any TVTopShelfContent)? {
         let config = ServerConfig.loadFromAppGroup()
         guard config.isConfigured else { return nil }
 
-        let recordings = await RecordingFetcher.fetchRecentRecordings(config: config, limit: 5)
-        guard !recordings.isEmpty else { return nil }
-
-        let urlScheme = "dispatcharr"
-        let cacheDir = FileManager.default.temporaryDirectory.appendingPathComponent("topshelf_images", isDirectory: true)
-        try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
-
         var items: [TVTopShelfSectionedItem] = []
+        var usedChannelIds: Set<Int> = []
 
+        // Tier 1: Recent recordings (up to 4)
+        let recordings = await RecordingFetcher.fetchRecentRecordings(config: config, limit: 4)
         for recording in recordings {
-            let item = TVTopShelfSectionedItem(identifier: "\(recording.id)")
-            item.title = recording.name
-
-            if let playURL = URL(string: "\(urlScheme)://recording/\(recording.id)") {
-                item.playAction = TVTopShelfAction(url: playURL)
-                item.displayAction = TVTopShelfAction(url: playURL)
-            }
-
-            let imageURL = cacheDir.appendingPathComponent("rec_\(recording.id).png")
-            renderTileImage(for: recording, to: imageURL)
-            item.setImageURL(imageURL, for: .screenScale1x)
-            item.setImageURL(imageURL, for: .screenScale2x)
-
-            items.append(item)
+            items.append(makeRecordingItem(recording))
+            if let chId = recording.channelId { usedChannelIds.insert(chId) }
         }
 
-        let section = TVTopShelfItemCollection(items: items)
-        section.title = "Recent Recordings"
+        // Tier 2: Topic-matched live programs
+        if items.count < 4 {
+            let prefs = UserPreferences.loadFromAppGroup()
+            if !prefs.keywords.isEmpty {
+                let needed = 4 - items.count
+                let topicMatches = await LiveProgramFetcher.fetchCurrentByKeywords(
+                    config: config, keywords: prefs.keywords,
+                    excludeChannelIds: usedChannelIds, limit: needed
+                )
+                for program in topicMatches {
+                    items.append(makeLiveItem(program))
+                    usedChannelIds.insert(program.channelId)
+                }
+            }
+        }
 
+        // Tier 3: Recently watched channels
+        if items.count < 4 {
+            let history = WatchHistory.loadFromAppGroup()
+            if !history.recentChannels.isEmpty {
+                let needed = 4 - items.count
+                let channelIds = history.recentChannels.map { $0.channelId }
+                let channelMatches = await LiveProgramFetcher.fetchCurrentForChannels(
+                    config: config, channelIds: channelIds,
+                    excludeChannelIds: usedChannelIds, limit: needed
+                )
+                for program in channelMatches {
+                    items.append(makeLiveItem(program))
+                    usedChannelIds.insert(program.channelId)
+                }
+            }
+        }
+
+        guard !items.isEmpty else { return nil }
+
+        let section = TVTopShelfItemCollection(items: items)
+        section.title = items.count == recordings.count ? "Recent Recordings" : "Recommended"
         return TVTopShelfSectionedContent(sections: [section])
     }
 
-    private func renderTileImage(for recording: Recording, to url: URL) {
+    // MARK: - Item Builders
+
+    private func makeRecordingItem(_ recording: Recording) -> TVTopShelfSectionedItem {
+        let item = TVTopShelfSectionedItem(identifier: "rec-\(recording.id)")
+        item.title = " "
+        item.imageShape = .hdtv
+
+        if let playURL = URL(string: "\(urlScheme)://recording/\(recording.id)") {
+            item.playAction = TVTopShelfAction(url: playURL)
+            item.displayAction = TVTopShelfAction(url: playURL)
+        }
+
+        let imageURL = cacheDir.appendingPathComponent("rec_\(recording.id).png")
+        renderRecordingTile(recording, to: imageURL)
+        item.setImageURL(imageURL, for: .screenScale1x)
+        item.setImageURL(imageURL, for: .screenScale2x)
+        return item
+    }
+
+    private func makeLiveItem(_ program: TopShelfProgram) -> TVTopShelfSectionedItem {
+        let item = TVTopShelfSectionedItem(identifier: "live-\(program.channelId)")
+        item.title = " "
+        item.imageShape = .hdtv
+
+        if let playURL = URL(string: "\(urlScheme)://channel/\(program.channelId)") {
+            item.playAction = TVTopShelfAction(url: playURL)
+            item.displayAction = TVTopShelfAction(url: playURL)
+        }
+
+        let imageURL = cacheDir.appendingPathComponent("live_\(program.channelId).png")
+        renderLiveTile(program, to: imageURL)
+        item.setImageURL(imageURL, for: .screenScale1x)
+        item.setImageURL(imageURL, for: .screenScale2x)
+        return item
+    }
+
+    // MARK: - Tile Rendering
+
+    private func renderRecordingTile(_ recording: Recording, to url: URL) {
         let size = CGSize(width: 548, height: 308)
-        let renderer = UIGraphicsImageRenderer(size: size)
-
-        let data = renderer.pngData { context in
-            let rect = CGRect(origin: .zero, size: size)
+        let data = UIGraphicsImageRenderer(size: size).pngData { context in
             let ctx = context.cgContext
+            drawTileBackground(in: ctx, size: size)
 
-            // Rounded rect clip
-            let cornerRadius: CGFloat = 16
-            let path = UIBezierPath(roundedRect: rect, cornerRadius: cornerRadius)
-            path.addClip()
-
-            // Background gradient
-            let colors = [TileColors.surfaceElevated.cgColor, TileColors.background.cgColor]
-            let colorSpace = CGColorSpaceCreateDeviceRGB()
-            if let gradient = CGGradient(colorsSpace: colorSpace, colors: colors as CFArray, locations: [0.0, 1.0]) {
-                ctx.drawLinearGradient(gradient, start: CGPoint(x: size.width / 2, y: 0), end: CGPoint(x: size.width / 2, y: size.height), options: [])
-            }
-
-            // Sport icon
             let sport = SportDetector.detect(from: recording)
-            let symbolName = sport?.sfSymbol ?? "play.rectangle.fill"
-            let iconSize: CGFloat = 80
+            drawIcon(sport?.sfSymbol ?? "play.rectangle.fill", in: ctx, size: size)
+            drawTitle(recording.name, in: ctx, size: size)
 
-            if let symbolImage = UIImage(systemName: symbolName, withConfiguration: UIImage.SymbolConfiguration(pointSize: iconSize, weight: .regular)) {
-                let tinted = symbolImage.withTintColor(TileColors.accent.withAlphaComponent(0.7), renderingMode: .alwaysOriginal)
-                let iconRect = CGRect(
-                    x: (size.width - tinted.size.width) / 2,
-                    y: size.height * 0.15,
-                    width: tinted.size.width,
-                    height: tinted.size.height
-                )
-                tinted.draw(in: iconRect)
-            }
-
-            // Title label (up to 2 lines, word wrap with tail truncation)
-            let titleLabel = UILabel()
-            titleLabel.text = recording.name
-            titleLabel.font = UIFont.systemFont(ofSize: 22, weight: .semibold)
-            titleLabel.textColor = TileColors.textPrimary
-            titleLabel.textAlignment = .center
-            titleLabel.numberOfLines = 2
-            titleLabel.lineBreakMode = .byTruncatingTail
-            let titleWidth = size.width - 40
-            let titleSize = titleLabel.sizeThatFits(CGSize(width: titleWidth, height: 60))
-            let titleFrame = CGRect(x: 20, y: size.height * 0.55, width: titleWidth, height: min(titleSize.height, 60))
-            titleLabel.frame = titleFrame
-            titleLabel.drawText(in: titleFrame)
-
-            // Date + time
             if let startDate = recording.startDate {
                 let formatter = DateFormatter()
                 formatter.dateStyle = .medium
                 formatter.timeStyle = .short
-
-                let dateLabel = UILabel()
-                dateLabel.text = formatter.string(from: startDate)
-                dateLabel.font = UIFont.systemFont(ofSize: 16, weight: .regular)
-                dateLabel.textColor = TileColors.textSecondary
-                dateLabel.textAlignment = .center
-                dateLabel.numberOfLines = 1
-                let dateFrame = CGRect(x: 20, y: titleFrame.maxY + 2, width: titleWidth, height: 22)
-                dateLabel.frame = dateFrame
-                dateLabel.drawText(in: dateFrame)
+                drawSubtitle(formatter.string(from: startDate), in: ctx, size: size)
             }
         }
-
         try? data.write(to: url)
+    }
+
+    private func renderLiveTile(_ program: TopShelfProgram, to url: URL) {
+        let size = CGSize(width: 548, height: 308)
+        let data = UIGraphicsImageRenderer(size: size).pngData { context in
+            let ctx = context.cgContext
+            drawTileBackground(in: ctx, size: size)
+
+            let sport = SportDetector.detect(name: program.programName, desc: program.desc, genres: program.genres)
+            drawIcon(sport?.sfSymbol ?? "tv", in: ctx, size: size)
+            drawTitle(program.programName, in: ctx, size: size)
+            drawSubtitle("LIVE · \(program.channelName)", in: ctx, size: size)
+
+            // Live indicator dot
+            let dotSize: CGFloat = 10
+            let dotRect = CGRect(x: 16, y: 16, width: dotSize, height: dotSize)
+            ctx.setFillColor(TileColors.liveRed.cgColor)
+            ctx.fillEllipse(in: dotRect)
+        }
+        try? data.write(to: url)
+    }
+
+    // MARK: - Shared Drawing
+
+    private func drawTileBackground(in ctx: CGContext, size: CGSize) {
+        let rect = CGRect(origin: .zero, size: size)
+        let path = UIBezierPath(roundedRect: rect, cornerRadius: 16)
+        path.addClip()
+
+        let colors = [TileColors.surfaceElevated.cgColor, TileColors.background.cgColor]
+        if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors as CFArray, locations: [0.0, 1.0]) {
+            ctx.drawLinearGradient(gradient, start: CGPoint(x: size.width / 2, y: 0), end: CGPoint(x: size.width / 2, y: size.height), options: [])
+        }
+    }
+
+    private func drawIcon(_ symbolName: String, in ctx: CGContext, size: CGSize) {
+        if let image = UIImage(systemName: symbolName, withConfiguration: UIImage.SymbolConfiguration(pointSize: 80, weight: .regular)) {
+            let tinted = image.withTintColor(TileColors.accent.withAlphaComponent(0.7), renderingMode: .alwaysOriginal)
+            tinted.draw(in: CGRect(
+                x: (size.width - tinted.size.width) / 2,
+                y: size.height * 0.15,
+                width: tinted.size.width,
+                height: tinted.size.height
+            ))
+        }
+    }
+
+    private let textInset: CGFloat = 48
+
+    private func drawTitle(_ text: String, in ctx: CGContext, size: CGSize) {
+        let label = UILabel()
+        label.text = text
+        label.font = UIFont.systemFont(ofSize: 22, weight: .semibold)
+        label.textColor = TileColors.textPrimary
+        label.textAlignment = .center
+        label.numberOfLines = 2
+        label.lineBreakMode = .byTruncatingTail
+        let width = size.width - textInset * 2
+        let fitSize = label.sizeThatFits(CGSize(width: width, height: 60))
+        let frame = CGRect(x: textInset, y: size.height * 0.55, width: width, height: min(fitSize.height, 60))
+        label.frame = CGRect(origin: .zero, size: frame.size)
+        ctx.saveGState()
+        ctx.translateBy(x: frame.origin.x, y: frame.origin.y)
+        label.layer.render(in: ctx)
+        ctx.restoreGState()
+    }
+
+    private func drawSubtitle(_ text: String, in ctx: CGContext, size: CGSize) {
+        let label = UILabel()
+        label.text = text
+        label.font = UIFont.systemFont(ofSize: 16, weight: .regular)
+        label.textColor = TileColors.textSecondary
+        label.textAlignment = .center
+        label.numberOfLines = 1
+        let frame = CGRect(x: textInset, y: size.height * 0.82, width: size.width - textInset * 2, height: 22)
+        label.frame = CGRect(origin: .zero, size: frame.size)
+        ctx.saveGState()
+        ctx.translateBy(x: frame.origin.x, y: frame.origin.y)
+        label.layer.render(in: ctx)
+        ctx.restoreGState()
     }
 }

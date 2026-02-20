@@ -145,7 +145,7 @@ struct LiveTVView: View {
             do {
                 let url = try await vm.streamURL(for: channel)
                 let programName = vm.currentProgram(for: channel)?.name ?? "Live"
-                appState.playStream(url: url, title: "\(channel.name) - \(programName)")
+                appState.playStream(url: url, title: "\(channel.name) - \(programName)", channelId: channel.id, channelName: channel.name)
             } catch {
                 playError = error.localizedDescription
             }

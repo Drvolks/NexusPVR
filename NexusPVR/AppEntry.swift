@@ -28,6 +28,10 @@ struct PVRApp: App {
         // Trigger iCloud sync on startup to pull latest data
         NSUbiquitousKeyValueStore.default.synchronize()
 
+        // Ensure App Group has latest data for Top Shelf extension
+        UserPreferences.load().save()
+        ServerConfig.load().save()
+
         // Start observing iCloud preference sync
         UserPreferences.startObservingSync {
             // Post notification when preferences change from another device
@@ -65,20 +69,42 @@ struct PVRApp: App {
     }
 
     private func handleDeepLink(_ url: URL) {
-        // Expected format: nexuspvr://recording/{id} or dispatcharr://recording/{id}
-        guard url.host == "recording",
+        guard let host = url.host,
               let idString = url.pathComponents.last,
-              let recordingId = Int(idString) else {
+              let id = Int(idString) else {
             return
         }
 
-        Task {
-            do {
-                let streamURL = try await client.recordingStreamURL(recordingId: recordingId)
-                appState.playStream(url: streamURL, title: "Recording", recordingId: recordingId)
-            } catch {
-                appState.showAlert("Failed to play recording: \(error.localizedDescription)")
+        switch host {
+        case "recording":
+            Task {
+                do {
+                    let streamURL = try await client.recordingStreamURL(recordingId: id)
+                    appState.playStream(url: streamURL, title: "Recording", recordingId: id)
+                } catch {
+                    appState.showAlert("Failed to play recording: \(error.localizedDescription)")
+                }
             }
+        case "channel":
+            Task {
+                do {
+                    let channels = try await client.getChannels()
+                    let channel = channels.first(where: { $0.id == id })
+                    let channelName = channel?.name ?? "Channel \(id)"
+                    // Prefer direct stream URL from channel data (same as ProgramDetailView)
+                    let streamURL: URL
+                    if let directURL = channel?.streamURL, let url = URL(string: directURL) {
+                        streamURL = url
+                    } else {
+                        streamURL = try await client.liveStreamURL(channelId: id)
+                    }
+                    appState.playStream(url: streamURL, title: channelName, channelId: id, channelName: channelName)
+                } catch {
+                    appState.showAlert("Failed to play channel: \(error.localizedDescription)")
+                }
+            }
+        default:
+            break
         }
     }
 }

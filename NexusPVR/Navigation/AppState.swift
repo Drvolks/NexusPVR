@@ -111,6 +111,13 @@ final class AppState: ObservableObject {
         isShowingPlayer = true
     }
 
+    func playStream(url: URL, title: String, channelId: Int, channelName: String) {
+        var history = WatchHistory.load()
+        history.recordChannelPlay(channelId: channelId, channelName: channelName)
+        history.save()
+        playStream(url: url, title: title)
+    }
+
     func stopPlayback() {
         isShowingPlayer = false
         currentlyPlayingURL = nil

@@ -106,7 +106,18 @@ struct UserPreferences: Codable {
 
             // Also save locally as backup
             UserDefaults.standard.set(data, forKey: Self.storageKey)
+
+            // Save to App Group for Top Shelf extension
+            UserDefaults(suiteName: ServerConfig.appGroupSuite)?.set(data, forKey: Self.storageKey)
         }
+    }
+
+    nonisolated static func loadFromAppGroup() -> UserPreferences {
+        guard let data = UserDefaults(suiteName: ServerConfig.appGroupSuite)?.data(forKey: storageKey),
+              let prefs = try? JSONDecoder().decode(UserPreferences.self, from: data) else {
+            return UserPreferences()
+        }
+        return prefs
     }
 
     /// Call this to start observing iCloud sync changes

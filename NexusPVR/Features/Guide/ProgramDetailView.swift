@@ -462,14 +462,14 @@ struct ProgramDetailView: View {
     private func watchLive() {
         // Use the direct stream URL from channel if available
         if let urlString = channel.streamURL, let url = URL(string: urlString) {
-            appState.playStream(url: url, title: "\(channel.name) - \(program.name)")
+            appState.playStream(url: url, title: "\(channel.name) - \(program.name)", channelId: channel.id, channelName: channel.name)
             dismiss()
         } else {
             // Fall back to API call if streamURL not available
             Task {
                 do {
                     let url = try await client.liveStreamURL(channelId: channel.id)
-                    appState.playStream(url: url, title: "\(channel.name) - \(program.name)")
+                    appState.playStream(url: url, title: "\(channel.name) - \(program.name)", channelId: channel.id, channelName: channel.name)
                     dismiss()
                 } catch {
                     scheduleError = error.localizedDescription
