@@ -9,6 +9,9 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var client: PVRClient
+    #if os(tvOS)
+    @Environment(\.requestNavBarFocus) private var requestNavBarFocus
+    #endif
     @State private var showingUnlinkConfirm = false
     @State private var seekBackwardSeconds: Int = UserPreferences.load().seekBackwardSeconds
     @State private var seekForwardSeconds: Int = UserPreferences.load().seekForwardSeconds
@@ -88,6 +91,11 @@ struct SettingsView: View {
                     }
                 }
                 .focusSection()
+                .onMoveCommand { direction in
+                    if direction == .up {
+                        requestNavBarFocus()
+                    }
+                }
 
                 // Playback Section
                 TVSettingsSection(

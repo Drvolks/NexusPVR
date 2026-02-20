@@ -42,6 +42,9 @@ private struct RecordingsListContentView: View {
     }
 
     @Environment(\.scenePhase) private var scenePhase
+    #if os(tvOS)
+    @Environment(\.requestNavBarFocus) private var requestNavBarFocus
+    #endif
 
     var body: some View {
         NavigationStack {
@@ -56,6 +59,13 @@ private struct RecordingsListContentView: View {
                 }
                 .pickerStyle(.segmented)
                 .accessibilityIdentifier("recordings-filter")
+                #if os(tvOS)
+                .onMoveCommand { direction in
+                    if direction == .up {
+                        requestNavBarFocus()
+                    }
+                }
+                #endif
                 .padding(.horizontal)
                 .padding(.vertical, Theme.spacingSM)
                 .background(Theme.background)

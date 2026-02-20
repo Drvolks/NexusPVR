@@ -19,6 +19,7 @@ struct TopicsView: View {
     @Environment(\.scenePhase) private var scenePhase
     #if os(tvOS)
     @State private var newKeyword = ""
+    @Environment(\.requestNavBarFocus) private var requestNavBarFocus
     private let manageTag = "__manage__"
     #endif
 
@@ -40,6 +41,11 @@ struct TopicsView: View {
                 }
                 .pickerStyle(.segmented)
                 .accessibilityIdentifier("keyword-tabs")
+                .onMoveCommand { direction in
+                    if direction == .up {
+                        requestNavBarFocus()
+                    }
+                }
                 .padding(.horizontal)
                 .padding(.vertical, Theme.spacingSM)
                 .background(Theme.background)

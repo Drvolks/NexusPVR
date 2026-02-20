@@ -12,6 +12,9 @@ struct SearchView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var epgCache: EPGCache
     @StateObject private var viewModel = SearchViewModel()
+    #if os(tvOS)
+    @Environment(\.requestNavBarFocus) private var requestNavBarFocus
+    #endif
     @State private var selectedProgramDetail: ProgramSearchDetail?
     @State private var refreshTrigger = UUID()
 
@@ -70,6 +73,11 @@ struct SearchView: View {
         .padding(.horizontal, Theme.spacingXL)
         .padding(.vertical, Theme.spacingMD)
         .background(Theme.surface)
+        .onMoveCommand { direction in
+            if direction == .up {
+                requestNavBarFocus()
+            }
+        }
     }
     #endif
 

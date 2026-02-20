@@ -7,6 +7,21 @@
 
 import SwiftUI
 
+// MARK: - Nav Bar Focus Environment Key
+
+#if os(tvOS)
+private struct RequestNavBarFocusKey: EnvironmentKey {
+    static let defaultValue: () -> Void = {}
+}
+
+extension EnvironmentValues {
+    var requestNavBarFocus: () -> Void {
+        get { self[RequestNavBarFocusKey.self] }
+        set { self[RequestNavBarFocusKey.self] = newValue }
+    }
+}
+#endif
+
 struct NavigationRouter: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var client: PVRClient
@@ -162,14 +177,9 @@ struct TVOSNavigation: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .focusSection()
+            .environment(\.requestNavBarFocus, enableNavBar)
             .onExitCommand {
                 enableNavBar()
-            }
-            .onMoveCommand { direction in
-                // For non-Guide screens, up enables nav bar
-                if direction == .up && appState.selectedTab != .guide {
-                    enableNavBar()
-                }
             }
         }
         .onAppear {
@@ -208,7 +218,8 @@ struct TVOSNavigation: View {
         HStack(spacing: 0) {
             ForEach(Tab.allCases) { tab in
                 Button {
-                    // Click confirms selection and returns to content
+                    appState.selectedTab = tab
+                    navBarEnabled = false
                     focusedTab = nil
                 } label: {
                     HStack(spacing: 12) {
