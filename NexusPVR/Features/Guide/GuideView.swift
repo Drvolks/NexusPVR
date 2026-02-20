@@ -673,15 +673,22 @@ struct GuideView: View {
                 // Scroll back in time — focus on last program in new window
                 timeOffset -= 1
                 let newPrograms = tvOSVisiblePrograms(for: channels[focusedRow])
-                focusedColumn = max(0, newPrograms.count - 1)
+                focusedColumn = newPrograms.isEmpty ? 0 : newPrograms.count - 1
             }
         case .right:
             let programs = tvOSVisiblePrograms(for: channels[focusedRow])
+            guard !programs.isEmpty else {
+                // No programs visible — just scroll forward in time
+                if timeOffset < 36 { timeOffset += 1 }
+                focusedColumn = 0
+                return
+            }
             if focusedColumn < programs.count - 1 {
                 focusedColumn += 1
             } else if timeOffset < 36 {  // Max 18 hours ahead (36 x 30min)
                 // Scroll forward in time — focus on first program after the current one
-                let lastProgram = programs[focusedColumn]
+                let safeColumn = min(focusedColumn, programs.count - 1)
+                let lastProgram = programs[safeColumn]
                 timeOffset += 1
                 let newPrograms = tvOSVisiblePrograms(for: channels[focusedRow])
                 if let nextIndex = newPrograms.firstIndex(where: { $0.startDate > lastProgram.startDate }) {
