@@ -52,8 +52,12 @@ enum AuthType {
 
 #if DISPATCHERPVR
 typealias Brand = DispatcherPVRBrand
+#if !TOPSHELF_EXTENSION
 typealias PVRClient = DispatcherClient
+#endif
 #else
 typealias Brand = NexusPVRBrand
+#if !TOPSHELF_EXTENSION
 typealias PVRClient = NextPVRClient
+#endif
 #endif

@@ -210,9 +210,11 @@ enum SportDetector {
         return nil
     }
 
+    #if !TOPSHELF_EXTENSION
     static func detect(from program: Program) -> Sport? {
         detect(name: program.name, desc: program.desc, genres: program.genres)
     }
+    #endif
 
     static func detect(from recording: Recording) -> Sport? {
         detect(name: recording.name, desc: recording.desc, genres: recording.genres)
@@ -229,6 +231,7 @@ enum SportDetector {
     }
 }
 
+#if !TOPSHELF_EXTENSION
 // MARK: - Sport Icon View
 
 struct SportIconView: View {
@@ -271,3 +274,4 @@ struct SportIconView: View {
     .background(Theme.background)
     .preferredColorScheme(.dark)
 }
+#endif

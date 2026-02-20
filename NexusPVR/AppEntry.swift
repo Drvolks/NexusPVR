@@ -54,10 +54,31 @@ struct PVRApp: App {
                         epgCache.invalidate()
                     }
                 }
+                .onOpenURL { url in
+                    handleDeepLink(url)
+                }
         }
         #if os(macOS)
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1200, height: 800)
         #endif
+    }
+
+    private func handleDeepLink(_ url: URL) {
+        // Expected format: nexuspvr://recording/{id} or dispatcharr://recording/{id}
+        guard url.host == "recording",
+              let idString = url.pathComponents.last,
+              let recordingId = Int(idString) else {
+            return
+        }
+
+        Task {
+            do {
+                let streamURL = try await client.recordingStreamURL(recordingId: recordingId)
+                appState.playStream(url: streamURL, title: "Recording", recordingId: recordingId)
+            } catch {
+                appState.showAlert("Failed to play recording: \(error.localizedDescription)")
+            }
+        }
     }
 }

@@ -88,6 +88,12 @@ extension ServerConfig {
     private static let storageKey = "ServerConfig"
     private static let ubiquitousStore = NSUbiquitousKeyValueStore.default
 
+    #if DISPATCHERPVR
+    static let appGroupSuite = "group.consultation-massawippi.DispatcherPVR"
+    #else
+    static let appGroupSuite = "group.consultation-massawippi.NexusPVR"
+    #endif
+
     // Legacy keys for migration
     private static let hostKey = "nextpvr_host"
     private static let portKey = "nextpvr_port"
@@ -146,6 +152,9 @@ extension ServerConfig {
 
             // Also save locally as backup
             UserDefaults.standard.set(data, forKey: Self.storageKey)
+
+            // Save to App Group for Top Shelf extension
+            UserDefaults(suiteName: Self.appGroupSuite)?.set(data, forKey: Self.storageKey)
         }
     }
 
@@ -153,6 +162,17 @@ extension ServerConfig {
         ubiquitousStore.removeObject(forKey: storageKey)
         ubiquitousStore.synchronize()
         UserDefaults.standard.removeObject(forKey: storageKey)
+        UserDefaults(suiteName: appGroupSuite)?.removeObject(forKey: storageKey)
+    }
+
+    /// Load config from App Group UserDefaults (for use by extensions)
+    nonisolated static func loadFromAppGroup() -> ServerConfig {
+        guard let data = UserDefaults(suiteName: appGroupSuite)?.data(forKey: storageKey),
+              let config = try? JSONDecoder().decode(ServerConfig.self, from: data),
+              config.isConfigured else {
+            return ServerConfig(host: "", port: 8866, pin: "", username: "", password: "", useHTTPS: false)
+        }
+        return config
     }
 
     private static func saveToUserDefaults(_ config: ServerConfig) {
