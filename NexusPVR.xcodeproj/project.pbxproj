@@ -9,9 +9,9 @@
 /* Begin PBXBuildFile section */
 		6E9E3CF02F31559900D2B8DF /* MPVKit in Frameworks */ = {isa = PBXBuildFile; productRef = 6E9E3CEF2F31559900D2B8DF /* MPVKit */; };
 		6EA347F62F48EF9C00E0A324 /* TVServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6EA347F52F48EF9C00E0A324 /* TVServices.framework */; };
-		6EA347FD2F48EF9D00E0A324 /* NexusPVR TopShelf.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6EA347F32F48EF9C00E0A324 /* NexusPVR TopShelf.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		6EA347FD2F48EF9D00E0A324 /* NexusPVR TopShelf.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6EA347F32F48EF9C00E0A324 /* NexusPVR TopShelf.appex */; platformFilters = (tvos, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		6EA348082F48EFB600E0A324 /* TVServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6EA347F52F48EF9C00E0A324 /* TVServices.framework */; };
-		6EA3480F2F48EFB600E0A324 /* DispatcherPVR TopShelf.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6EA348072F48EFB600E0A324 /* DispatcherPVR TopShelf.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		6EA3480F2F48EFB600E0A324 /* DispatcherPVR TopShelf.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6EA348072F48EFB600E0A324 /* DispatcherPVR TopShelf.appex */; platformFilters = (tvos, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		D1AAAA0A2F31559900D2B8DF /* MPVKit in Frameworks */ = {isa = PBXBuildFile; productRef = D1AAAA0B2F31559900D2B8DF /* MPVKit */; };
 /* End PBXBuildFile section */
 
@@ -579,11 +579,17 @@
 		};
 		6EA347FC2F48EF9C00E0A324 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
+			platformFilters = (
+				tvos,
+			);
 			target = 6EA347F22F48EF9C00E0A324 /* NexusPVR TopShelf */;
 			targetProxy = 6EA347FB2F48EF9C00E0A324 /* PBXContainerItemProxy */;
 		};
 		6EA3480E2F48EFB600E0A324 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
+			platformFilters = (
+				tvos,
+			);
 			target = 6EA348062F48EFB600E0A324 /* DispatcherPVR TopShelf */;
 			targetProxy = 6EA3480D2F48EFB600E0A324 /* PBXContainerItemProxy */;
 		};
@@ -717,7 +723,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = NexusPVR/NexusPVR.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 40;
+				CURRENT_PROJECT_VERSION = 46;
 				DEVELOPMENT_TEAM = 654X66AK24;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -787,7 +793,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = NexusPVR/NexusPVR.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 40;
+				CURRENT_PROJECT_VERSION = 46;
 				DEVELOPMENT_TEAM = 654X66AK24;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -852,7 +858,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 40;
+				CURRENT_PROJECT_VERSION = 46;
 				DEVELOPMENT_TEAM = 654X66AK24;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
@@ -878,7 +884,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 40;
+				CURRENT_PROJECT_VERSION = 46;
 				DEVELOPMENT_TEAM = 654X66AK24;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
@@ -903,7 +909,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 40;
+				CURRENT_PROJECT_VERSION = 46;
 				DEVELOPMENT_TEAM = 654X66AK24;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
@@ -929,7 +935,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 40;
+				CURRENT_PROJECT_VERSION = 46;
 				DEVELOPMENT_TEAM = 654X66AK24;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
@@ -956,7 +962,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "NexusPVR TopShelf/NexusPVR TopShelf.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 40;
+				CURRENT_PROJECT_VERSION = 46;
 				DEVELOPMENT_TEAM = 654X66AK24;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "NexusPVR TopShelf/Info.plist";
@@ -973,6 +979,8 @@
 				SDKROOT = appletvos;
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG TOPSHELF_EXTENSION $(inherited)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -988,7 +996,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "NexusPVR TopShelf/NexusPVR TopShelf.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 40;
+				CURRENT_PROJECT_VERSION = 46;
 				DEVELOPMENT_TEAM = 654X66AK24;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "NexusPVR TopShelf/Info.plist";
@@ -1005,6 +1013,8 @@
 				SDKROOT = appletvos;
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = TOPSHELF_EXTENSION;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1021,7 +1031,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "DispatcherPVR TopShelf/DispatcherPVR TopShelf.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 40;
+				CURRENT_PROJECT_VERSION = 46;
 				DEVELOPMENT_TEAM = 654X66AK24;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "DispatcherPVR TopShelf/Info.plist";
@@ -1038,6 +1048,8 @@
 				SDKROOT = appletvos;
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG DISPATCHERPVR TOPSHELF_EXTENSION $(inherited)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1053,7 +1065,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "DispatcherPVR TopShelf/DispatcherPVR TopShelf.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 40;
+				CURRENT_PROJECT_VERSION = 46;
 				DEVELOPMENT_TEAM = 654X66AK24;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "DispatcherPVR TopShelf/Info.plist";
@@ -1070,6 +1082,8 @@
 				SDKROOT = appletvos;
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DISPATCHERPVR TOPSHELF_EXTENSION";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1091,7 +1105,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = DispatcherPVR/DispatcherPVR.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 40;
+				CURRENT_PROJECT_VERSION = 46;
 				DEVELOPMENT_TEAM = 654X66AK24;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1162,7 +1176,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = DispatcherPVR/DispatcherPVR.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 40;
+				CURRENT_PROJECT_VERSION = 46;
 				DEVELOPMENT_TEAM = 654X66AK24;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
