@@ -36,7 +36,10 @@ class ContentProvider: TVTopShelfContentProvider {
 
     private let urlScheme = "nexuspvr"
     private lazy var cacheDir: URL = {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("topshelf_images", isDirectory: true)
+        let groupID = ServerConfig.appGroupSuite
+        let base = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupID)
+            ?? FileManager.default.temporaryDirectory
+        let dir = base.appendingPathComponent("topshelf_images", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }()
