@@ -204,35 +204,38 @@ class ContentProvider: TVTopShelfContentProvider {
     private let textInset: CGFloat = 48
 
     private func drawTitle(_ text: String, in ctx: CGContext, size: CGSize) {
-        let label = UILabel()
-        label.text = text
-        label.font = UIFont.systemFont(ofSize: 22, weight: .semibold)
-        label.textColor = TileColors.textPrimary
-        label.textAlignment = .center
-        label.numberOfLines = 2
-        label.lineBreakMode = .byTruncatingTail
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .center
+        paragraphStyle.lineBreakMode = .byTruncatingTail
+
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 22, weight: .semibold),
+            .foregroundColor: TileColors.textPrimary,
+            .paragraphStyle: paragraphStyle
+        ]
+
         let width = size.width - textInset * 2
-        let fitSize = label.sizeThatFits(CGSize(width: width, height: 60))
-        let frame = CGRect(x: textInset, y: size.height * 0.55, width: width, height: min(fitSize.height, 60))
-        label.frame = CGRect(origin: .zero, size: frame.size)
-        ctx.saveGState()
-        ctx.translateBy(x: frame.origin.x, y: frame.origin.y)
-        label.layer.render(in: ctx)
-        ctx.restoreGState()
+        let boundingRect = (text as NSString).boundingRect(
+            with: CGSize(width: width, height: 60),
+            options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine],
+            attributes: attrs, context: nil
+        )
+        let frame = CGRect(x: textInset, y: size.height * 0.55, width: width, height: min(boundingRect.height, 60))
+        (text as NSString).draw(in: frame, withAttributes: attrs)
     }
 
     private func drawSubtitle(_ text: String, in ctx: CGContext, size: CGSize) {
-        let label = UILabel()
-        label.text = text
-        label.font = UIFont.systemFont(ofSize: 16, weight: .regular)
-        label.textColor = TileColors.textSecondary
-        label.textAlignment = .center
-        label.numberOfLines = 1
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .center
+        paragraphStyle.lineBreakMode = .byTruncatingTail
+
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 16, weight: .regular),
+            .foregroundColor: TileColors.textSecondary,
+            .paragraphStyle: paragraphStyle
+        ]
+
         let frame = CGRect(x: textInset, y: size.height * 0.82, width: size.width - textInset * 2, height: 22)
-        label.frame = CGRect(origin: .zero, size: frame.size)
-        ctx.saveGState()
-        ctx.translateBy(x: frame.origin.x, y: frame.origin.y)
-        label.layer.render(in: ctx)
-        ctx.restoreGState()
+        (text as NSString).draw(in: frame, withAttributes: attrs)
     }
 }
