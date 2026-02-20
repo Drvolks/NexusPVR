@@ -8,6 +8,10 @@
 
 /* Begin PBXBuildFile section */
 		6E9E3CF02F31559900D2B8DF /* MPVKit in Frameworks */ = {isa = PBXBuildFile; productRef = 6E9E3CEF2F31559900D2B8DF /* MPVKit */; };
+		6EA347F62F48EF9C00E0A324 /* TVServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6EA347F52F48EF9C00E0A324 /* TVServices.framework */; };
+		6EA347FD2F48EF9D00E0A324 /* NexusPVR TopShelf.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6EA347F32F48EF9C00E0A324 /* NexusPVR TopShelf.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		6EA348082F48EFB600E0A324 /* TVServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6EA347F52F48EF9C00E0A324 /* TVServices.framework */; };
+		6EA3480F2F48EFB600E0A324 /* DispatcherPVR TopShelf.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6EA348072F48EFB600E0A324 /* DispatcherPVR TopShelf.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		D1AAAA0A2F31559900D2B8DF /* MPVKit in Frameworks */ = {isa = PBXBuildFile; productRef = D1AAAA0B2F31559900D2B8DF /* MPVKit */; };
 /* End PBXBuildFile section */
 
@@ -26,16 +30,100 @@
 			remoteGlobalIDString = 6E74158B2F315368001FE083;
 			remoteInfo = NexusPVR;
 		};
+		6EA347FB2F48EF9C00E0A324 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 6E7415842F315368001FE083 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 6EA347F22F48EF9C00E0A324;
+			remoteInfo = "NexusPVR TopShelf";
+		};
+		6EA3480D2F48EFB600E0A324 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 6E7415842F315368001FE083 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 6EA348062F48EFB600E0A324;
+			remoteInfo = "DispatcherPVR TopShelf";
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		6EA348022F48EF9D00E0A324 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				6EA347FD2F48EF9D00E0A324 /* NexusPVR TopShelf.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6EA348142F48EFB600E0A324 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				6EA3480F2F48EFB600E0A324 /* DispatcherPVR TopShelf.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		6E74158C2F315368001FE083 /* NexusPVR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NexusPVR.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6E74159B2F315369001FE083 /* NexusPVRTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NexusPVRTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6E7415A52F315369001FE083 /* NexusPVRUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NexusPVRUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		6EA347F32F48EF9C00E0A324 /* NexusPVR TopShelf.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "NexusPVR TopShelf.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		6EA347F52F48EF9C00E0A324 /* TVServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = TVServices.framework; path = Library/Frameworks/TVServices.framework; sourceTree = DEVELOPER_DIR; };
+		6EA348072F48EFB600E0A324 /* DispatcherPVR TopShelf.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "DispatcherPVR TopShelf.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		D1AAAA012F31559900D2B8DF /* DispatcherPVR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DispatcherPVR.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		6EA347FE2F48EF9D00E0A324 /* Exceptions for "NexusPVR TopShelf" folder in "NexusPVR TopShelf" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 6EA347F22F48EF9C00E0A324 /* NexusPVR TopShelf */;
+		};
+		6EA348132F48EFB600E0A324 /* Exceptions for "DispatcherPVR TopShelf" folder in "DispatcherPVR TopShelf" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 6EA348062F48EFB600E0A324 /* DispatcherPVR TopShelf */;
+		};
+		6EA348182F48F04500E0A324 /* Exceptions for "NexusPVR" folder in "NexusPVR TopShelf" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Core/BrandConfig.swift,
+				Core/DispatcherPVRBrand.swift,
+				Core/Models/Recording.swift,
+				Core/Models/Session.swift,
+				Core/NexusPVRBrand.swift,
+				Core/Services/RecordingFetcher.swift,
+				Design/SportIcon.swift,
+				Design/Theme.swift,
+			);
+			target = 6EA347F22F48EF9C00E0A324 /* NexusPVR TopShelf */;
+		};
+		6EA348192F48F04500E0A324 /* Exceptions for "NexusPVR" folder in "DispatcherPVR TopShelf" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Core/BrandConfig.swift,
+				Core/DispatcherPVRBrand.swift,
+				Core/Models/Recording.swift,
+				Core/Models/Session.swift,
+				Core/NexusPVRBrand.swift,
+				Core/Services/RecordingFetcher.swift,
+				Design/SportIcon.swift,
+				Design/Theme.swift,
+			);
+			target = 6EA348062F48EFB600E0A324 /* DispatcherPVR TopShelf */;
+		};
 		D1AAAA0C2F31559900D2B8DF /* Exceptions for "NexusPVR" folder in "DispatcherPVR" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -51,6 +139,8 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				D1AAAA0C2F31559900D2B8DF /* Exceptions for "NexusPVR" folder in "DispatcherPVR" target */,
+				6EA348182F48F04500E0A324 /* Exceptions for "NexusPVR" folder in "NexusPVR TopShelf" target */,
+				6EA348192F48F04500E0A324 /* Exceptions for "NexusPVR" folder in "DispatcherPVR TopShelf" target */,
 			);
 			path = NexusPVR;
 			sourceTree = "<group>";
@@ -63,6 +153,22 @@
 		6E7415A82F315369001FE083 /* NexusPVRUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = NexusPVRUITests;
+			sourceTree = "<group>";
+		};
+		6EA347F72F48EF9C00E0A324 /* NexusPVR TopShelf */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				6EA347FE2F48EF9D00E0A324 /* Exceptions for "NexusPVR TopShelf" folder in "NexusPVR TopShelf" target */,
+			);
+			path = "NexusPVR TopShelf";
+			sourceTree = "<group>";
+		};
+		6EA348092F48EFB600E0A324 /* DispatcherPVR TopShelf */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				6EA348132F48EFB600E0A324 /* Exceptions for "DispatcherPVR TopShelf" folder in "DispatcherPVR TopShelf" target */,
+			);
+			path = "DispatcherPVR TopShelf";
 			sourceTree = "<group>";
 		};
 		D1AAAA022F31559900D2B8DF /* DispatcherPVR */ = {
@@ -95,6 +201,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		6EA347F02F48EF9C00E0A324 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6EA347F62F48EF9C00E0A324 /* TVServices.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6EA348042F48EFB600E0A324 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6EA348082F48EFB600E0A324 /* TVServices.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		D1AAAA042F31559900D2B8DF /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -113,6 +235,9 @@
 				D1AAAA022F31559900D2B8DF /* DispatcherPVR */,
 				6E74159E2F315369001FE083 /* NexusPVRTests */,
 				6E7415A82F315369001FE083 /* NexusPVRUITests */,
+				6EA347F72F48EF9C00E0A324 /* NexusPVR TopShelf */,
+				6EA348092F48EFB600E0A324 /* DispatcherPVR TopShelf */,
+				6EA347F42F48EF9C00E0A324 /* Frameworks */,
 				6E74158D2F315368001FE083 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -124,8 +249,18 @@
 				D1AAAA012F31559900D2B8DF /* DispatcherPVR.app */,
 				6E74159B2F315369001FE083 /* NexusPVRTests.xctest */,
 				6E7415A52F315369001FE083 /* NexusPVRUITests.xctest */,
+				6EA347F32F48EF9C00E0A324 /* NexusPVR TopShelf.appex */,
+				6EA348072F48EFB600E0A324 /* DispatcherPVR TopShelf.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		6EA347F42F48EF9C00E0A324 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				6EA347F52F48EF9C00E0A324 /* TVServices.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -138,10 +273,12 @@
 				6E7415882F315368001FE083 /* Sources */,
 				6E7415892F315368001FE083 /* Frameworks */,
 				6E74158A2F315368001FE083 /* Resources */,
+				6EA348022F48EF9D00E0A324 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				6EA347FC2F48EF9C00E0A324 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				6E74158E2F315368001FE083 /* NexusPVR */,
@@ -200,6 +337,50 @@
 			productReference = 6E7415A52F315369001FE083 /* NexusPVRUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		6EA347F22F48EF9C00E0A324 /* NexusPVR TopShelf */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6EA347FF2F48EF9D00E0A324 /* Build configuration list for PBXNativeTarget "NexusPVR TopShelf" */;
+			buildPhases = (
+				6EA347EF2F48EF9C00E0A324 /* Sources */,
+				6EA347F02F48EF9C00E0A324 /* Frameworks */,
+				6EA347F12F48EF9C00E0A324 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				6EA347F72F48EF9C00E0A324 /* NexusPVR TopShelf */,
+			);
+			name = "NexusPVR TopShelf";
+			packageProductDependencies = (
+			);
+			productName = "NexusPVR TopShelf";
+			productReference = 6EA347F32F48EF9C00E0A324 /* NexusPVR TopShelf.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		6EA348062F48EFB600E0A324 /* DispatcherPVR TopShelf */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6EA348102F48EFB600E0A324 /* Build configuration list for PBXNativeTarget "DispatcherPVR TopShelf" */;
+			buildPhases = (
+				6EA348032F48EFB600E0A324 /* Sources */,
+				6EA348042F48EFB600E0A324 /* Frameworks */,
+				6EA348052F48EFB600E0A324 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				6EA348092F48EFB600E0A324 /* DispatcherPVR TopShelf */,
+			);
+			name = "DispatcherPVR TopShelf";
+			packageProductDependencies = (
+			);
+			productName = "DispatcherPVR TopShelf";
+			productReference = 6EA348072F48EFB600E0A324 /* DispatcherPVR TopShelf.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		D1AAAA062F31559900D2B8DF /* DispatcherPVR */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = D1AAAA092F31559900D2B8DF /* Build configuration list for PBXNativeTarget "DispatcherPVR" */;
@@ -207,10 +388,12 @@
 				D1AAAA032F31559900D2B8DF /* Sources */,
 				D1AAAA042F31559900D2B8DF /* Frameworks */,
 				D1AAAA052F31559900D2B8DF /* Resources */,
+				6EA348142F48EFB600E0A324 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				6EA3480E2F48EFB600E0A324 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				6E74158E2F315368001FE083 /* NexusPVR */,
@@ -245,6 +428,12 @@
 						CreatedOnToolsVersion = 26.2;
 						TestTargetID = 6E74158B2F315368001FE083;
 					};
+					6EA347F22F48EF9C00E0A324 = {
+						CreatedOnToolsVersion = 26.2;
+					};
+					6EA348062F48EFB600E0A324 = {
+						CreatedOnToolsVersion = 26.2;
+					};
 					D1AAAA062F31559900D2B8DF = {
 						CreatedOnToolsVersion = 26.2;
 					};
@@ -271,6 +460,8 @@
 				D1AAAA062F31559900D2B8DF /* DispatcherPVR */,
 				6E74159A2F315369001FE083 /* NexusPVRTests */,
 				6E7415A42F315369001FE083 /* NexusPVRUITests */,
+				6EA347F22F48EF9C00E0A324 /* NexusPVR TopShelf */,
+				6EA348062F48EFB600E0A324 /* DispatcherPVR TopShelf */,
 			);
 		};
 /* End PBXProject section */
@@ -291,6 +482,20 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		6E7415A32F315369001FE083 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6EA347F12F48EF9C00E0A324 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6EA348052F48EFB600E0A324 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -328,6 +533,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		6EA347EF2F48EF9C00E0A324 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6EA348032F48EFB600E0A324 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		D1AAAA032F31559900D2B8DF /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -347,6 +566,16 @@
 			isa = PBXTargetDependency;
 			target = 6E74158B2F315368001FE083 /* NexusPVR */;
 			targetProxy = 6E7415A62F315369001FE083 /* PBXContainerItemProxy */;
+		};
+		6EA347FC2F48EF9C00E0A324 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 6EA347F22F48EF9C00E0A324 /* NexusPVR TopShelf */;
+			targetProxy = 6EA347FB2F48EF9C00E0A324 /* PBXContainerItemProxy */;
+		};
+		6EA3480E2F48EFB600E0A324 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 6EA348062F48EFB600E0A324 /* DispatcherPVR TopShelf */;
+			targetProxy = 6EA3480D2F48EFB600E0A324 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -712,6 +941,136 @@
 			};
 			name = Release;
 		};
+		6EA348002F48EF9D00E0A324 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "NexusPVR TopShelf/NexusPVR TopShelf.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 40;
+				DEVELOPMENT_TEAM = 654X66AK24;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "NexusPVR TopShelf/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "NexusPVR TopShelf";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "consultation-massawippi.NexusPVR.TopShelfExtension";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG TOPSHELF_EXTENSION $(inherited)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 26.2;
+			};
+			name = Debug;
+		};
+		6EA348012F48EF9D00E0A324 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "NexusPVR TopShelf/NexusPVR TopShelf.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 40;
+				DEVELOPMENT_TEAM = 654X66AK24;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "NexusPVR TopShelf/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "NexusPVR TopShelf";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "consultation-massawippi.NexusPVR.TopShelfExtension";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = TOPSHELF_EXTENSION;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 26.2;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		6EA348112F48EFB600E0A324 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "DispatcherPVR TopShelf/DispatcherPVR TopShelf.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 40;
+				DEVELOPMENT_TEAM = 654X66AK24;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "DispatcherPVR TopShelf/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "DispatcherPVR TopShelf";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "consultation-massawippi.DispatcherPVR.TopShelfExtension";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG DISPATCHERPVR TOPSHELF_EXTENSION $(inherited)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 26.2;
+			};
+			name = Debug;
+		};
+		6EA348122F48EFB600E0A324 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "DispatcherPVR TopShelf/DispatcherPVR TopShelf.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 40;
+				DEVELOPMENT_TEAM = 654X66AK24;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "DispatcherPVR TopShelf/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "DispatcherPVR TopShelf";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "consultation-massawippi.DispatcherPVR.TopShelfExtension";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DISPATCHERPVR TOPSHELF_EXTENSION";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 26.2;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		D1AAAA072F31559900D2B8DF /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -890,6 +1249,24 @@
 			buildConfigurations = (
 				6E7415B62F315369001FE083 /* Debug */,
 				6E7415B72F315369001FE083 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		6EA347FF2F48EF9D00E0A324 /* Build configuration list for PBXNativeTarget "NexusPVR TopShelf" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6EA348002F48EF9D00E0A324 /* Debug */,
+				6EA348012F48EF9D00E0A324 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		6EA348102F48EFB600E0A324 /* Build configuration list for PBXNativeTarget "DispatcherPVR TopShelf" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6EA348112F48EFB600E0A324 /* Debug */,
+				6EA348122F48EFB600E0A324 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
