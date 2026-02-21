@@ -35,12 +35,14 @@ private enum TileColors {
 class ContentProvider: TVTopShelfContentProvider {
 
     private let urlScheme = "nexuspvr"
+
+    /// Store rendered tile images in the App Group shared container so the
+    /// system process that renders Top Shelf tiles can read them.
     private lazy var cacheDir: URL = {
-        // Images must be in the extension's own container — the system process
-        // that renders Top Shelf tiles cannot read from the app group container.
-        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+        let groupID = ServerConfig.appGroupSuite
+        let base = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupID)
             ?? FileManager.default.temporaryDirectory
-        let dir = base.appendingPathComponent("topshelf_images", isDirectory: true)
+        let dir = base.appendingPathComponent("Library/Caches/topshelf_images", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }()
@@ -103,7 +105,7 @@ class ContentProvider: TVTopShelfContentProvider {
 
     private func makeRecordingItem(_ recording: Recording) -> TVTopShelfSectionedItem {
         let item = TVTopShelfSectionedItem(identifier: "rec-\(recording.id)")
-        item.title = " "
+        item.title = recording.name
         item.imageShape = .hdtv
 
         if let playURL = URL(string: "\(urlScheme)://recording/\(recording.id)") {
@@ -120,7 +122,7 @@ class ContentProvider: TVTopShelfContentProvider {
 
     private func makeLiveItem(_ program: TopShelfProgram) -> TVTopShelfSectionedItem {
         let item = TVTopShelfSectionedItem(identifier: "live-\(program.channelId)")
-        item.title = " "
+        item.title = program.programName
         item.imageShape = .hdtv
 
         if let playURL = URL(string: "\(urlScheme)://channel/\(program.channelId)") {
