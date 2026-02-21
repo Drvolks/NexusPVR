@@ -131,13 +131,12 @@ struct RecordingRow: View {
                 // Row 3: Date + time range | Duration
                 HStack {
                     if let start = recording.startDate {
-                        if (recording.recordingStatus.isScheduled || recording.recordingStatus == .recording),
-                           let end = recording.endDate {
+                        if let end = recording.endDate {
                             Text("\(start.formatted(date: .abbreviated, time: .shortened)) – \(end.formatted(date: .omitted, time: .shortened))")
                                 .font(.caption)
                                 .foregroundStyle(Theme.textTertiary)
                         } else {
-                            Text(start, style: .date)
+                            Text(start.formatted(date: .abbreviated, time: .shortened))
                                 .font(.caption)
                                 .foregroundStyle(Theme.textTertiary)
                         }
@@ -362,11 +361,10 @@ struct RecordingRowTV: View {
 
                         if let start = recording.startDate {
                             Label {
-                                if (recording.recordingStatus.isScheduled || recording.recordingStatus == .recording),
-                                   let end = recording.endDate {
+                                if let end = recording.endDate {
                                     Text("\(start.formatted(date: .abbreviated, time: .shortened)) – \(end.formatted(date: .omitted, time: .shortened))")
                                 } else {
-                                    Text(start, style: .date)
+                                    Text(start.formatted(date: .abbreviated, time: .shortened))
                                 }
                             } icon: {
                                 Image(systemName: "calendar")
