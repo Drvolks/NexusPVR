@@ -36,8 +36,9 @@ class ContentProvider: TVTopShelfContentProvider {
 
     private let urlScheme = "nexuspvr"
     private lazy var cacheDir: URL = {
-        let groupID = ServerConfig.appGroupSuite
-        let base = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupID)
+        // Images must be in the extension's own container — the system process
+        // that renders Top Shelf tiles cannot read from the app group container.
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         let dir = base.appendingPathComponent("topshelf_images", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -206,22 +207,22 @@ class ContentProvider: TVTopShelfContentProvider {
     private func drawTitle(_ text: String, in ctx: CGContext, size: CGSize) {
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.alignment = .center
-        paragraphStyle.lineBreakMode = .byTruncatingTail
+        paragraphStyle.lineBreakMode = .byWordWrapping
+
+        let font = UIFont.systemFont(ofSize: 22, weight: .semibold)
 
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: 22, weight: .semibold),
+            .font: font,
             .foregroundColor: TileColors.textPrimary,
             .paragraphStyle: paragraphStyle
         ]
 
         let width = size.width - textInset * 2
-        let boundingRect = (text as NSString).boundingRect(
-            with: CGSize(width: width, height: 60),
-            options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine],
-            attributes: attrs, context: nil
-        )
-        let frame = CGRect(x: textInset, y: size.height * 0.55, width: width, height: min(boundingRect.height, 60))
-        (text as NSString).draw(in: frame, withAttributes: attrs)
+        // Allow up to 2 lines of text
+        let maxHeight = ceil(font.lineHeight) * 2 + ceil(font.leading)
+        let frame = CGRect(x: textInset, y: size.height * 0.55, width: width, height: maxHeight)
+        let attrString = NSAttributedString(string: text, attributes: attrs)
+        attrString.draw(with: frame, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], context: nil)
     }
 
     private func drawSubtitle(_ text: String, in ctx: CGContext, size: CGSize) {
