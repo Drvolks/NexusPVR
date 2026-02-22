@@ -7,15 +7,6 @@
 
 import SwiftUI
 
-// PreferenceKey for tracking horizontal scroll offset (to sync timeline header)
-private struct HorizontalScrollOffsetPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
-
 
 // Helper struct to hold both program and channel for sheet presentation
 private struct ProgramDetail: Identifiable {
@@ -286,8 +277,6 @@ struct GuideView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    @State private var horizontalScrollOffset: CGFloat = 0
-    @State private var scrollProxy: ScrollViewProxy?
     @State private var currentTimelineHour: Date?
     @State private var scrollTargetId: String?
     @State private var gridHorizontalOffset: CGFloat = 0
@@ -335,87 +324,65 @@ struct GuideView: View {
     @State private var leadingSafeArea: CGFloat = 0
 
     private var iOSMacOSGuideContent: some View {
-        VStack(spacing: 0) {
-            // Timeline header — channel label pinned left, hours scroll with grid
-            ZStack(alignment: .leading) {
-                ScrollViewReader { proxy in
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 0) {
-                            Color.clear.frame(width: channelWidth + leadingSafeArea, height: 30)
-                            timelineHeaderContent
+        // Main grid — single LazyVStack for guaranteed lazy rendering
+        // Channel cells pinned to left edge by counteracting horizontal scroll
+        ScrollViewReader { programProxy in
+            ScrollView([.horizontal, .vertical], showsIndicators: true) {
+                LazyVStack(spacing: 1) {
+                    // Invisible scroll anchors for scroll-to-time
+                    HStack(spacing: 0) {
+                        Color.clear.frame(width: channelWidth + leadingSafeArea, height: 1)
+                        ForEach(viewModel.hoursToShow, id: \.self) { hour in
+                            HStack(spacing: 0) {
+                                Color.clear
+                                    .frame(width: hourWidth / 2, height: 1)
+                                    .id("scroll-\(hour.timeIntervalSince1970)")
+                                Color.clear
+                                    .frame(width: hourWidth / 2, height: 1)
+                                    .id("scroll-\(hour.timeIntervalSince1970 + 1800)")
+                            }
                         }
                     }
-                    .onAppear {
-                        scrollProxy = proxy
-                        scrollToCurrentTime(proxy: proxy)
-                    }
-                    .onChange(of: viewModel.selectedDate) {
-                        scrollToCurrentTime(proxy: proxy)
+                    .frame(height: 0)
+
+                    ForEach(viewModel.channels) { channel in
+                        ZStack(alignment: .leading) {
+                            // Programs (scroll with content)
+                            HStack(spacing: 0) {
+                                Color.clear.frame(width: channelWidth + leadingSafeArea, height: rowHeight)
+                                programsRow(channel)
+                                    .frame(height: rowHeight)
+                                    .background(Theme.surface)
+                            }
+
+                            // Channel cell pinned to visible left edge (after safe area)
+                            channelCell(channel)
+                                .frame(width: channelWidth, height: rowHeight)
+                                .offset(x: gridHorizontalOffset + leadingSafeArea)
+                                .zIndex(1)
+                        }
                     }
                 }
-                // Pinned header corner (accounts for safe area on macOS)
-                Rectangle()
-                    .fill(Theme.surfaceElevated)
-                    .frame(width: channelWidth + leadingSafeArea, height: 30)
             }
-            .frame(height: 30)
-
-            // Main grid — single LazyVStack for guaranteed lazy rendering
-            // Channel cells pinned to left edge by counteracting horizontal scroll
-            ScrollViewReader { programProxy in
-                ScrollView([.horizontal, .vertical], showsIndicators: true) {
-                    LazyVStack(spacing: 1) {
-                        // Invisible scroll anchors for scroll-to-time
-                        HStack(spacing: 0) {
-                            Color.clear.frame(width: channelWidth + leadingSafeArea, height: 1)
-                            ForEach(viewModel.hoursToShow, id: \.self) { hour in
-                                HStack(spacing: 0) {
-                                    Color.clear
-                                        .frame(width: hourWidth / 2, height: 1)
-                                        .id("scroll-\(hour.timeIntervalSince1970)")
-                                    Color.clear
-                                        .frame(width: hourWidth / 2, height: 1)
-                                        .id("scroll-\(hour.timeIntervalSince1970 + 1800)")
-                                }
-                            }
-                        }
-                        .frame(height: 0)
-
-                        ForEach(viewModel.channels) { channel in
-                            ZStack(alignment: .leading) {
-                                // Programs (scroll with content)
-                                HStack(spacing: 0) {
-                                    Color.clear.frame(width: channelWidth + leadingSafeArea, height: rowHeight)
-                                    programsRow(channel)
-                                        .frame(height: rowHeight)
-                                        .background(Theme.surface)
-                                }
-
-                                // Channel cell pinned to visible left edge (after safe area)
-                                channelCell(channel)
-                                    .frame(width: channelWidth, height: rowHeight)
-                                    .offset(x: gridHorizontalOffset + leadingSafeArea)
-                                    .zIndex(1)
-                            }
-                        }
-                    }
-                }
-                .onScrollGeometryChange(for: CGFloat.self) { geo in
-                    geo.contentOffset.x
-                } action: { _, new in
-                    gridHorizontalOffset = new
-                }
-                .onAppear {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                        if let targetId = scrollTargetId {
-                            programProxy.scrollTo(targetId, anchor: UnitPoint(x: 0, y: 0))
-                        }
-                    }
-                }
-                .onChange(of: scrollTargetId) { _, newValue in
-                    if let targetId = newValue {
+            .onScrollGeometryChange(for: CGFloat.self) { geo in
+                geo.contentOffset.x
+            } action: { _, new in
+                gridHorizontalOffset = new
+            }
+            .onAppear {
+                updateScrollTarget()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    if let targetId = scrollTargetId {
                         programProxy.scrollTo(targetId, anchor: UnitPoint(x: 0, y: 0))
                     }
+                }
+            }
+            .onChange(of: viewModel.selectedDate) {
+                updateScrollTarget()
+            }
+            .onChange(of: scrollTargetId) { _, newValue in
+                if let targetId = newValue {
+                    programProxy.scrollTo(targetId, anchor: UnitPoint(x: 0, y: 0))
                 }
             }
         }
@@ -430,9 +397,7 @@ struct GuideView: View {
         .onChange(of: scenePhase) {
             if scenePhase == .active {
                 viewModel.scrollToNow()
-                if let proxy = scrollProxy {
-                    scrollToCurrentTime(proxy: proxy)
-                }
+                updateScrollTarget()
             }
         }
     }
@@ -449,9 +414,6 @@ struct GuideView: View {
                 selectFocusedProgram()
             } label: {
                 VStack(spacing: 0) {
-                    // Time header
-                    tvOSTimeHeader(gridWidth: gridWidth, pxPerMinute: pxPerMinute)
-
                     // Grid with manual focus tracking
                     ScrollViewReader { verticalProxy in
                         ScrollView(.vertical, showsIndicators: false) {
@@ -497,29 +459,6 @@ struct GuideView: View {
             configuration.label
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-    }
-
-    private func tvOSTimeHeader(gridWidth: CGFloat, pxPerMinute: CGFloat) -> some View {
-        HStack(spacing: 0) {
-            // Empty space for channel column
-            Rectangle()
-                .fill(Theme.surfaceElevated)
-                .frame(width: channelWidth, height: 40)
-
-            // Time slots
-            HStack(spacing: 0) {
-                ForEach(0..<Int(visibleHours * 2), id: \.self) { slot in
-                    let slotTime = visibleStart.addingTimeInterval(Double(slot * 30 * 60))
-                    Text(slotTime, format: .dateTime.hour().minute())
-                        .font(.caption)
-                        .foregroundStyle(Theme.textSecondary)
-                        .frame(width: pxPerMinute * 30, alignment: .leading)
-                        .padding(.leading, 8)
-                }
-            }
-            .frame(width: gridWidth)
-        }
-        .background(Theme.surfaceElevated)
     }
 
     private func tvOSChannelRow(channel: Channel, rowIndex: Int, gridWidth: CGFloat, pxPerMinute: CGFloat) -> some View {
@@ -787,28 +726,6 @@ struct GuideView: View {
     }
     #endif
 
-    private var timelineHeaderContent: some View {
-        HStack(spacing: 0) {
-            // Hour markers with :00 and :30 scroll anchors
-            ForEach(viewModel.hoursToShow, id: \.self) { hour in
-                HStack(spacing: 0) {
-                    // :00 half with hour label
-                    Text(hour, format: .dateTime.hour())
-                        .font(.caption)
-                        .foregroundStyle(Theme.textSecondary)
-                        .frame(width: hourWidth / 2, alignment: .leading)
-                        .padding(.leading, Theme.spacingSM)
-                        .id("scroll-\(hour.timeIntervalSince1970)")
-                    // :30 half (empty)
-                    Color.clear
-                        .frame(width: hourWidth / 2)
-                        .id("scroll-\(hour.timeIntervalSince1970 + 1800)")
-                }
-            }
-        }
-        .frame(height: 30)
-        .background(Theme.surfaceElevated)
-    }
 
     @ViewBuilder
     private func channelCell(_ channel: Channel) -> some View {
@@ -1036,7 +953,7 @@ struct GuideView: View {
         }
     }
 
-    private func scrollToCurrentTime(proxy: ScrollViewProxy, isInitialLoad: Bool = false) {
+    private func updateScrollTarget() {
         let calendar = Calendar.current
         let now = Date()
         let isToday = calendar.isDate(viewModel.selectedDate, inSameDayAs: now)
@@ -1051,16 +968,7 @@ struct GuideView: View {
         // Find the hour marker in hoursToShow and scroll to the appropriate anchor
         let targetHourComponent = calendar.component(.hour, from: targetTime)
         if let targetHour = viewModel.hoursToShow.first(where: { calendar.component(.hour, from: $0) == targetHourComponent }) {
-            let scrollId = GuideScrollHelper.calculateScrollId(currentTime: targetTime, targetHour: targetHour)
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                withAnimation(isInitialLoad ? nil : .default) {
-                    // Scroll timeline header
-                    proxy.scrollTo(scrollId, anchor: UnitPoint(x: 0, y: 0))
-                    // Update shared target to scroll all program rows
-                    scrollTargetId = scrollId
-                }
-            }
+            scrollTargetId = GuideScrollHelper.calculateScrollId(currentTime: targetTime, targetHour: targetHour)
         }
     }
 
