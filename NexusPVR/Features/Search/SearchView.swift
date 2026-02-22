@@ -37,8 +37,10 @@ struct SearchView: View {
             .safeAreaInset(edge: .top) {
                 tvSearchBar
             }
-            #else
+            #elseif os(iOS)
             .searchable(text: $viewModel.searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search programs")
+            #else
+            .searchable(text: $viewModel.searchText, prompt: "Search programs")
             #endif
             .sheet(item: $selectedProgramDetail) { detail in
                 ProgramDetailView(
