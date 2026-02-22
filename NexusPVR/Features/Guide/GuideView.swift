@@ -322,6 +322,7 @@ struct GuideView: View {
 
     #if !os(tvOS)
     @State private var leadingSafeArea: CGFloat = 0
+    @State private var scrollViewHeight: CGFloat = 0
 
     private var iOSMacOSGuideContent: some View {
         // Main grid — single LazyVStack for guaranteed lazy rendering
@@ -363,6 +364,12 @@ struct GuideView: View {
                         }
                     }
                 }
+                .frame(minHeight: scrollViewHeight, alignment: .top)
+            }
+            .onScrollGeometryChange(for: CGFloat.self) { geo in
+                geo.containerSize.height
+            } action: { _, new in
+                scrollViewHeight = new
             }
             .onScrollGeometryChange(for: CGFloat.self) { geo in
                 geo.contentOffset.x
