@@ -380,7 +380,7 @@ struct GuideView: View {
                 updateScrollTarget()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                     if let targetId = scrollTargetId {
-                        programProxy.scrollTo(targetId, anchor: UnitPoint(x: 0, y: 0))
+                        programProxy.scrollTo(targetId, anchor: UnitPoint(x: 0.10, y: 0))
                     }
                 }
             }
@@ -389,7 +389,7 @@ struct GuideView: View {
             }
             .onChange(of: scrollTargetId) { _, newValue in
                 if let targetId = newValue {
-                    programProxy.scrollTo(targetId, anchor: UnitPoint(x: 0, y: 0))
+                    programProxy.scrollTo(targetId, anchor: UnitPoint(x: 0.10, y: 0))
                 }
             }
         }
