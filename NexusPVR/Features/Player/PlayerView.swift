@@ -820,12 +820,15 @@ class MPVPlayerCore: NSObject {
         mpv_set_option_string(mpv, "stream-lavf-o", "reconnect=1,reconnect_streamed=1,reconnect_delay_max=5")
 
         // Audio
-        #if !os(macOS)
+        #if os(macOS)
+        mpv_set_option_string(mpv, "ao", "coreaudio")
+        mpv_set_option_string(mpv, "audio-buffer", "0.5")  // Larger buffer on macOS to avoid coreaudio race with raw TS streams
+        #else
         mpv_set_option_string(mpv, "ao", "audiounit")
+        mpv_set_option_string(mpv, "audio-buffer", "0.2")
         #endif
         mpv_set_option_string(mpv, "audio-channels", "stereo")
         mpv_set_option_string(mpv, "volume", "100")
-        mpv_set_option_string(mpv, "audio-buffer", "0.2")  // Smaller buffer for faster audio sync after seek
         mpv_set_option_string(mpv, "audio-fallback-to-null", "yes")
         mpv_set_option_string(mpv, "audio-stream-silence", "yes")  // Output silence while audio buffers (avoid muting)
 
