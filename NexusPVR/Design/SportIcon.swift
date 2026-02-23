@@ -98,7 +98,7 @@ enum Sport: CaseIterable {
         case .hockey: return ["hockey", "nhl", "lnh"]
         case .basketball: return ["basketball", "nba"]
         case .americanFootball: return ["american football", "super bowl", "nfl", "cfl"]
-        case .soccer: return ["champions league", "premier league", "europa league", "la liga", "bundesliga", "serie a", "ligue 1", "football", "soccer", "mls", "fifa"]
+        case .soccer: return ["champions league", "premier league", "europa league", "fa cup", "la liga", "bundesliga", "serie a", "ligue 1", "football", "soccer", "mls", "fifa"]
         case .baseball: return ["baseball", "mlb"]
         case .tennis: return ["roland garros", "wimbledon", "tennis"]
         case .golf: return ["golf", "pga"]
