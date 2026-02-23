@@ -9,6 +9,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var client: PVRClient
+    @EnvironmentObject private var appState: AppState
     #if os(tvOS)
     @Environment(\.requestNavBarFocus) private var requestNavBarFocus
     #endif
@@ -229,6 +230,8 @@ struct SettingsView: View {
         client.disconnect()
         ServerConfig.clear()
         client.updateConfig(.default)
+        appState.guideChannelFilter = ""
+        appState.searchQuery = ""
     }
 
     private var playbackSection: some View {
