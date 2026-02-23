@@ -62,6 +62,7 @@ final class AppState: ObservableObject {
     @Published var selectedTab: Tab = .guide
     @Published var searchQuery: String = ""
     @Published var guideChannelFilter: String = ""
+    @Published var guideGroupFilter: Int? = nil
     @Published var isShowingPlayer = false
 
     // Topic picker state (shared between TopicsView and iOS nav bar)

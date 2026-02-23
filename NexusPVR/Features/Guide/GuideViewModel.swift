@@ -26,6 +26,9 @@ final class GuideViewModel: ObservableObject {
 
     @Published var showChannelSearch: Bool = false
     @Published var channelSearchText: String = ""
+    @Published var selectedProfileId: Int? = nil
+    @Published var selectedGroupId: Int? = nil
+    @Published var showFilters: Bool = false
 
     // O(1) lookup for recording status by program ID
     private var recordingsByEventId: [Int: Recording] = [:]
@@ -44,15 +47,23 @@ final class GuideViewModel: ObservableObject {
         return calendar.startOfDay(for: selectedDate)
     }
 
-    /// Channels to display in the guide (reads from EPGCache, filtered by search)
+    var hasActiveFilters: Bool {
+        selectedProfileId != nil || selectedGroupId != nil
+    }
+
+    /// Channels to display in the guide (reads from EPGCache, filtered by profile, group, and search)
     /// Uses visibleChannels which starts with first 20, expands to all after EPG loads
     var channels: [Channel] {
         guard let cache = epgCache else { return [] }
-        if channelSearchText.isEmpty {
-            return cache.visibleChannels
-        } else {
-            return cache.filteredChannels(matching: channelSearchText)
+        var result = cache.channels(inProfile: selectedProfileId)
+        if let groupId = selectedGroupId {
+            result = result.filter { $0.groupId == groupId }
         }
+        if !channelSearchText.isEmpty {
+            let query = channelSearchText.lowercased()
+            result = result.filter { $0.name.lowercased().contains(query) || String($0.number).contains(query) }
+        }
+        return result
     }
 
     var hoursToShow: [Date] {

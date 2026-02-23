@@ -16,6 +16,8 @@ final class EPGCache: ObservableObject {
     @Published var channels: [Channel] = []
     /// Channels to display in the guide — first 20 initially, all after EPG loads
     @Published var visibleChannels: [Channel] = []
+    @Published var channelProfiles: [ChannelProfile] = []
+    @Published var channelGroups: [ChannelGroup] = []
     @Published private(set) var isLoading = false
     @Published private(set) var hasLoaded = false
     @Published private(set) var isFullyLoaded = false
@@ -68,6 +70,15 @@ final class EPGCache: ObservableObject {
             // Show the grid immediately with all channels
             // LazyVStack only renders visible rows (~15), so 1000 channels is fine
             visibleChannels = sorted
+
+            // Fetch channel profiles and groups (Dispatcharr only)
+            #if DISPATCHERPVR
+            if let dispClient = client as? DispatcherClient {
+                channelProfiles = (try? await dispClient.getChannelProfiles()) ?? []
+                channelGroups = (try? await dispClient.getChannelGroups()) ?? []
+            }
+            #endif
+
             hasLoaded = true
             isLoading = false
             print("[EPGCache] Grid ready (\(visibleChannels.count) channels): \(ms(since: totalStart))ms")
@@ -146,6 +157,20 @@ final class EPGCache: ObservableObject {
     }
 
     // MARK: - Channel Filtering
+
+    func channels(inProfile profileId: Int?) -> [Channel] {
+        guard let profileId,
+              let profile = channelProfiles.first(where: { $0.id == profileId }) else {
+            return visibleChannels
+        }
+        let channelIds = Set(profile.channels)
+        return visibleChannels.filter { channelIds.contains($0.id) }
+    }
+
+    func channels(inGroup groupId: Int?) -> [Channel] {
+        guard let groupId else { return visibleChannels }
+        return visibleChannels.filter { $0.groupId == groupId }
+    }
 
     func filteredChannels(matching search: String) -> [Channel] {
         guard !search.isEmpty else { return visibleChannels }
@@ -281,6 +306,8 @@ final class EPGCache: ObservableObject {
         backgroundLoadTask = nil
         channels = []
         visibleChannels = []
+        channelProfiles = []
+        channelGroups = []
         channelMap = [:]
         epg = [:]
         loadedDays = []

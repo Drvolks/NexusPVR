@@ -326,6 +326,23 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         return items.map { $0.toChannel() }
     }
 
+    func getChannelProfiles() async throws -> [ChannelProfile] {
+        guard !config.isDemoMode else { return DemoDataProvider.channelProfiles }
+        guard let url = URL(string: "\(baseURL)/api/channels/profiles/") else {
+            throw PVRClientError.invalidResponse
+        }
+        let profiles: [ChannelProfile] = try await fetchAllPages(url)
+        return profiles
+    }
+
+    func getChannelGroups() async throws -> [ChannelGroup] {
+        guard !config.isDemoMode else { return DemoDataProvider.channelGroups }
+        guard let url = URL(string: "\(baseURL)/api/channels/groups/") else {
+            throw PVRClientError.invalidResponse
+        }
+        return try await fetchAllPages(url)
+    }
+
     // MARK: - EPG / Listings
 
     func getListings(channelId: Int) async throws -> [Program] {
@@ -598,6 +615,7 @@ nonisolated struct DispatcharrChannel: Decodable {
     let logoId: Int?
     let uuid: String?
     let epgDataId: Int?
+    let channelGroupId: Int?
 
     enum CodingKeys: String, CodingKey {
         case id, name
@@ -606,6 +624,7 @@ nonisolated struct DispatcharrChannel: Decodable {
         case logoId = "logo_id"
         case uuid
         case epgDataId = "epg_data_id"
+        case channelGroupId = "channel_group_id"
     }
 
     init(from decoder: Decoder) throws {
@@ -646,6 +665,17 @@ nonisolated struct DispatcharrChannel: Decodable {
         } else {
             epgDataId = nil
         }
+
+        // channel_group_id can be Int or String
+        if let intGroup = try? container.decode(Int.self, forKey: .channelGroupId) {
+            channelGroupId = intGroup
+        } else if let stringGroup = try? container.decodeIfPresent(String.self, forKey: .channelGroupId),
+                  let parsed = Int(stringGroup) {
+            channelGroupId = parsed
+        } else {
+            channelGroupId = nil
+        }
+
     }
 
     func toChannel() -> Channel {
@@ -653,7 +683,8 @@ nonisolated struct DispatcharrChannel: Decodable {
             id: id,
             name: name,
             number: Int(channelNumber ?? 0),
-            hasIcon: logoId != nil
+            hasIcon: logoId != nil,
+            groupId: channelGroupId
         )
     }
 }

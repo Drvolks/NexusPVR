@@ -64,6 +64,19 @@ const SHOW_NOUNS = [
 
 const DURATIONS = [15, 30, 30, 30, 60, 60, 60, 60, 90, 120, 120, 180];
 
+const CHANNEL_GROUPS = [
+  { id: 1, name: "News" },
+  { id: 2, name: "Sports" },
+  { id: 3, name: "Entertainment" },
+  { id: 4, name: "Movies" },
+  { id: 5, name: "Kids & Family" },
+  { id: 6, name: "Documentary" },
+  { id: 7, name: "Music" },
+  { id: 8, name: "Lifestyle" },
+  { id: 9, name: "Science & Tech" },
+  { id: 10, name: "International" },
+];
+
 // ---------------------------------------------------------------------------
 // Random helpers
 // ---------------------------------------------------------------------------
@@ -93,6 +106,7 @@ function generateChannels(n) {
       logo_id: i,
       uuid: crypto.randomUUID(),
       epg_data_id: i,
+      channel_group_id: CHANNEL_GROUPS[(i - 1) % CHANNEL_GROUPS.length].id,
     });
   }
   return channels;
@@ -411,6 +425,21 @@ function handleRequest(req, res) {
   if (path === "/api/channels/channels/") {
     const baseUrl = `http://${req.headers.host}${path}`;
     return json(res, paginate(CHANNELS, page, baseUrl, pageSize));
+  }
+
+  // Channel profiles
+  if (path === "/api/channels/profiles/") {
+    const profiles = CHANNEL_GROUPS.slice(0, 4).map((g, i) => ({
+      id: i + 1,
+      name: g.name,
+      channels: CHANNELS.filter((c) => c.channel_group_id === g.id).map((c) => c.id),
+    }));
+    return json(res, profiles);
+  }
+
+  // Channel groups
+  if (path === "/api/channels/groups/") {
+    return json(res, CHANNEL_GROUPS);
   }
 
   // EPG data lookup

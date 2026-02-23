@@ -37,6 +37,18 @@ struct GuideView: View {
     private let channelWidth: CGFloat = Theme.channelColumnWidth
     private let rowHeight: CGFloat = Theme.cellHeight
 
+    #if DISPATCHERPVR
+    private var hasFilterData: Bool {
+        !epgCache.channelProfiles.isEmpty || hasPopulatedGroups
+    }
+
+    private var hasPopulatedGroups: Bool {
+        epgCache.channelGroups.contains { group in
+            epgCache.visibleChannels.contains { $0.groupId == group.id }
+        }
+    }
+    #endif
+
     var body: some View {
         contentView
             .background(Theme.background)
@@ -83,6 +95,9 @@ struct GuideView: View {
                 if !appState.guideChannelFilter.isEmpty {
                     viewModel.channelSearchText = appState.guideChannelFilter
                 }
+                if let groupId = appState.guideGroupFilter {
+                    viewModel.selectedGroupId = groupId
+                }
                 #endif
             }
             .onChange(of: viewModel.channelSearchText) {
@@ -94,6 +109,9 @@ struct GuideView: View {
             #if os(iOS)
             .onChange(of: appState.guideChannelFilter) {
                 viewModel.channelSearchText = appState.guideChannelFilter
+            }
+            .onChange(of: appState.guideGroupFilter) {
+                viewModel.selectedGroupId = appState.guideGroupFilter
             }
             #endif
             .onChange(of: scenePhase) {
@@ -185,37 +203,69 @@ struct GuideView: View {
     private var iOSNavigationBar: some View {
         VStack(spacing: 0) {
             #if os(iOS)
-            HStack(spacing: 8) {
-                Button {
-                    viewModel.previousDay()
-                    Task { await viewModel.navigateToDate(using: client) }
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Theme.accent)
-                        .frame(width: 32, height: 32)
-                }
+            HStack {
+                HStack(spacing: 8) {
+                    Button {
+                        viewModel.previousDay()
+                        Task { await viewModel.navigateToDate(using: client) }
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Theme.accent)
+                            .frame(width: 32, height: 32)
+                    }
 
-                Text(viewModel.selectedDate, format: .dateTime.month(.abbreviated).day())
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(Theme.textPrimary)
+                    Text(viewModel.selectedDate, format: .dateTime.month(.abbreviated).day())
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Theme.textPrimary)
 
-                Button {
-                    viewModel.nextDay()
-                    Task { await viewModel.navigateToDate(using: client) }
-                } label: {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Theme.accent)
-                        .frame(width: 32, height: 32)
+                    Button {
+                        viewModel.nextDay()
+                        Task { await viewModel.navigateToDate(using: client) }
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Theme.accent)
+                            .frame(width: 32, height: 32)
+                    }
                 }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+                .background(.ultraThinMaterial)
+                .clipShape(Capsule())
+                .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 2)
+
+                Spacer()
+
+                #if DISPATCHERPVR
+                if hasFilterData {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            viewModel.showFilters.toggle()
+                        }
+                    } label: {
+                        Image(systemName: viewModel.hasActiveFilters
+                              ? "line.3.horizontal.decrease.circle.fill"
+                              : "line.3.horizontal.decrease")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(viewModel.hasActiveFilters ? Theme.accent : Theme.textPrimary)
+                            .frame(width: 32, height: 32)
+                            .background(.ultraThinMaterial)
+                            .clipShape(Capsule())
+                            .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 2)
+                    }
+                }
+                #endif
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 4)
-            .background(.ultraThinMaterial)
-            .clipShape(Capsule())
-            .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 2)
+            .padding(.horizontal, Theme.spacingMD)
             .padding(.vertical, Theme.spacingSM)
+
+            #if DISPATCHERPVR
+            if viewModel.showFilters && hasFilterData {
+                filterPanel
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+            #endif
             #else
             HStack(spacing: Theme.spacingMD) {
                 Button {
@@ -275,6 +325,84 @@ struct GuideView: View {
             }
             #endif
         }
+    }
+    #endif
+
+    #if os(iOS)
+    private var guideTopPadding: CGFloat {
+        let base: CGFloat = UIDevice.current.userInterfaceIdiom == .phone ? 80 : 55
+        #if DISPATCHERPVR
+        if viewModel.showFilters && hasFilterData {
+            // Add space for each filter row shown
+            var extra: CGFloat = 8 // top/bottom padding
+            if !epgCache.channelProfiles.isEmpty { extra += 36 }
+            if hasPopulatedGroups { extra += 36 }
+            return base + extra
+        }
+        #endif
+        return base
+    }
+    #endif
+
+    #if DISPATCHERPVR
+    @ViewBuilder
+    private var filterPanel: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if !epgCache.channelProfiles.isEmpty {
+                filterRow(label: "Profile", items: epgCache.channelProfiles.map { (id: $0.id, name: $0.name) },
+                          selectedId: viewModel.selectedProfileId) { id in
+                    viewModel.selectedProfileId = id
+                }
+            }
+            let populatedGroups = epgCache.channelGroups.filter { group in
+                epgCache.visibleChannels.contains { $0.groupId == group.id }
+            }
+            if !populatedGroups.isEmpty {
+                filterRow(label: "Group", items: populatedGroups.map { (id: $0.id, name: $0.name) },
+                          selectedId: viewModel.selectedGroupId) { id in
+                    viewModel.selectedGroupId = id
+                }
+            }
+        }
+        .padding(.horizontal, Theme.spacingMD)
+        .padding(.vertical, 4)
+        .background(.ultraThinMaterial)
+    }
+
+    private func filterRow(label: String, items: [(id: Int, name: String)], selectedId: Int?, onSelect: @escaping (Int?) -> Void) -> some View {
+        HStack(spacing: 6) {
+            Text(label)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Theme.textTertiary)
+                .frame(width: 48, alignment: .leading)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    filterPill("All", isSelected: selectedId == nil) {
+                        onSelect(nil)
+                    }
+                    ForEach(items, id: \.id) { item in
+                        filterPill(item.name, isSelected: selectedId == item.id) {
+                            onSelect(item.id)
+                        }
+                    }
+                }
+            }
+        }
+        .frame(height: 32)
+    }
+
+    private func filterPill(_ title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(isSelected ? .white : Theme.textPrimary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(isSelected ? Theme.accent : Color.white.opacity(0.1))
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
     #endif
 
@@ -395,8 +523,8 @@ struct GuideView: View {
                     .frame(height: 0)
 
                     #if os(iOS)
-                    // Top padding so first row isn't behind the floating date pill
-                    Color.clear.frame(height: UIDevice.current.userInterfaceIdiom == .phone ? 80 : 55)
+                    // Top padding so first row isn't behind the floating date pill + filter panel
+                    Color.clear.frame(height: guideTopPadding)
                     #endif
 
                     ForEach(viewModel.channels) { channel in

@@ -58,6 +58,7 @@ struct IOSNavigation: View {
     @State private var showSearchDropdown = false
     @State private var channelMatchCount = 0
     @State private var programMatchCount = 0
+    @State private var matchingGroups: [ChannelGroup] = []
     @State private var searchDebounceTask: Task<Void, Never>?
     @State private var lastSearchedText = ""
     @FocusState private var isSearchFocused: Bool
@@ -176,6 +177,7 @@ struct IOSNavigation: View {
                 showSearchDropdown = false
                 channelMatchCount = 0
                 programMatchCount = 0
+                matchingGroups = []
                 lastSearchedText = ""
                 return
             }
@@ -189,6 +191,14 @@ struct IOSNavigation: View {
                 guard !Task.isCancelled else { return }
                 channelMatchCount = channels
                 programMatchCount = programs
+                #if DISPATCHERPVR
+                let query = newValue.lowercased()
+                let groupsWithChannels = epgCache.channelGroups.filter { group in
+                    group.name.lowercased().contains(query) &&
+                    epgCache.visibleChannels.contains { $0.groupId == group.id }
+                }
+                matchingGroups = groupsWithChannels
+                #endif
                 lastSearchedText = newValue
                 withAnimation(.easeInOut(duration: 0.2)) {
                     showSearchDropdown = true
@@ -361,6 +371,7 @@ struct IOSNavigation: View {
                     showSearchDropdown = false
                     isSearchFocused = false
                     appState.guideChannelFilter = ""
+                    appState.guideGroupFilter = nil
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 15))
@@ -434,6 +445,7 @@ struct IOSNavigation: View {
             Button {
                 searchDebounceTask?.cancel()
                 lastSearchedText = searchText
+                appState.guideGroupFilter = nil
                 appState.guideChannelFilter = searchText
                 appState.selectedTab = .guide
                 showSearchDropdown = false
@@ -453,6 +465,39 @@ struct IOSNavigation: View {
                 .padding(.vertical, 12)
             }
             .disabled(channelMatchCount == 0)
+
+            #if DISPATCHERPVR
+            if !matchingGroups.isEmpty {
+                Divider().overlay(Theme.surfaceHighlight)
+
+                // Groups section
+                ForEach(matchingGroups) { group in
+                    Button {
+                        searchDebounceTask?.cancel()
+                        lastSearchedText = searchText
+                        appState.guideChannelFilter = ""
+                        appState.guideGroupFilter = group.id
+                        appState.selectedTab = .guide
+                        showSearchDropdown = false
+                        isSearchFocused = false
+                    } label: {
+                        HStack {
+                            Image(systemName: "folder")
+                                .foregroundStyle(Theme.accent)
+                                .frame(width: 24)
+                            Text(group.name)
+                                .foregroundStyle(Theme.textPrimary)
+                            Spacer()
+                            Text("Group")
+                                .font(.caption)
+                                .foregroundStyle(Theme.textTertiary)
+                        }
+                        .padding(.horizontal, Theme.spacingMD)
+                        .padding(.vertical, 12)
+                    }
+                }
+            }
+            #endif
 
             Divider().overlay(Theme.surfaceHighlight)
 

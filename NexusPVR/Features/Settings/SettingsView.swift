@@ -231,6 +231,7 @@ struct SettingsView: View {
         ServerConfig.clear()
         client.updateConfig(.default)
         appState.guideChannelFilter = ""
+        appState.guideGroupFilter = nil
         appState.searchQuery = ""
     }
 

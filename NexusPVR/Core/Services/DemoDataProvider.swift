@@ -35,23 +35,39 @@ struct DemoDataProvider {
     // MARK: - Channels
 
     static let channels: [Channel] = [
-        Channel(id: 1001, name: "SportsCenter HD", number: 1, hasIcon: true),
-        Channel(id: 1002, name: "News 24/7", number: 2, hasIcon: true),
-        Channel(id: 1003, name: "Hockey Night", number: 3, hasIcon: true),
-        Channel(id: 1004, name: "The Movie Channel", number: 4, hasIcon: true),
-        Channel(id: 1005, name: "Comedy Gold", number: 5, hasIcon: true),
-        Channel(id: 1006, name: "Nature & Discovery", number: 6, hasIcon: true),
-        Channel(id: 1007, name: "Premier League TV", number: 7, hasIcon: true),
-        Channel(id: 1008, name: "Breaking News Now", number: 8, hasIcon: true),
-        Channel(id: 1009, name: "Sci-Fi Universe", number: 9, hasIcon: true),
-        Channel(id: 1010, name: "Food Network Plus", number: 10, hasIcon: true),
-        Channel(id: 1011, name: "Classic TV", number: 11, hasIcon: true),
-        Channel(id: 1012, name: "Kids & Family", number: 12, hasIcon: true),
-        Channel(id: 1013, name: "Music Television", number: 13, hasIcon: true),
-        Channel(id: 1014, name: "True Crime", number: 14, hasIcon: true),
-        Channel(id: 1015, name: "Travel & Adventure", number: 15, hasIcon: true),
-        Channel(id: 1016, name: "History Channel", number: 16, hasIcon: true),
-        Channel(id: 1017, name: "Public Broadcasting", number: 17, hasIcon: true),
+        Channel(id: 1001, name: "SportsCenter HD", number: 1, hasIcon: true, groupId: 1),
+        Channel(id: 1002, name: "News 24/7", number: 2, hasIcon: true, groupId: 2),
+        Channel(id: 1003, name: "Hockey Night", number: 3, hasIcon: true, groupId: 1),
+        Channel(id: 1004, name: "The Movie Channel", number: 4, hasIcon: true, groupId: 3),
+        Channel(id: 1005, name: "Comedy Gold", number: 5, hasIcon: true, groupId: 3),
+        Channel(id: 1006, name: "Nature & Discovery", number: 6, hasIcon: true, groupId: 4),
+        Channel(id: 1007, name: "Premier League TV", number: 7, hasIcon: true, groupId: 1),
+        Channel(id: 1008, name: "Breaking News Now", number: 8, hasIcon: true, groupId: 2),
+        Channel(id: 1009, name: "Sci-Fi Universe", number: 9, hasIcon: true, groupId: 3),
+        Channel(id: 1010, name: "Food Network Plus", number: 10, hasIcon: true, groupId: 4),
+        Channel(id: 1011, name: "Classic TV", number: 11, hasIcon: true, groupId: 3),
+        Channel(id: 1012, name: "Kids & Family", number: 12, hasIcon: true, groupId: 5),
+        Channel(id: 1013, name: "Music Television", number: 13, hasIcon: true, groupId: 3),
+        Channel(id: 1014, name: "True Crime", number: 14, hasIcon: true, groupId: 4),
+        Channel(id: 1015, name: "Travel & Adventure", number: 15, hasIcon: true, groupId: 4),
+        Channel(id: 1016, name: "History Channel", number: 16, hasIcon: true, groupId: 4),
+        Channel(id: 1017, name: "Public Broadcasting", number: 17, hasIcon: true, groupId: 5),
+    ]
+
+    // MARK: - Channel Profiles & Groups
+
+    static let channelProfiles: [ChannelProfile] = [
+        ChannelProfile(id: 1, name: "Sports", channels: [1001, 1003, 1007]),
+        ChannelProfile(id: 2, name: "News & Info", channels: [1002, 1008, 1017]),
+        ChannelProfile(id: 3, name: "Entertainment", channels: [1004, 1005, 1009, 1011, 1013]),
+    ]
+
+    static let channelGroups: [ChannelGroup] = [
+        ChannelGroup(id: 1, name: "Sports"),
+        ChannelGroup(id: 2, name: "News"),
+        ChannelGroup(id: 3, name: "Entertainment"),
+        ChannelGroup(id: 4, name: "Documentary & Lifestyle"),
+        ChannelGroup(id: 5, name: "Family"),
     ]
 
     // MARK: - Channel Icons
