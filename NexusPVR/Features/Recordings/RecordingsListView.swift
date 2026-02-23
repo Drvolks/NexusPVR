@@ -49,7 +49,8 @@ private struct RecordingsListContentView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Tab picker
+                // Tab picker (tvOS and macOS only — iOS uses floating nav bar picker)
+                #if os(tvOS)
                 Picker("Filter", selection: $viewModel.filter) {
                     if viewModel.hasActiveRecordings {
                         Text("Recording").tag(RecordingsFilter.recording)
@@ -59,16 +60,28 @@ private struct RecordingsListContentView: View {
                 }
                 .pickerStyle(.segmented)
                 .accessibilityIdentifier("recordings-filter")
-                #if os(tvOS)
                 .onMoveCommand { direction in
                     if direction == .up {
                         requestNavBarFocus()
                     }
                 }
-                #endif
                 .padding(.horizontal)
                 .padding(.vertical, Theme.spacingSM)
                 .background(Theme.background)
+                #elseif os(macOS)
+                Picker("Filter", selection: $viewModel.filter) {
+                    if viewModel.hasActiveRecordings {
+                        Text("Recording").tag(RecordingsFilter.recording)
+                    }
+                    Text("Completed").tag(RecordingsFilter.completed)
+                    Text("Scheduled").tag(RecordingsFilter.scheduled)
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("recordings-filter")
+                .padding(.horizontal)
+                .padding(.vertical, Theme.spacingSM)
+                .background(Theme.background)
+                #endif
 
                 // Content
                 Group {
@@ -116,7 +129,18 @@ private struct RecordingsListContentView: View {
         .background(Theme.background)
         .task {
             await viewModel.loadRecordings()
+            #if os(iOS)
+            appState.recordingsHasActive = viewModel.hasActiveRecordings
+            #endif
         }
+        #if os(iOS)
+        .onChange(of: appState.recordingsFilter) {
+            viewModel.filter = appState.recordingsFilter
+        }
+        .onChange(of: viewModel.hasActiveRecordings) {
+            appState.recordingsHasActive = viewModel.hasActiveRecordings
+        }
+        #endif
         .onReceive(NotificationCenter.default.publisher(for: .recordingsDidChange)) { _ in
             Task {
                 await viewModel.loadRecordings()

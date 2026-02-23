@@ -79,6 +79,11 @@ struct GuideView: View {
                 keywords = UserPreferences.load().keywords
                 await viewModel.loadData(using: client, epgCache: epgCache)
                 viewModel.updateKeywordMatches(keywords: keywords)
+                #if os(iOS)
+                if !appState.guideChannelFilter.isEmpty {
+                    viewModel.channelSearchText = appState.guideChannelFilter
+                }
+                #endif
             }
             .onChange(of: viewModel.channelSearchText) {
                 viewModel.updateKeywordMatches(keywords: keywords)
@@ -86,6 +91,11 @@ struct GuideView: View {
             .onChange(of: epgCache.isFullyLoaded) {
                 viewModel.updateKeywordMatches(keywords: keywords)
             }
+            #if os(iOS)
+            .onChange(of: appState.guideChannelFilter) {
+                viewModel.channelSearchText = appState.guideChannelFilter
+            }
+            #endif
             .onChange(of: scenePhase) {
                 if scenePhase == .active {
                     Task { await refreshRecordings() }
@@ -97,11 +107,7 @@ struct GuideView: View {
 
     private var contentView: some View {
         VStack(spacing: 0) {
-            #if os(iOS)
-            iOSNavigationBar
-                // Extra padding for Dynamic Island on iPhone (compact width)
-                .padding(.top, horizontalSizeClass == .compact ? 16 : 0)
-            #elseif os(macOS)
+            #if os(macOS)
             iOSNavigationBar
             #endif
 
@@ -118,7 +124,13 @@ struct GuideView: View {
             }
         }
         #if os(iOS)
-        .safeAreaPadding(.top)
+        .overlay(alignment: .top) {
+            iOSNavigationBar
+                .padding(.top, UIDevice.current.userInterfaceIdiom == .phone ? 30 : 0)
+        }
+        #endif
+        #if os(iOS)
+        .safeAreaPadding(.top, 0)
         #endif
     }
 
@@ -172,6 +184,39 @@ struct GuideView: View {
     #if !os(tvOS)
     private var iOSNavigationBar: some View {
         VStack(spacing: 0) {
+            #if os(iOS)
+            HStack(spacing: 8) {
+                Button {
+                    viewModel.previousDay()
+                    Task { await viewModel.navigateToDate(using: client) }
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Theme.accent)
+                        .frame(width: 32, height: 32)
+                }
+
+                Text(viewModel.selectedDate, format: .dateTime.month(.abbreviated).day())
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Theme.textPrimary)
+
+                Button {
+                    viewModel.nextDay()
+                    Task { await viewModel.navigateToDate(using: client) }
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Theme.accent)
+                        .frame(width: 32, height: 32)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
+            .background(.ultraThinMaterial)
+            .clipShape(Capsule())
+            .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 2)
+            .padding(.vertical, Theme.spacingSM)
+            #else
             HStack(spacing: Theme.spacingMD) {
                 Button {
                     viewModel.previousDay()
@@ -205,7 +250,9 @@ struct GuideView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, Theme.spacingSM)
             .background(Theme.surface)
+            #endif
 
+            #if os(macOS)
             if viewModel.showChannelSearch {
                 HStack(spacing: Theme.spacingSM) {
                     Image(systemName: "magnifyingglass")
@@ -226,6 +273,7 @@ struct GuideView: View {
                 .padding(.vertical, Theme.spacingSM)
                 .background(Theme.surface)
             }
+            #endif
         }
     }
     #endif
@@ -345,6 +393,11 @@ struct GuideView: View {
                         }
                     }
                     .frame(height: 0)
+
+                    #if os(iOS)
+                    // Top padding so first row isn't behind the floating date pill
+                    Color.clear.frame(height: UIDevice.current.userInterfaceIdiom == .phone ? 80 : 55)
+                    #endif
 
                     ForEach(viewModel.channels) { channel in
                         ZStack(alignment: .leading) {

@@ -13,20 +13,27 @@ struct TopicsView: View {
     @EnvironmentObject private var epgCache: EPGCache
     @StateObject private var viewModel = TopicsViewModel()
     @State private var selectedProgramDetail: ProgramTopicDetail?
-    @State private var selectedKeyword: String = ""
     @State private var refreshTrigger = UUID()
-    @State private var showingKeywordsEditor = false
     @Environment(\.scenePhase) private var scenePhase
     #if os(tvOS)
+    @State private var selectedKeyword: String = ""
+    @State private var showingKeywordsEditor = false
     @State private var newKeyword = ""
     @Environment(\.requestNavBarFocus) private var requestNavBarFocus
     private let manageTag = "__manage__"
     #endif
 
+    #if os(tvOS)
     private var filteredPrograms: [MatchingProgram] {
         guard !selectedKeyword.isEmpty else { return viewModel.matchingPrograms }
         return viewModel.matchingPrograms.filter { $0.matchedKeyword == selectedKeyword }
     }
+    #else
+    private var filteredPrograms: [MatchingProgram] {
+        guard !appState.selectedTopicKeyword.isEmpty else { return viewModel.matchingPrograms }
+        return viewModel.matchingPrograms.filter { $0.matchedKeyword == appState.selectedTopicKeyword }
+    }
+    #endif
 
     var body: some View {
         NavigationStack {
@@ -49,10 +56,10 @@ struct TopicsView: View {
                 .padding(.horizontal)
                 .padding(.vertical, Theme.spacingSM)
                 .background(Theme.background)
-                #else
+                #elseif os(macOS)
                 if !viewModel.keywords.isEmpty {
                     HStack {
-                        Picker("Topic", selection: $selectedKeyword) {
+                        Picker("Topic", selection: $appState.selectedTopicKeyword) {
                             ForEach(viewModel.keywords, id: \.self) { keyword in
                                 Text(keyword).tag(keyword)
                             }
@@ -61,15 +68,13 @@ struct TopicsView: View {
                         .labelsHidden()
                         .accessibilityIdentifier("keyword-tabs")
 
-                        #if os(macOS)
                         Spacer()
                         Button {
-                            showingKeywordsEditor = true
+                            appState.showingKeywordsEditor = true
                         } label: {
                             Image(systemName: "pencil")
                         }
                         .accessibilityIdentifier("edit-keywords-button")
-                        #endif
                     }
                     .padding(.horizontal)
                     .padding(.vertical, Theme.spacingSM)
@@ -95,18 +100,6 @@ struct TopicsView: View {
                 .environmentObject(client)
                 .environmentObject(appState)
             }
-            #if os(iOS)
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showingKeywordsEditor = true
-                    } label: {
-                        Image(systemName: "pencil")
-                    }
-                    .accessibilityIdentifier("edit-keywords-button")
-                }
-            }
-            #endif
             .onChange(of: viewModel.keywords) {
                 #if os(tvOS)
                 if selectedKeyword.isEmpty {
@@ -115,15 +108,16 @@ struct TopicsView: View {
                     selectedKeyword = viewModel.keywords.first ?? manageTag
                 }
                 #else
-                if selectedKeyword.isEmpty, let first = viewModel.keywords.first {
-                    selectedKeyword = first
+                appState.topicKeywords = viewModel.keywords
+                if appState.selectedTopicKeyword.isEmpty, let first = viewModel.keywords.first {
+                    appState.selectedTopicKeyword = first
                 }
                 #endif
             }
         }
         .background(Theme.background)
         #if !os(tvOS)
-        .sheet(isPresented: $showingKeywordsEditor) {
+        .sheet(isPresented: $appState.showingKeywordsEditor) {
             KeywordsEditorView()
                 .onDisappear {
                     Task {
@@ -138,6 +132,12 @@ struct TopicsView: View {
         .task {
             viewModel.epgCache = epgCache
             await viewModel.loadData()
+            #if !os(tvOS)
+            appState.topicKeywords = viewModel.keywords
+            if appState.selectedTopicKeyword.isEmpty, let first = viewModel.keywords.first {
+                appState.selectedTopicKeyword = first
+            }
+            #endif
         }
         .onChange(of: scenePhase) {
             if scenePhase == .active {
@@ -189,7 +189,11 @@ struct TopicsView: View {
                 .multilineTextAlignment(.center)
 
             Button {
+                #if os(tvOS)
                 showingKeywordsEditor = true
+                #else
+                appState.showingKeywordsEditor = true
+                #endif
             } label: {
                 HStack {
                     Image(systemName: "pencil")
@@ -238,10 +242,17 @@ struct TopicsView: View {
             Text("No Matching Programs")
                 .font(.headline)
                 .foregroundStyle(Theme.textPrimary)
+            #if os(tvOS)
             Text("No upcoming programs match: \(selectedKeyword.isEmpty ? viewModel.keywords.joined(separator: ", ") : selectedKeyword)")
                 .font(.subheadline)
                 .foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center)
+            #else
+            Text("No upcoming programs match: \(appState.selectedTopicKeyword.isEmpty ? viewModel.keywords.joined(separator: ", ") : appState.selectedTopicKeyword)")
+                .font(.subheadline)
+                .foregroundStyle(Theme.textSecondary)
+                .multilineTextAlignment(.center)
+            #endif
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)

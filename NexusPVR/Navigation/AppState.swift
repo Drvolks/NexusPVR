@@ -43,12 +43,35 @@ enum Tab: String, Identifiable {
         cases.append(.settings)
         return cases
     }
+
+    #if os(iOS)
+    /// Tabs shown in the iOS collapsible nav bar (search is integrated into the bar itself)
+    static var iOSTabs: [Tab] {
+        var cases: [Tab] = [.guide, .recordings, .topics]
+        #if DISPATCHERPVR
+        cases.append(.stats)
+        #endif
+        cases.append(.settings)
+        return cases
+    }
+    #endif
 }
 
 @MainActor
 final class AppState: ObservableObject {
     @Published var selectedTab: Tab = .guide
+    @Published var searchQuery: String = ""
+    @Published var guideChannelFilter: String = ""
     @Published var isShowingPlayer = false
+
+    // Topic picker state (shared between TopicsView and iOS nav bar)
+    @Published var topicKeywords: [String] = []
+    @Published var selectedTopicKeyword: String = ""
+    @Published var showingKeywordsEditor = false
+
+    // Recordings filter state (shared between RecordingsListView and iOS nav bar)
+    @Published var recordingsFilter: RecordingsFilter = .completed
+    @Published var recordingsHasActive = false
     @Published var currentlyPlayingURL: URL?
     @Published var currentlyPlayingTitle: String?
     @Published var currentlyPlayingRecordingId: Int?

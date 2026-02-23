@@ -207,6 +207,29 @@ final class EPGCache: ObservableObject {
         return results
     }
 
+    func searchProgramsCount(query: String) async -> Int {
+        let q = query.lowercased()
+        let epg = self.epg
+
+        return await Task.detached(priority: .userInitiated) {
+            var count = 0
+            for (_, programs) in epg {
+                guard !Task.isCancelled else { return 0 }
+                for program in programs {
+                    let text = [
+                        program.name,
+                        program.subtitle ?? "",
+                        program.desc ?? ""
+                    ].joined(separator: " ").lowercased()
+                    if text.contains(q) {
+                        count += 1
+                    }
+                }
+            }
+            return count
+        }.value
+    }
+
     // MARK: - Topic Matching
 
     func matchingPrograms(keywords: [String]) async -> [MatchingProgram] {

@@ -51,53 +51,107 @@ struct NavigationRouter: View {
 struct IOSNavigation: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var client: PVRClient
+    @EnvironmentObject private var epgCache: EPGCache
+
+    @State private var isNavExpanded = false
+    @State private var searchText = ""
+    @State private var showSearchDropdown = false
+    @State private var channelMatchCount = 0
+    @State private var programMatchCount = 0
+    @State private var searchDebounceTask: Task<Void, Never>?
+    @State private var lastSearchedText = ""
+    @FocusState private var isSearchFocused: Bool
 
     var body: some View {
-        // Content area with safe area inset for custom tab bar
-        Group {
-            switch appState.selectedTab {
-            case .guide:
-                GuideView()
-            case .topics:
-                TopicsView()
-            case .search:
-                SearchView()
-            case .recordings:
-                RecordingsListView()
-            #if DISPATCHERPVR
-            case .stats:
-                StatsView()
-            #endif
-            case .settings:
-                SettingsView()
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .safeAreaInset(edge: .bottom) {
-            // Custom tab bar
-            HStack(spacing: 0) {
-                ForEach(Tab.allCases) { tab in
-                    Button {
-                        appState.selectedTab = tab
-                    } label: {
-                        VStack(spacing: 4) {
-                            Image(systemName: tab.icon)
-                                .font(.system(size: 22))
-                                .overlay(alignment: .topTrailing) {
-                                    tabBadge(for: tab)
-                                }
-                            Text(tab.label)
-                                .font(.caption2)
-                        }
-                        .foregroundStyle(appState.selectedTab == tab ? Theme.accent : Theme.textSecondary)
-                        .frame(maxWidth: .infinity)
-                    }
-                    .accessibilityIdentifier("tab-\(tab.rawValue)")
+        ZStack(alignment: .bottom) {
+            // Content area
+            Group {
+                switch appState.selectedTab {
+                case .guide:
+                    GuideView()
+                case .topics:
+                    TopicsView()
+                case .search:
+                    SearchView()
+                case .recordings:
+                    RecordingsListView()
+                #if DISPATCHERPVR
+                case .stats:
+                    StatsView()
+                #endif
+                case .settings:
+                    SettingsView()
                 }
             }
-            .padding(.top, 8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .safeAreaInset(edge: .top) {
+                Color.clear.frame(height: 16)
+            }
+            .safeAreaInset(edge: .bottom) {
+                Color.clear.frame(height: 64)
+            }
+
+            // Dismiss layer when dropdown or expanded
+            if showSearchDropdown || isNavExpanded {
+                Color.black.opacity(0.01)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showSearchDropdown = false
+                            isNavExpanded = false
+                            isSearchFocused = false
+                        }
+                    }
+            }
+
+            // Floating nav bar
+            VStack(spacing: 6) {
+                // Search dropdown (above the bar)
+                if showSearchDropdown {
+                    searchDropdown
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        .padding(.horizontal, Theme.spacingMD)
+                }
+
+                // Bottom row: menu pill (left) + search bar (right)
+                HStack(spacing: 10) {
+                    // Menu pill — expands to include tabs
+                    menuPill
+
+                    // Search bar — on guide and search tabs, hides when menu is expanded
+                    if !isNavExpanded && (appState.selectedTab == .guide || appState.selectedTab == .search) {
+                        searchBar
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .trailing).combined(with: .opacity),
+                                removal: .move(edge: .trailing).combined(with: .opacity)
+                            ))
+                    }
+
+                    // Topic picker — only on topics tab
+                    if !isNavExpanded && appState.selectedTab == .topics && !appState.topicKeywords.isEmpty {
+                        topicPicker
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .trailing).combined(with: .opacity),
+                                removal: .move(edge: .trailing).combined(with: .opacity)
+                            ))
+                    }
+
+                    // Recordings filter — only on recordings tab
+                    if !isNavExpanded && appState.selectedTab == .recordings {
+                        recordingsFilterPicker
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .trailing).combined(with: .opacity),
+                                removal: .move(edge: .trailing).combined(with: .opacity)
+                            ))
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, Theme.spacingMD)
+            }
             .padding(.bottom, 8)
-            .background(Theme.surface)
+            .animation(.spring(response: 0.4, dampingFraction: 0.82), value: isNavExpanded)
+            .animation(.spring(response: 0.3, dampingFraction: 0.85), value: showSearchDropdown)
         }
         .background(Theme.background)
         .fullScreenCover(isPresented: $appState.isShowingPlayer) {
@@ -110,7 +164,329 @@ struct IOSNavigation: View {
                 )
             }
         }
+        .onChange(of: searchText) { oldValue, newValue in
+            searchDebounceTask?.cancel()
+            // When on search tab, drive SearchView directly — no dropdown
+            if appState.selectedTab == .search {
+                appState.searchQuery = newValue
+                showSearchDropdown = false
+                return
+            }
+            if newValue.count < 2 {
+                showSearchDropdown = false
+                channelMatchCount = 0
+                programMatchCount = 0
+                lastSearchedText = ""
+                return
+            }
+            // Don't re-trigger if text hasn't actually changed (spurious re-fire)
+            guard newValue != lastSearchedText else { return }
+            searchDebounceTask = Task {
+                try? await Task.sleep(for: .milliseconds(300))
+                guard !Task.isCancelled else { return }
+                let channels = epgCache.filteredChannels(matching: newValue).count
+                let programs = await epgCache.searchProgramsCount(query: newValue)
+                guard !Task.isCancelled else { return }
+                channelMatchCount = channels
+                programMatchCount = programs
+                lastSearchedText = newValue
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showSearchDropdown = true
+                    isNavExpanded = false
+                }
+            }
+        }
+        .onChange(of: appState.selectedTab) {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                showSearchDropdown = false
+            }
+        }
+        .background {
+            Button("") {
+                if appState.selectedTab == .guide || appState.selectedTab == .search {
+                    isSearchFocused = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        UIApplication.shared.sendAction(#selector(UIResponder.selectAll(_:)), to: nil, from: nil, for: nil)
+                    }
+                }
+            }
+            .keyboardShortcut("f", modifiers: .command)
+            .hidden()
+        }
     }
+
+    // MARK: - Menu Pill (expands to show tabs)
+
+    private var menuPill: some View {
+        HStack(spacing: 0) {
+            // Menu icon — visible only when collapsed
+            if !isNavExpanded {
+                Button {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) {
+                        isNavExpanded = true
+                        showSearchDropdown = false
+                        isSearchFocused = false
+                    }
+                } label: {
+                    Image(systemName: appState.selectedTab.icon)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Theme.accent)
+                        .frame(width: 44, height: 44)
+                        .overlay(alignment: .topTrailing) {
+                            tabBadge(for: appState.selectedTab)
+                        }
+                }
+                .accessibilityIdentifier("nav-expand-button")
+                .transition(.opacity)
+            }
+
+            // Tab buttons — appear when expanded
+            if isNavExpanded {
+                HStack(spacing: 0) {
+                    ForEach(Tab.iOSTabs) { tab in
+                        Button {
+                            appState.selectedTab = tab
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) {
+                                isNavExpanded = false
+                            }
+                        } label: {
+                            VStack(spacing: 3) {
+                                Image(systemName: tab.icon)
+                                    .font(.system(size: 17))
+                                    .overlay(alignment: .topTrailing) {
+                                        tabBadge(for: tab)
+                                    }
+                                Text(tab.label)
+                                    .font(.system(size: 10))
+                            }
+                            .foregroundStyle(appState.selectedTab == tab ? Theme.accent : Theme.textSecondary)
+                            .frame(maxWidth: .infinity)
+                        }
+                        .accessibilityIdentifier("tab-\(tab.rawValue)")
+                    }
+                }
+                .padding(.trailing, 8)
+                .padding(.vertical, 6)
+                .transition(.opacity.combined(with: .scale(scale: 0.5, anchor: .leading)))
+            }
+        }
+        .background(.ultraThinMaterial)
+        .clipShape(Capsule())
+        .shadow(color: .black.opacity(0.25), radius: 12, x: 0, y: 4)
+    }
+
+    // MARK: - Recordings Filter Picker
+
+    private var recordingsFilterPicker: some View {
+        Menu {
+            if appState.recordingsHasActive {
+                Button {
+                    appState.recordingsFilter = .recording
+                } label: {
+                    HStack {
+                        Text("Recording")
+                        if appState.recordingsFilter == .recording {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+            Button {
+                appState.recordingsFilter = .completed
+            } label: {
+                HStack {
+                    Text("Completed")
+                    if appState.recordingsFilter == .completed {
+                        Image(systemName: "checkmark")
+                    }
+                }
+            }
+            Button {
+                appState.recordingsFilter = .scheduled
+            } label: {
+                HStack {
+                    Text("Scheduled")
+                    if appState.recordingsFilter == .scheduled {
+                        Image(systemName: "checkmark")
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(appState.recordingsFilter.rawValue)
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.textTertiary)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(.ultraThinMaterial)
+            .clipShape(Capsule())
+            .shadow(color: .black.opacity(0.25), radius: 12, x: 0, y: 4)
+        }
+        .accessibilityIdentifier("recordings-filter")
+    }
+
+    // MARK: - Search Bar
+
+    private var searchBar: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.textTertiary)
+
+            TextField("Search...", text: $searchText)
+                .font(.subheadline)
+                .textFieldStyle(.plain)
+                .focused($isSearchFocused)
+                .submitLabel(.search)
+                .onSubmit {
+                    if searchText.count >= 2 {
+                        appState.searchQuery = searchText
+                        appState.selectedTab = .search
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showSearchDropdown = false
+                            isSearchFocused = false
+                        }
+                    }
+                }
+
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                    showSearchDropdown = false
+                    isSearchFocused = false
+                    appState.guideChannelFilter = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 15))
+                        .foregroundStyle(Theme.textTertiary)
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial)
+        .clipShape(Capsule())
+        .shadow(color: .black.opacity(0.25), radius: 12, x: 0, y: 4)
+    }
+
+    // MARK: - Topic Picker
+
+    private var topicPicker: some View {
+        HStack(spacing: 10) {
+            Menu {
+                ForEach(appState.topicKeywords, id: \.self) { keyword in
+                    Button {
+                        appState.selectedTopicKeyword = keyword
+                    } label: {
+                        HStack {
+                            Text(keyword)
+                            if keyword == appState.selectedTopicKeyword {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(appState.selectedTopicKeyword.isEmpty ? "All Topics" : appState.selectedTopicKeyword)
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.textPrimary)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.textTertiary)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(.ultraThinMaterial)
+                .clipShape(Capsule())
+                .shadow(color: .black.opacity(0.25), radius: 12, x: 0, y: 4)
+            }
+            .accessibilityIdentifier("keyword-tabs")
+
+            Button {
+                appState.showingKeywordsEditor = true
+            } label: {
+                Image(systemName: "pencil")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Theme.accent)
+                    .frame(width: 44, height: 44)
+            }
+            .background(.ultraThinMaterial)
+            .clipShape(Circle())
+            .shadow(color: .black.opacity(0.25), radius: 12, x: 0, y: 4)
+            .accessibilityIdentifier("edit-keywords-button")
+        }
+    }
+
+    // MARK: - Search Dropdown
+
+    private var searchDropdown: some View {
+        VStack(spacing: 0) {
+            // Channels row
+            Button {
+                searchDebounceTask?.cancel()
+                lastSearchedText = searchText
+                appState.guideChannelFilter = searchText
+                appState.selectedTab = .guide
+                showSearchDropdown = false
+                isSearchFocused = false
+            } label: {
+                HStack {
+                    Image(systemName: "tv")
+                        .foregroundStyle(Theme.accent)
+                        .frame(width: 24)
+                    Text("Channels")
+                        .foregroundStyle(Theme.textPrimary)
+                    Spacer()
+                    Text("(\(channelMatchCount))")
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                .padding(.horizontal, Theme.spacingMD)
+                .padding(.vertical, 12)
+            }
+            .disabled(channelMatchCount == 0)
+
+            Divider().overlay(Theme.surfaceHighlight)
+
+            // Programs row
+            Button {
+                searchDebounceTask?.cancel()
+                lastSearchedText = searchText
+                appState.searchQuery = searchText
+                appState.selectedTab = .search
+                showSearchDropdown = false
+                isSearchFocused = false
+            } label: {
+                HStack {
+                    Image(systemName: "film")
+                        .foregroundStyle(Theme.accent)
+                        .frame(width: 24)
+                    Text("Programs")
+                        .foregroundStyle(Theme.textPrimary)
+                    Spacer()
+                    Text("(\(programMatchCount))")
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                .padding(.horizontal, Theme.spacingMD)
+                .padding(.vertical, 12)
+            }
+            .disabled(programMatchCount == 0)
+
+        }
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.25), radius: 16, x: 0, y: 2)
+    }
+
+    // MARK: - Badge
 
     @ViewBuilder
     private func tabBadge(for tab: Tab) -> some View {

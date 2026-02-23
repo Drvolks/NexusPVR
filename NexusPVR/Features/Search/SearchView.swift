@@ -37,9 +37,7 @@ struct SearchView: View {
             .safeAreaInset(edge: .top) {
                 tvSearchBar
             }
-            #elseif os(iOS)
-            .searchable(text: $viewModel.searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search programs")
-            #else
+            #elseif os(macOS)
             .searchable(text: $viewModel.searchText, prompt: "Search programs")
             #endif
             .sheet(item: $selectedProgramDetail) { detail in
@@ -59,6 +57,12 @@ struct SearchView: View {
         .background(Theme.background)
         .onAppear {
             viewModel.epgCache = epgCache
+            if !appState.searchQuery.isEmpty {
+                viewModel.searchText = appState.searchQuery
+            }
+        }
+        .onChange(of: appState.searchQuery) {
+            viewModel.searchText = appState.searchQuery
         }
     }
 
