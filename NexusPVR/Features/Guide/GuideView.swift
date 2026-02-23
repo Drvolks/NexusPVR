@@ -91,7 +91,7 @@ struct GuideView: View {
                 keywords = UserPreferences.load().keywords
                 await viewModel.loadData(using: client, epgCache: epgCache)
                 viewModel.updateKeywordMatches(keywords: keywords)
-                #if os(iOS)
+                #if !os(tvOS)
                 if !appState.guideChannelFilter.isEmpty {
                     viewModel.channelSearchText = appState.guideChannelFilter
                 }
@@ -106,7 +106,7 @@ struct GuideView: View {
             .onChange(of: epgCache.isFullyLoaded) {
                 viewModel.updateKeywordMatches(keywords: keywords)
             }
-            #if os(iOS)
+            #if !os(tvOS)
             .onChange(of: appState.guideChannelFilter) {
                 viewModel.channelSearchText = appState.guideChannelFilter
             }
@@ -125,10 +125,6 @@ struct GuideView: View {
 
     private var contentView: some View {
         VStack(spacing: 0) {
-            #if os(macOS)
-            iOSNavigationBar
-            #endif
-
             Group {
                 if !epgCache.isFullyLoaded {
                     loadingView
@@ -141,10 +137,12 @@ struct GuideView: View {
                 }
             }
         }
-        #if os(iOS)
+        #if !os(tvOS)
         .overlay(alignment: .top) {
             iOSNavigationBar
+                #if os(iOS)
                 .padding(.top, UIDevice.current.userInterfaceIdiom == .phone ? 30 : 0)
+                #endif
         }
         #endif
         #if os(iOS)
@@ -267,70 +265,87 @@ struct GuideView: View {
             }
             #endif
             #else
-            HStack(spacing: Theme.spacingMD) {
-                Button {
-                    viewModel.previousDay()
-                    Task { await viewModel.navigateToDate(using: client) }
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(Theme.accent)
-                        .frame(width: 36, height: 36)
-                        .background(Theme.surfaceElevated)
-                        .clipShape(Circle())
-                }
-
-                Text(viewModel.selectedDate, format: .dateTime.month(.abbreviated).day())
-                    .font(.headline)
-                    .foregroundStyle(Theme.textPrimary)
-                    .frame(minWidth: 80)
-
-                Button {
-                    viewModel.nextDay()
-                    Task { await viewModel.navigateToDate(using: client) }
-                } label: {
-                    Image(systemName: "chevron.right")
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(Theme.accent)
-                        .frame(width: 36, height: 36)
-                        .background(Theme.surfaceElevated)
-                        .clipShape(Circle())
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, Theme.spacingSM)
-            .background(Theme.surface)
-            #endif
-
-            #if os(macOS)
-            if viewModel.showChannelSearch {
-                HStack(spacing: Theme.spacingSM) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(Theme.textTertiary)
-                    TextField("Filter channels", text: $viewModel.channelSearchText)
-                        .textFieldStyle(.plain)
-                    if !viewModel.channelSearchText.isEmpty {
-                        Button {
-                            viewModel.channelSearchText = ""
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(Theme.textTertiary)
-                        }
-                        .buttonStyle(.plain)
+            HStack {
+                Spacer()
+                HStack(spacing: 8) {
+                    Button {
+                        viewModel.previousDay()
+                        Task { await viewModel.navigateToDate(using: client) }
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Theme.accent)
+                            .frame(width: 32, height: 32)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+
+                    Text(viewModel.selectedDate, format: .dateTime.month(.abbreviated).day())
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Theme.textPrimary)
+
+                    Button {
+                        viewModel.nextDay()
+                        Task { await viewModel.navigateToDate(using: client) }
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Theme.accent)
+                            .frame(width: 32, height: 32)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .padding(.horizontal, Theme.spacingMD)
-                .padding(.vertical, Theme.spacingSM)
-                .background(Theme.surface)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+                .background(.ultraThinMaterial)
+                .clipShape(Capsule())
+                .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 2)
+                Spacer()
+
+                #if DISPATCHERPVR
+                if hasFilterData {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            viewModel.showFilters.toggle()
+                        }
+                    } label: {
+                        Image(systemName: viewModel.hasActiveFilters
+                              ? "line.3.horizontal.decrease.circle.fill"
+                              : "line.3.horizontal.decrease")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(viewModel.hasActiveFilters ? Theme.accent : Theme.textPrimary)
+                            .frame(width: 32, height: 32)
+                            .background(.ultraThinMaterial)
+                            .clipShape(Capsule())
+                            .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 2)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, Theme.spacingSM)
+                }
+                #endif
             }
+            .padding(.horizontal, Theme.spacingMD)
+            .padding(.vertical, Theme.spacingSM)
+
+            #if DISPATCHERPVR
+            if viewModel.showFilters && hasFilterData {
+                filterPanel
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+            #endif
             #endif
         }
     }
     #endif
 
-    #if os(iOS)
+    #if !os(tvOS)
     private var guideTopPadding: CGFloat {
+        #if os(iOS)
         let base: CGFloat = UIDevice.current.userInterfaceIdiom == .phone ? 80 : 55
+        #else
+        let base: CGFloat = 50
+        #endif
         #if DISPATCHERPVR
         if viewModel.showFilters && hasFilterData {
             // Add space for each filter row shown
@@ -522,7 +537,7 @@ struct GuideView: View {
                     }
                     .frame(height: 0)
 
-                    #if os(iOS)
+                    #if !os(tvOS)
                     // Top padding so first row isn't behind the floating date pill + filter panel
                     Color.clear.frame(height: guideTopPadding)
                     #endif

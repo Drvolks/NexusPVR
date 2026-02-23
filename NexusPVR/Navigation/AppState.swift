@@ -55,6 +55,18 @@ enum Tab: String, Identifiable {
         return cases
     }
     #endif
+
+    #if os(macOS)
+    /// Tabs shown in the macOS sidebar (search is integrated into the guide floating bar)
+    static var macOSTabs: [Tab] {
+        var cases: [Tab] = [.guide, .recordings, .topics]
+        #if DISPATCHERPVR
+        cases.append(.stats)
+        #endif
+        cases.append(.settings)
+        return cases
+    }
+    #endif
 }
 
 @MainActor
