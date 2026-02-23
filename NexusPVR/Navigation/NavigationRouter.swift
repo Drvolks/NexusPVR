@@ -637,7 +637,7 @@ struct TVOSNavigation: View {
 
     private var tvOSNavBar: some View {
         HStack(spacing: 0) {
-            ForEach(Tab.allCases) { tab in
+            ForEach(Tab.tvOSTabs) { tab in
                 Button {
                     appState.selectedTab = tab
                     navBarEnabled = false

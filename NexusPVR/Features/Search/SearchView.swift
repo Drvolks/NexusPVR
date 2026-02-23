@@ -59,10 +59,14 @@ struct SearchView: View {
             viewModel.epgCache = epgCache
             if !appState.searchQuery.isEmpty {
                 viewModel.searchText = appState.searchQuery
+                viewModel.search()
             }
         }
         .onChange(of: appState.searchQuery) {
             viewModel.searchText = appState.searchQuery
+            if !appState.searchQuery.isEmpty {
+                viewModel.search()
+            }
         }
     }
 

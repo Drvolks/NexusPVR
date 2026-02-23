@@ -67,6 +67,18 @@ enum Tab: String, Identifiable {
         return cases
     }
     #endif
+
+    #if os(tvOS)
+    /// Tabs shown in the tvOS nav bar (search is integrated into the guide filter panel)
+    static var tvOSTabs: [Tab] {
+        var cases: [Tab] = [.guide, .recordings, .topics]
+        #if DISPATCHERPVR
+        cases.append(.stats)
+        #endif
+        cases.append(.settings)
+        return cases
+    }
+    #endif
 }
 
 @MainActor
