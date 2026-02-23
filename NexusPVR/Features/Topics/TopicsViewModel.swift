@@ -8,7 +8,7 @@
 import SwiftUI
 import Combine
 
-struct MatchingProgram: Identifiable {
+nonisolated struct MatchingProgram: Identifiable, Sendable {
     var id: String { "\(program.id)-\(channel.id)" }
     let program: Program
     let channel: Channel
@@ -32,8 +32,11 @@ final class TopicsViewModel: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
+            guard let self else { return }
             let prefs = UserPreferences.load()
-            self?.keywords = prefs.keywords
+            Task { @MainActor [weak self] in
+                self?.keywords = prefs.keywords
+            }
         }
     }
 

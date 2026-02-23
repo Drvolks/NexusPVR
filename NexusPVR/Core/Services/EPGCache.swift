@@ -27,7 +27,7 @@ final class EPGCache: ObservableObject {
     private var backgroundLoadTask: Task<Void, Never>?
     private var isLoadInProgress = false
 
-    private static let dayFormatter: DateFormatter = {
+    nonisolated private static let dayFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
         f.timeZone = Calendar.current.timeZone

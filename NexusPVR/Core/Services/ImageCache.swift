@@ -8,7 +8,7 @@
 import SwiftUI
 
 /// Thread-safe in-memory image cache using NSCache
-final class ImageCache: @unchecked Sendable {
+nonisolated final class ImageCache: @unchecked Sendable {
     static let shared = ImageCache()
 
     private let cache = NSCache<NSString, PlatformImage>()
@@ -20,13 +20,13 @@ final class ImageCache: @unchecked Sendable {
         cache.countLimit = 100
     }
 
-    func image(for url: URL) -> PlatformImage? {
+    nonisolated func image(for url: URL) -> PlatformImage? {
         lock.lock()
         defer { lock.unlock() }
         return cache.object(forKey: url.absoluteString as NSString)
     }
 
-    func setImage(_ image: PlatformImage, for url: URL) {
+    nonisolated func setImage(_ image: PlatformImage, for url: URL) {
         lock.lock()
         defer { lock.unlock() }
         // Estimate cost based on image size
@@ -84,7 +84,7 @@ import AppKit
 typealias PlatformImage = NSImage
 
 extension NSImage {
-    var size: CGSize {
+    nonisolated var size: CGSize {
         let rep = representations.first
         return CGSize(width: rep?.pixelsWide ?? 0, height: rep?.pixelsHigh ?? 0)
     }

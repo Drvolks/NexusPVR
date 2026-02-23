@@ -8,7 +8,7 @@
 import SwiftUI
 import Combine
 
-struct SearchResult: Identifiable {
+nonisolated struct SearchResult: Identifiable, Sendable {
     var id: String { "\(program.id)-\(channel.id)" }
     let program: Program
     let channel: Channel

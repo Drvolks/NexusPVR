@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-protocol BrandConfig {
+nonisolated protocol BrandConfig {
     // App identity
     static var appName: String { get }
     static var serverName: String { get }
@@ -45,7 +45,7 @@ protocol BrandConfig {
     static var guideNowPlaying: Color { get }
 }
 
-enum AuthType {
+nonisolated enum AuthType {
     case pin
     case usernamePassword
 }

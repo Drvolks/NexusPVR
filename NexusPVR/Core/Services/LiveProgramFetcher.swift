@@ -219,7 +219,7 @@ enum LiveProgramFetcher {
         return try JSONDecoder().decode(TokenResponse.self, from: data).access
     }
 
-    private struct SimpleChannel: Decodable {
+    private nonisolated struct SimpleChannel: Decodable {
         let id: Int
         let name: String
         let tvgId: String?
@@ -246,12 +246,12 @@ enum LiveProgramFetcher {
         }
     }
 
-    private struct SimpleEPGData: Decodable {
+    private nonisolated struct SimpleEPGData: Decodable {
         let tvgId: String?
         enum CodingKeys: String, CodingKey { case tvgId = "tvg_id" }
     }
 
-    private struct SimpleProgram: Decodable {
+    private nonisolated struct SimpleProgram: Decodable {
         let id: Int
         let title: String
         let subTitle: String?
@@ -299,7 +299,7 @@ enum LiveProgramFetcher {
         }
     }
 
-    private struct PaginatedResponse<T: Decodable>: Decodable {
+    private nonisolated struct PaginatedResponse<T: Decodable>: Decodable {
         let results: [T]?
         let data: [T]?
         let next: String?

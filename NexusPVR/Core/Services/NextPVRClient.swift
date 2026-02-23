@@ -277,7 +277,7 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
 
     func setRecordingPosition(recordingId: Int, positionSeconds: Int) async throws {
         guard !config.isDemoMode else { return }
-        let response: APIResponse = try await request("recording.watched.set", params: [
+        let _: APIResponse = try await request("recording.watched.set", params: [
             "recording_id": String(recordingId),
             "position": String(positionSeconds)
         ])

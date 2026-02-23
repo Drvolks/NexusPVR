@@ -62,11 +62,12 @@ final class LiveTVViewModel: ObservableObject {
     private func loadCurrentPrograms() async {
         let now = Date()
 
+        let client = self.client
         await withTaskGroup(of: (Int, Program?).self) { group in
             for channel in channels.prefix(50) { // Limit to first 50 to avoid overloading
                 group.addTask {
                     do {
-                        let listings = try await self.client.getListings(channelId: channel.id)
+                        let listings = try await client.getListings(channelId: channel.id)
                         let currentProgram = listings.first { program in
                             program.startDate <= now && program.endDate > now
                         }

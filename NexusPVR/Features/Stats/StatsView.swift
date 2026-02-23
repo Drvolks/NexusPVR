@@ -56,7 +56,7 @@ struct StatsView: View {
         }
         .background(Theme.background)
         .task {
-            vm.startRefreshing(client: client as! DispatcherClient, appState: appState)
+            vm.startRefreshing(client: client, appState: appState)
         }
         .onDisappear {
             vm.stopRefreshing()
@@ -101,7 +101,7 @@ struct StatsView: View {
         }
         .background(Theme.background)
         .task {
-            vm.startRefreshing(client: client as! DispatcherClient, appState: appState)
+            vm.startRefreshing(client: client, appState: appState)
         }
         .onDisappear {
             vm.stopRefreshing()

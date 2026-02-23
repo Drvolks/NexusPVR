@@ -263,7 +263,7 @@ struct SportIconView: View {
             ForEach(Sport.allCases, id: \.self) { sport in
                 VStack(spacing: 4) {
                     SportIconView(sport: sport)
-                    Text("\(sport)")
+                    Text(String(describing: sport))
                         .font(.caption2)
                         .foregroundStyle(Theme.textSecondary)
                 }

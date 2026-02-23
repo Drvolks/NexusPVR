@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum RecordingStatus: String, Codable {
+nonisolated enum RecordingStatus: String, Codable {
     case pending = "pending"
     case recording = "recording"
     case ready = "ready"
@@ -39,7 +39,7 @@ enum RecordingStatus: String, Codable {
     }
 }
 
-struct Recording: Identifiable, Codable, Hashable {
+nonisolated struct Recording: Identifiable, Codable, Hashable {
     let id: Int
     let name: String
     let subtitle: String?
@@ -133,7 +133,7 @@ struct Recording: Identifiable, Codable, Hashable {
     }
 }
 
-struct RecordingListResponse: Codable {
+nonisolated struct RecordingListResponse: Codable {
     let recordings: [Recording]?
 }
 

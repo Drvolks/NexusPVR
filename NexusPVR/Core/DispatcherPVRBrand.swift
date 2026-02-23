@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-enum DispatcherPVRBrand: BrandConfig {
+nonisolated enum DispatcherPVRBrand: BrandConfig {
     // App identity
     static let appName = "Dispatcharr Client"
     static let serverName = "Dispatcharr"

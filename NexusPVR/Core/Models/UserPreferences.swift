@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct PlayerStats: Codable {
+nonisolated struct PlayerStats: Codable {
     var avgFps: Double = 0
     var avgBitrateKbps: Double = 0
     var totalDroppedFrames: Int64 = 0
@@ -32,7 +32,7 @@ struct PlayerStats: Codable {
     }
 }
 
-struct UserPreferences: Codable {
+nonisolated struct UserPreferences: Codable {
     var keywords: [String] = []
     var seekBackwardSeconds: Int = 10
     var seekForwardSeconds: Int = 30
@@ -72,7 +72,7 @@ struct UserPreferences: Codable {
     private static let ubiquitousStore = NSUbiquitousKeyValueStore.default
 
     /// In-memory store for demo mode — when set, load/save bypass persistence
-    static var demoStore: UserPreferences?
+    nonisolated(unsafe) static var demoStore: UserPreferences?
 
     static func load() -> UserPreferences {
         if let demo = demoStore { return demo }
@@ -112,7 +112,7 @@ struct UserPreferences: Codable {
         }
     }
 
-    nonisolated static func loadFromAppGroup() -> UserPreferences {
+    static func loadFromAppGroup() -> UserPreferences {
         guard let data = UserDefaults(suiteName: ServerConfig.appGroupSuite)?.data(forKey: storageKey),
               let prefs = try? JSONDecoder().decode(UserPreferences.self, from: data) else {
             return UserPreferences()

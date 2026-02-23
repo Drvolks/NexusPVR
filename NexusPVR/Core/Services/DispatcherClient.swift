@@ -541,17 +541,17 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
 
 // MARK: - API Response Models
 
-private struct TokenResponse: Decodable {
+private nonisolated struct TokenResponse: Decodable {
     let access: String
     let refresh: String
 }
 
-private struct TokenRefreshResponse: Decodable {
+private nonisolated struct TokenRefreshResponse: Decodable {
     let access: String
 }
 
 /// Flexible list response that handles array, { results: [] }, or { data: [] }
-struct DispatcharrListResponse<T: Decodable>: Decodable {
+nonisolated struct DispatcharrListResponse<T: Decodable>: Decodable {
     let results: [T]?
     let data: [T]?
     let count: Int?
@@ -590,7 +590,7 @@ struct DispatcharrListResponse<T: Decodable>: Decodable {
 
 // MARK: - Dispatcharr API Models
 
-struct DispatcharrChannel: Decodable {
+nonisolated struct DispatcharrChannel: Decodable {
     let id: Int
     let name: String
     let channelNumber: Double?
@@ -658,7 +658,7 @@ struct DispatcharrChannel: Decodable {
     }
 }
 
-private struct DispatcharrEPGData: Decodable {
+private nonisolated struct DispatcharrEPGData: Decodable, Sendable {
     let id: Int
     let tvgId: String?
 
@@ -668,7 +668,7 @@ private struct DispatcharrEPGData: Decodable {
     }
 }
 
-struct DispatcharrProgram: Decodable {
+nonisolated struct DispatcharrProgram: Decodable, Sendable {
     let id: Int
     let startTime: String
     let endTime: String
@@ -746,7 +746,7 @@ struct DispatcharrProgram: Decodable {
     }
 }
 
-struct DispatcharrRecording: Decodable {
+nonisolated struct DispatcharrRecording: Decodable {
     let id: Int
     let startTime: String
     let endTime: String
@@ -839,11 +839,11 @@ struct DispatcharrRecording: Decodable {
     }
 }
 
-struct DispatcharrCustomProperties: Codable {
+nonisolated struct DispatcharrCustomProperties: Codable {
     let program: DispatcharrProgramRef?
 }
 
-struct DispatcharrProgramRef: Codable {
+nonisolated struct DispatcharrProgramRef: Codable {
     let id: Int?
     let startTime: String?
     let endTime: String?
@@ -865,7 +865,7 @@ struct DispatcharrProgramRef: Codable {
 
 // MARK: - M3U Account Model
 
-struct M3UAccount: Decodable, Identifiable {
+nonisolated struct M3UAccount: Decodable, Identifiable {
     let id: Int
     let name: String
     let serverUrl: String
@@ -925,12 +925,12 @@ struct M3UAccount: Decodable, Identifiable {
 
 // MARK: - Proxy Status Models
 
-struct ProxyStatusResponse: Decodable {
+nonisolated struct ProxyStatusResponse: Decodable {
     let count: Int?
     let channels: [ProxyChannelStatus]?
 }
 
-struct ProxyChannelStatus: Decodable, Identifiable {
+nonisolated struct ProxyChannelStatus: Decodable, Identifiable {
     var id: String { streamName }
 
     let streamName: String
@@ -965,7 +965,7 @@ struct ProxyChannelStatus: Decodable, Identifiable {
     }
 }
 
-struct ProxyClientInfo: Decodable, Identifiable {
+nonisolated struct ProxyClientInfo: Decodable, Identifiable {
     var id: String { ipAddress + userAgent }
 
     let ipAddress: String
@@ -981,7 +981,7 @@ struct ProxyClientInfo: Decodable, Identifiable {
 
 // MARK: - Recording Request Model
 
-private struct DispatcharrRecordingRequest: Encodable {
+private nonisolated struct DispatcharrRecordingRequest: Encodable {
     let startTime: String
     let endTime: String
     let channel: String

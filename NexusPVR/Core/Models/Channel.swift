@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct Channel: Identifiable, Decodable, Hashable {
+nonisolated struct Channel: Identifiable, Decodable, Hashable, Sendable {
     let id: Int
     let name: String
     let number: Int
@@ -44,6 +44,6 @@ struct Channel: Identifiable, Decodable, Hashable {
     }
 }
 
-struct ChannelListResponse: Decodable {
+nonisolated struct ChannelListResponse: Decodable {
     let channels: [Channel]?
 }

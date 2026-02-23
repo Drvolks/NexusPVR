@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-enum NexusPVRBrand: BrandConfig {
+nonisolated enum NexusPVRBrand: BrandConfig {
     // App identity
     static let appName = "NextPVR Client"
     static let serverName = "NextPVR"

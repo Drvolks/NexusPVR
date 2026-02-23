@@ -7,13 +7,13 @@
 
 import Foundation
 
-struct SessionInitiateResponse: Codable {
+nonisolated struct SessionInitiateResponse: Codable {
     let sid: String?
     let salt: String?
     let stat: String?
 }
 
-struct SessionLoginResponse: Codable {
+nonisolated struct SessionLoginResponse: Codable {
     let stat: String?
     let status: String?
 
@@ -23,7 +23,7 @@ struct SessionLoginResponse: Codable {
     }
 }
 
-struct APIResponse: Codable {
+nonisolated struct APIResponse: Codable {
     let stat: String?
     let status: String?
 
@@ -33,7 +33,7 @@ struct APIResponse: Codable {
     }
 }
 
-struct ServerConfig: Codable, Equatable {
+nonisolated struct ServerConfig: Codable, Equatable {
     var host: String
     var port: Int
     var pin: String
@@ -84,7 +84,7 @@ struct ServerConfig: Codable, Equatable {
     }
 }
 
-extension ServerConfig {
+nonisolated extension ServerConfig {
     private static let storageKey = "ServerConfig"
     private static let ubiquitousStore = NSUbiquitousKeyValueStore.default
 
@@ -100,7 +100,7 @@ extension ServerConfig {
     private static let pinKey = "nextpvr_pin"
     private static let useHTTPSKey = "nextpvr_use_https"
 
-    nonisolated static func load() -> ServerConfig {
+    static func load() -> ServerConfig {
         // Try iCloud first
         if let data = ubiquitousStore.data(forKey: storageKey),
            let config = try? JSONDecoder().decode(ServerConfig.self, from: data),
@@ -166,7 +166,7 @@ extension ServerConfig {
     }
 
     /// Load config from App Group UserDefaults (for use by extensions)
-    nonisolated static func loadFromAppGroup() -> ServerConfig {
+    static func loadFromAppGroup() -> ServerConfig {
         guard let data = UserDefaults(suiteName: appGroupSuite)?.data(forKey: storageKey),
               let config = try? JSONDecoder().decode(ServerConfig.self, from: data),
               config.isConfigured else {

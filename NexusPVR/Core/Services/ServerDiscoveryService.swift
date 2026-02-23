@@ -10,7 +10,7 @@ import CryptoKit
 import Foundation
 import Network
 
-struct DiscoveredServer: Identifiable, Equatable {
+nonisolated struct DiscoveredServer: Identifiable, Equatable {
     let id: String // IP address
     let host: String
     let port: Int
@@ -183,36 +183,27 @@ class ServerDiscoveryService: ObservableObject {
             )
 
             let queue = DispatchQueue(label: "discovery.probe.\(host)")
-            var resumed = false
-            let lock = NSLock()
+            let state = ProbeState()
 
             // Timeout
             queue.asyncAfter(deadline: .now() + 0.75) {
-                lock.lock()
-                guard !resumed else { lock.unlock(); return }
-                resumed = true
-                lock.unlock()
+                guard state.tryResume() else { return }
                 connection.cancel()
                 continuation.resume(returning: false)
             }
 
-            connection.stateUpdateHandler = { state in
-                lock.lock()
-                guard !resumed else { lock.unlock(); return }
-
-                switch state {
+            connection.stateUpdateHandler = { newState in
+                switch newState {
                 case .ready:
-                    resumed = true
-                    lock.unlock()
+                    guard state.tryResume() else { return }
                     connection.cancel()
                     continuation.resume(returning: true)
                 case .failed, .cancelled:
-                    resumed = true
-                    lock.unlock()
+                    guard state.tryResume() else { return }
                     connection.cancel()
                     continuation.resume(returning: false)
                 default:
-                    lock.unlock()
+                    break
                 }
             }
 
@@ -325,4 +316,19 @@ class ServerDiscoveryService: ObservableObject {
         return digest.map { String(format: "%02x", $0) }.joined()
     }
     #endif
+}
+
+/// Thread-safe one-shot flag for probe continuation resumption
+private nonisolated final class ProbeState: @unchecked Sendable {
+    private var resumed = false
+    private let lock = NSLock()
+
+    /// Returns true if this is the first call (i.e., we should resume). Subsequent calls return false.
+    func tryResume() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !resumed else { return false }
+        resumed = true
+        return true
+    }
 }

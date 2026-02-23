@@ -7,12 +7,12 @@
 
 import Foundation
 
-struct WatchedChannel: Codable, Equatable {
+nonisolated struct WatchedChannel: Codable, Equatable {
     let channelId: Int
     let channelName: String
 }
 
-struct WatchHistory: Codable {
+nonisolated struct WatchHistory: Codable {
     var recentChannels: [WatchedChannel] = []
 
     #if DISPATCHERPVR
@@ -43,7 +43,7 @@ struct WatchHistory: Codable {
         return WatchHistory()
     }
 
-    nonisolated static func loadFromAppGroup() -> WatchHistory {
+    static func loadFromAppGroup() -> WatchHistory {
         guard let data = UserDefaults(suiteName: ServerConfig.appGroupSuite)?.data(forKey: storageKey),
               let history = try? JSONDecoder().decode(WatchHistory.self, from: data) else {
             return WatchHistory()

@@ -39,7 +39,7 @@ struct NavigationRouter: View {
         .preferredColorScheme(.dark)
         #if DISPATCHERPVR
         .task {
-            appState.startStreamCountPolling(client: client as! DispatcherClient)
+            appState.startStreamCountPolling(client: client)
         }
         #endif
     }

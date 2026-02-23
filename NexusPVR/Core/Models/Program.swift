@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct Program: Identifiable, Decodable, Hashable {
+nonisolated struct Program: Identifiable, Decodable, Hashable, Sendable {
     let id: Int
     let name: String
     let subtitle: String?
@@ -121,7 +121,7 @@ struct Program: Identifiable, Decodable, Hashable {
     }
 }
 
-struct ProgramListingsResponse: Decodable {
+nonisolated struct ProgramListingsResponse: Decodable {
     let listings: [Program]?
 }
 
