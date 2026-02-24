@@ -823,6 +823,7 @@ class MPVPlayerCore: NSObject {
         #if os(macOS)
         mpv_set_option_string(mpv, "ao", "coreaudio")
         mpv_set_option_string(mpv, "audio-buffer", "0.5")  // Larger buffer on macOS to avoid coreaudio race with raw TS streams
+        mpv_set_option_string(mpv, "audio-wait-open", "0.5")  // Delay opening audio device until data is ready (prevents NULL buffer crash with raw TS streams)
         #else
         mpv_set_option_string(mpv, "ao", "audiounit")
         mpv_set_option_string(mpv, "audio-buffer", "0.2")
