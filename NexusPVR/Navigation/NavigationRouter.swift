@@ -150,7 +150,7 @@ struct IOSNavigation: View {
                 }
                 .padding(.horizontal, Theme.spacingMD)
             }
-            .padding(.bottom, 8)
+            .padding(.bottom, 16)
             .animation(.spring(response: 0.4, dampingFraction: 0.82), value: isNavExpanded)
             .animation(.spring(response: 0.3, dampingFraction: 0.85), value: showSearchDropdown)
         }
