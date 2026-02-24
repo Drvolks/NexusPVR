@@ -43,7 +43,7 @@ struct ProgramCell: View {
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(program.name)
+                    Text(program.name.replacingOccurrences(of: "\n", with: " "))
                         .font(.caption)
                         .fontWeight(.medium)
                         .foregroundStyle(Theme.textPrimary)
