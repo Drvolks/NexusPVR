@@ -348,7 +348,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
     func getListings(channelId: Int) async throws -> [Program] {
         guard !config.isDemoMode else { return DemoDataProvider.listings(for: channelId) }
 
-        guard let url = URL(string: "\(baseURL)/api/epg/grid/?page_size=50000") else {
+        guard let url = URL(string: "\(baseURL)/api/epg/programs/?page_size=50000") else {
             throw PVRClientError.invalidResponse
         }
 
@@ -376,7 +376,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
             try await authenticate()
         }
 
-        guard let url = URL(string: "\(baseURL)/api/epg/grid/?page_size=50000") else {
+        guard let url = URL(string: "\(baseURL)/api/epg/programs/?page_size=50000") else {
             throw PVRClientError.invalidResponse
         }
 
@@ -398,76 +398,6 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
                 guard let p = program.toProgram(channelId: resolvedId) else { continue }
                 mapped[resolvedId, default: []].append(p)
             }
-            return mapped
-        }.value
-
-        return result
-    }
-
-    // MARK: - XMLTV EPG
-
-    /// Fetch EPG data from the XMLTV endpoint (/output/epg) which provides more days of guide data
-    /// - Parameter channelNames: Optional map of channel id → name for fallback display-name matching
-    private func fetchXMLTVListings(channelNames: [Int: String] = [:]) async throws -> [Int: [Program]] {
-        guard let url = URL(string: "\(baseURL)/output/epg") else {
-            throw PVRClientError.invalidResponse
-        }
-
-        let fetchStart = CFAbsoluteTimeGetCurrent()
-        let (data, response) = try await session.data(for: URLRequest(url: url))
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw PVRClientError.apiError("XMLTV endpoint returned non-200 status")
-        }
-
-        print("[Dispatcharr] XMLTV fetched \(data.count / 1024)KB in \(String(format: "%.0f", (CFAbsoluteTimeGetCurrent() - fetchStart) * 1000))ms")
-
-        // Parse XML off main actor
-        let tvgMap = tvgIdToChannelId
-        let result = try await Task.detached(priority: .userInitiated) {
-            let parser = XMLTVParser()
-            let (programmes, xmltvChannels) = try parser.parse(data: data)
-            print("[Dispatcharr] XMLTV parsed \(programmes.count) programmes, \(xmltvChannels.count) channels")
- 
-            // Build extended mapping: XMLTV channel id → app channel id
-            // The XMLTV <channel> elements contain display-name which may match our channel names.
-            // Also try matching XMLTV channel ids directly via tvgIdToChannelId.
-            var xmltvIdToChannelId = [String: Int]()
-            for (xmltvId, _) in xmltvChannels {
-                if let channelId = tvgMap[xmltvId] {
-                    xmltvIdToChannelId[xmltvId] = channelId
-                }
-            }
-
-            // If direct tvg_id matching got few results, try matching by display-name
-            if xmltvIdToChannelId.count < xmltvChannels.count / 2 && !channelNames.isEmpty {
-                // Build reverse map: lowercased channel name → channel id
-                var nameToChannelId = [String: Int]()
-                for (id, name) in channelNames {
-                    nameToChannelId[name.lowercased()] = id
-                }
-                for (xmltvId, displayName) in xmltvChannels where xmltvIdToChannelId[xmltvId] == nil {
-                    if let channelId = nameToChannelId[displayName.lowercased()] {
-                        xmltvIdToChannelId[xmltvId] = channelId
-                    }
-                }
-            }
-
-            var mapped = [Int: [Program]]()
-            var unmappedCount = 0
-            for programme in programmes {
-                guard let channelId = xmltvIdToChannelId[programme.channel] ?? tvgMap[programme.channel] else {
-                    unmappedCount += 1
-                    continue
-                }
-                let program = programme.toProgram(channelId: channelId)
-                mapped[channelId, default: []].append(program)
-            }
-            if unmappedCount > 0 {
-                print("[Dispatcharr] XMLTV: \(unmappedCount) programmes had no channel mapping")
-            }
-            print("[Dispatcharr] XMLTV: mapped \(programmes.count - unmappedCount) programmes across \(mapped.count) channels")
             return mapped
         }.value
 
@@ -1080,203 +1010,6 @@ nonisolated struct ProxyClientInfo: Decodable, Identifiable {
     }
 }
 
-// MARK: - XMLTV Parser
-
-/// Parsed programme from XMLTV XML
-private nonisolated struct XMLTVProgramme: Sendable {
-    let channel: String   // tvg_id e.g. "TSN1.ca"
-    let startTimestamp: Int
-    let stopTimestamp: Int
-    let title: String
-    let subtitle: String?
-    let desc: String?
-    let categories: [String]?
-
-    /// Generate a stable ID from channel + start + stop
-    var stableId: Int {
-        var hasher = Hasher()
-        hasher.combine(channel)
-        hasher.combine(startTimestamp)
-        hasher.combine(stopTimestamp)
-        return abs(hasher.finalize())
-    }
-
-    func toProgram(channelId: Int) -> Program {
-        Program(
-            id: stableId,
-            name: title,
-            subtitle: subtitle,
-            desc: desc,
-            start: startTimestamp,
-            end: stopTimestamp,
-            genres: categories?.isEmpty == true ? nil : categories,
-            channelId: channelId
-        )
-    }
-}
-
-/// SAX-style XMLTV parser using Foundation's XMLParser
-private nonisolated final class XMLTVParser: NSObject, XMLParserDelegate {
-    private var programmes: [XMLTVProgramme] = []
-    /// Maps XMLTV channel id → display-name (from <channel> elements)
-    private var xmltvChannels: [String: String] = [:]
-
-    // Current element state
-    private var currentChannel: String?
-    private var currentStart: Int?
-    private var currentStop: Int?
-    private var currentTitle: String?
-    private var currentSubtitle: String?
-    private var currentDesc: String?
-    private var currentCategories: [String] = []
-    private var currentElement: String?
-    private var currentText: String = ""
-    private var inProgramme = false
-    private var inChannel = false
-    private var currentChannelId: String?
-    private var currentDisplayName: String?
-
-    /// Returns (programmes, xmltvChannels: [xmltvId: displayName])
-    func parse(data: Data) throws -> ([XMLTVProgramme], [String: String]) {
-        programmes = []
-        xmltvChannels = [:]
-        let parser = XMLParser(data: data)
-        parser.delegate = self
-        parser.shouldResolveExternalEntities = false
-        guard parser.parse() else {
-            if let error = parser.parserError {
-                throw error
-            }
-            throw PVRClientError.apiError("XMLTV parse failed")
-        }
-        return (programmes, xmltvChannels)
-    }
-
-    // MARK: - XMLParserDelegate
-
-    func parser(_ parser: XMLParser, didStartElement elementName: String,
-                namespaceURI: String?, qualifiedName: String?,
-                attributes: [String: String]) {
-        if elementName == "channel" {
-            inChannel = true
-            currentChannelId = attributes["id"]
-            currentDisplayName = nil
-        } else if elementName == "programme" {
-            inProgramme = true
-            currentChannel = attributes["channel"]
-            currentStart = Self.parseXMLTVDate(attributes["start"])
-            currentStop = Self.parseXMLTVDate(attributes["stop"])
-            currentTitle = nil
-            currentSubtitle = nil
-            currentDesc = nil
-            currentCategories = []
-        }
-        if inProgramme || inChannel {
-            currentElement = elementName
-            currentText = ""
-        }
-    }
-
-    func parser(_ parser: XMLParser, foundCharacters string: String) {
-        if inProgramme || inChannel {
-            currentText += string
-        }
-    }
-
-    func parser(_ parser: XMLParser, didEndElement elementName: String,
-                namespaceURI: String?, qualifiedName: String?) {
-        if inChannel {
-            switch elementName {
-            case "display-name":
-                currentDisplayName = currentText.trimmingCharacters(in: .whitespacesAndNewlines)
-            case "channel":
-                if let id = currentChannelId {
-                    xmltvChannels[id] = currentDisplayName ?? id
-                }
-                inChannel = false
-            default:
-                break
-            }
-            currentText = ""
-            if !inProgramme { return }
-        }
-
-        guard inProgramme else { return }
-
-        switch elementName {
-        case "title":
-            currentTitle = currentText.trimmingCharacters(in: .whitespacesAndNewlines)
-        case "sub-title":
-            let trimmed = currentText.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty { currentSubtitle = trimmed }
-        case "desc":
-            let trimmed = currentText.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty { currentDesc = trimmed }
-        case "category":
-            let trimmed = currentText.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty { currentCategories.append(trimmed) }
-        case "programme":
-            if let channel = currentChannel, let start = currentStart, let stop = currentStop,
-               let title = currentTitle, !title.isEmpty, stop > start {
-                programmes.append(XMLTVProgramme(
-                    channel: channel,
-                    startTimestamp: start,
-                    stopTimestamp: stop,
-                    title: title,
-                    subtitle: currentSubtitle,
-                    desc: currentDesc,
-                    categories: currentCategories.isEmpty ? nil : currentCategories
-                ))
-            }
-            inProgramme = false
-        default:
-            break
-        }
-        currentElement = nil
-        currentText = ""
-    }
-
-    /// Parse XMLTV date format: "20260224120000 +0000" or "20260224120000"
-    private static func parseXMLTVDate(_ string: String?) -> Int? {
-        guard let string, string.count >= 14 else { return nil }
-
-        let digits = String(string.prefix(14))
-        guard digits.allSatisfy({ $0.isNumber }) else { return nil }
-
-        let idx = digits.startIndex
-        guard let year = Int(digits[idx..<digits.index(idx, offsetBy: 4)]),
-              let month = Int(digits[digits.index(idx, offsetBy: 4)..<digits.index(idx, offsetBy: 6)]),
-              let day = Int(digits[digits.index(idx, offsetBy: 6)..<digits.index(idx, offsetBy: 8)]),
-              let hour = Int(digits[digits.index(idx, offsetBy: 8)..<digits.index(idx, offsetBy: 10)]),
-              let minute = Int(digits[digits.index(idx, offsetBy: 10)..<digits.index(idx, offsetBy: 12)]),
-              let second = Int(digits[digits.index(idx, offsetBy: 12)..<digits.index(idx, offsetBy: 14)]) else {
-            return nil
-        }
-
-        // Parse timezone offset if present (e.g. " +0000", " -0500")
-        var tzOffsetSeconds = 0
-        let remaining = string.dropFirst(14).trimmingCharacters(in: .whitespaces)
-        if !remaining.isEmpty, remaining.count >= 5 {
-            let sign = remaining.first == "-" ? -1 : 1
-            let tzDigits = remaining.dropFirst()
-            if let tzHours = Int(tzDigits.prefix(2)), let tzMinutes = Int(tzDigits.dropFirst(2).prefix(2)) {
-                tzOffsetSeconds = sign * (tzHours * 3600 + tzMinutes * 60)
-            }
-        }
-
-        var components = DateComponents()
-        components.year = year
-        components.month = month
-        components.day = day
-        components.hour = hour
-        components.minute = minute
-        components.second = second
-        components.timeZone = TimeZone(secondsFromGMT: tzOffsetSeconds)
-
-        guard let date = Calendar(identifier: .gregorian).date(from: components) else { return nil }
-        return Int(date.timeIntervalSince1970)
-    }
-}
 
 // MARK: - Recording Request Model
 
