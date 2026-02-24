@@ -586,6 +586,11 @@ struct GuideView: View {
                                 .zIndex(1)
                         }
                     }
+
+                    #if os(macOS)
+                    // Bottom padding so last row isn't behind the floating search bar
+                    Color.clear.frame(height: 60)
+                    #endif
                 }
                 .frame(minHeight: scrollViewHeight, alignment: .top)
             }
