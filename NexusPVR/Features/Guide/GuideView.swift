@@ -827,7 +827,7 @@ struct GuideView: View {
                     }
                 }
 
-                Text(program.startDate, format: .dateTime.hour().minute())
+                Text("\(program.startDate, format: .dateTime.hour().minute()) - \(program.endDate, format: .dateTime.hour().minute())")
                     .font(.system(size: 14))
                     .foregroundStyle(isFocused ? .white.opacity(0.8) : Theme.textSecondary)
             }
