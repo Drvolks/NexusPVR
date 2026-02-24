@@ -189,11 +189,16 @@ final class GuideViewModel: ObservableObject {
         return CGFloat(offset / 3600) * hourWidth
     }
 
+    var isOnToday: Bool {
+        Calendar.current.isDateInToday(selectedDate)
+    }
+
     func scrollToNow() {
         selectedDate = Date()
     }
 
     func previousDay() {
+        guard !isOnToday else { return }
         selectedDate = Calendar.current.date(byAdding: .day, value: -1, to: selectedDate) ?? selectedDate
     }
 

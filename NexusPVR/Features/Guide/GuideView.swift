@@ -209,9 +209,10 @@ struct GuideView: View {
                     } label: {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(Theme.accent)
+                            .foregroundStyle(viewModel.isOnToday ? Theme.textTertiary : Theme.accent)
                             .frame(width: 32, height: 32)
                     }
+                    .disabled(viewModel.isOnToday)
 
                     Text(viewModel.selectedDate, format: .dateTime.month(.abbreviated).day())
                         .font(.subheadline.weight(.medium))
@@ -274,11 +275,12 @@ struct GuideView: View {
                     } label: {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(Theme.accent)
+                            .foregroundStyle(viewModel.isOnToday ? Theme.textTertiary : Theme.accent)
                             .frame(width: 32, height: 32)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .disabled(viewModel.isOnToday)
 
                     Text(viewModel.selectedDate, format: .dateTime.month(.abbreviated).day())
                         .font(.subheadline.weight(.medium))
