@@ -348,14 +348,6 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
     func getListings(channelId: Int) async throws -> [Program] {
         guard !config.isDemoMode else { return DemoDataProvider.listings(for: channelId) }
 
-        // Try XMLTV first, fall back to API
-        do {
-            let allListings = try await fetchXMLTVListings()
-            return allListings[channelId] ?? []
-        } catch {
-            print("[Dispatcharr] XMLTV fetch failed for single channel, falling back to API: \(error)")
-        }
-
         guard let url = URL(string: "\(baseURL)/api/epg/grid/?page_size=50000") else {
             throw PVRClientError.invalidResponse
         }
@@ -379,14 +371,6 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
 
     func getAllListings(for channels: [Channel]) async throws -> [Int: [Program]] {
         guard !config.isDemoMode else { return DemoDataProvider.allListings(for: channels) }
-
-        // Try XMLTV first for more days of EPG data, fall back to API
-        do {
-            let channelNames = Dictionary(uniqueKeysWithValues: channels.map { ($0.id, $0.name) })
-            return try await fetchXMLTVListings(channelNames: channelNames)
-        } catch {
-            print("[Dispatcharr] XMLTV fetch failed, falling back to API: \(error)")
-        }
 
         if !isAuthenticated {
             try await authenticate()
