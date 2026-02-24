@@ -339,7 +339,7 @@ enum LiveProgramFetcher {
         }()
 
         async let programsTask: [SimpleProgram] = {
-            guard let url = URL(string: "\(config.baseURL)/api/epg/grid/?page_size=50000") else { return [] }
+            guard let url = URL(string: "\(config.baseURL)/api/epg/programs/?page_size=50000") else { return [] }
             var request = URLRequest(url: url)
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             let (data, _) = try await session.data(for: request)
