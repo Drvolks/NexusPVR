@@ -44,6 +44,14 @@ final class GuideViewModel: ObservableObject {
 
     var timelineStart: Date {
         let calendar = Calendar.current
+        if isOnToday {
+            // Start from current half-hour (round down to :00 or :30)
+            let now = Date()
+            let minute = calendar.component(.minute, from: now)
+            let roundedMinute = minute >= 30 ? 30 : 0
+            return calendar.date(bySettingHour: calendar.component(.hour, from: now),
+                                minute: roundedMinute, second: 0, of: now) ?? now
+        }
         return calendar.startOfDay(for: selectedDate)
     }
 
@@ -70,8 +78,12 @@ final class GuideViewModel: ObservableObject {
         var hours: [Date] = []
         let calendar = Calendar.current
         var current = timelineStart
+        let remainingHours = isOnToday ? (24 - calendar.component(.hour, from: Date())) : 24
+        // Add an extra hour when starting at :30 to cover the same time range
+        let startsAtHalfHour = isOnToday && calendar.component(.minute, from: Date()) >= 30
+        let count = remainingHours + (startsAtHalfHour ? 1 : 0)
 
-        for _ in 0..<24 {
+        for _ in 0..<count {
             hours.append(current)
             current = calendar.date(byAdding: .hour, value: 1, to: current) ?? current
         }
@@ -171,14 +183,22 @@ final class GuideViewModel: ObservableObject {
     }
 
     /// Lazily look up programs for a channel on the selected date from the cache
+    /// On today, filters out programs that have already ended (like tvOS)
     func visiblePrograms(for channel: Channel) -> [Program] {
         guard let cache = epgCache else { return [] }
-        return cache.programs(for: channel.id, on: selectedDate)
+        let programs = cache.programs(for: channel.id, on: selectedDate)
+        if isOnToday {
+            // Show any program that overlaps the visible timeline (ends after timeline start)
+            let start = timelineStart
+            return programs.filter { $0.endDate > start }
+        }
+        return programs
     }
 
     func programWidth(for program: Program, hourWidth: CGFloat, startTime: Date) -> CGFloat {
         let visibleStart = max(program.startDate, startTime)
-        let visibleEnd = min(program.endDate, startTime.addingTimeInterval(24 * 3600))
+        let timelineEnd = startTime.addingTimeInterval(Double(hoursToShow.count) * 3600)
+        let visibleEnd = min(program.endDate, timelineEnd)
         let duration = visibleEnd.timeIntervalSince(visibleStart)
         return max(CGFloat(duration / 3600) * hourWidth, 50)
     }
