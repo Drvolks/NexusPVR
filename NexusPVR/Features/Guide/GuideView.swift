@@ -550,7 +550,7 @@ struct GuideView: View {
                 LazyVStack(spacing: 1) {
                     // Invisible scroll anchors for scroll-to-time
                     HStack(spacing: 0) {
-                        Color.clear.frame(width: channelWidth + leadingSafeArea, height: 1)
+                        Color.clear.frame(width: channelWidth, height: 1)
                         ForEach(viewModel.hoursToShow, id: \.self) { hour in
                             HStack(spacing: 0) {
                                 Color.clear
@@ -573,7 +573,7 @@ struct GuideView: View {
                         ZStack(alignment: .leading) {
                             // Programs (scroll with content)
                             HStack(spacing: 0) {
-                                Color.clear.frame(width: channelWidth + leadingSafeArea, height: rowHeight)
+                                Color.clear.frame(width: channelWidth, height: rowHeight)
                                 programsRow(channel)
                                     .frame(height: rowHeight)
                                     .background(Theme.surface)
@@ -1341,7 +1341,7 @@ struct GuideView: View {
         return ZStack(alignment: .leading) {
             // Background for the full timeline
             Color.clear
-                .frame(width: hourWidth * 24)
+                .frame(width: hourWidth * CGFloat(viewModel.hoursToShow.count))
 
             // Program cells
             ForEach(programs) { program in
@@ -1352,7 +1352,7 @@ struct GuideView: View {
                 let sport = viewModel.detectedSport(for: program)
                 // Calculate leading padding for live programs - push text to visible left edge (scroll target)
                 let leadingPad = GuideScrollHelper.calculateLeadingPadding(
-                    programStart: program.startDate,
+                    programStart: max(program.startDate, timelineStart),
                     scrollTarget: scrollTarget,
                     hourWidth: hourWidth,
                     isCurrentlyAiring: program.isCurrentlyAiring
@@ -1497,13 +1497,13 @@ struct GuideView: View {
             // Now indicator
             nowIndicator(timelineStart: timelineStart)
         }
-        .frame(width: hourWidth * 24, height: rowHeight)
+        .frame(width: hourWidth * CGFloat(viewModel.hoursToShow.count), height: rowHeight)
     }
 
     @ViewBuilder
     private func nowIndicator(timelineStart: Date) -> some View {
         let now = Date()
-        if now >= timelineStart && now < timelineStart.addingTimeInterval(24 * 3600) {
+        if now >= timelineStart && now < timelineStart.addingTimeInterval(Double(viewModel.hoursToShow.count) * 3600) {
             let offset = CGFloat(now.timeIntervalSince(timelineStart) / 3600) * hourWidth
             Rectangle()
                 .fill(Theme.accent)
@@ -1517,14 +1517,18 @@ struct GuideView: View {
         let now = Date()
         let isToday = calendar.isDate(viewModel.selectedDate, inSameDayAs: now)
 
-        // For today, scroll to current time; for other days, scroll to start of day
-        let targetTime = isToday ? now : viewModel.timelineStart
-        let scrollTargetDate = GuideScrollHelper.calculateScrollTarget(currentTime: targetTime)
-
         // Store scroll target for text padding calculation
+        let scrollTargetDate = GuideScrollHelper.calculateScrollTarget(currentTime: isToday ? now : viewModel.timelineStart)
         currentTimelineHour = scrollTargetDate
 
-        // Find the hour marker in hoursToShow and scroll to the appropriate anchor
+        // On today, the timeline already starts at the current hour — no scroll needed.
+        // For other days, scroll to start of day.
+        guard !isToday else {
+            scrollTargetId = nil
+            return
+        }
+
+        let targetTime = viewModel.timelineStart
         let targetHourComponent = calendar.component(.hour, from: targetTime)
         if let targetHour = viewModel.hoursToShow.first(where: { calendar.component(.hour, from: $0) == targetHourComponent }) {
             scrollTargetId = GuideScrollHelper.calculateScrollId(currentTime: targetTime, targetHour: targetHour)
