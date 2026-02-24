@@ -442,11 +442,10 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         // Parse XML off main actor
         let tvgMap = tvgIdToChannelId
         let result = try await Task.detached(priority: .userInitiated) {
-            let parseStart = CFAbsoluteTimeGetCurrent()
             let parser = XMLTVParser()
             let (programmes, xmltvChannels) = try parser.parse(data: data)
-            print("[Dispatcharr] XMLTV parsed \(programmes.count) programmes, \(xmltvChannels.count) channels in \(String(format: "%.0f", (CFAbsoluteTimeGetCurrent() - parseStart) * 1000))ms")
-
+            print("[Dispatcharr] XMLTV parsed \(programmes.count) programmes, \(xmltvChannels.count) channels")
+ 
             // Build extended mapping: XMLTV channel id → app channel id
             // The XMLTV <channel> elements contain display-name which may match our channel names.
             // Also try matching XMLTV channel ids directly via tvgIdToChannelId.
@@ -1136,7 +1135,7 @@ private nonisolated struct XMLTVProgramme: Sendable {
 }
 
 /// SAX-style XMLTV parser using Foundation's XMLParser
-private final class XMLTVParser: NSObject, XMLParserDelegate {
+private nonisolated final class XMLTVParser: NSObject, XMLParserDelegate {
     private var programmes: [XMLTVProgramme] = []
     /// Maps XMLTV channel id → display-name (from <channel> elements)
     private var xmltvChannels: [String: String] = [:]

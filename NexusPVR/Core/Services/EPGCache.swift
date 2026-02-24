@@ -73,10 +73,8 @@ final class EPGCache: ObservableObject {
 
             // Fetch channel profiles and groups (Dispatcharr only)
             #if DISPATCHERPVR
-            if let dispClient = client as? DispatcherClient {
-                channelProfiles = (try? await dispClient.getChannelProfiles()) ?? []
-                channelGroups = (try? await dispClient.getChannelGroups()) ?? []
-            }
+            channelProfiles = (try? await client.getChannelProfiles()) ?? []
+            channelGroups = (try? await client.getChannelGroups()) ?? []
             #endif
 
             hasLoaded = true
