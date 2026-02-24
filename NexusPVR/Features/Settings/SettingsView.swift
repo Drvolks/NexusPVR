@@ -37,7 +37,13 @@ struct SettingsView: View {
                 playbackSection
             }
             .navigationTitle("Settings")
-            #if os(iOS)
+            #if os(macOS)
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
+            .frame(maxWidth: 600)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(nsColor: .windowBackgroundColor))
+            #elseif os(iOS)
             .listStyle(.insetGrouped)
             #endif
             #endif
