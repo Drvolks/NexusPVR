@@ -10,7 +10,7 @@ import SwiftUI
 // MARK: - Colors
 
 extension Color {
-    init(light: Color, dark: Color) {
+    nonisolated init(light: Color, dark: Color) {
         #if os(macOS)
         self.init(nsColor: NSColor(name: nil) { appearance in
             appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
