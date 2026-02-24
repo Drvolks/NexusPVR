@@ -468,9 +468,6 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
                         xmltvIdToChannelId[xmltvId] = channelId
                     }
                 }
-                let sampleXmltvIds = Array(xmltvChannels.prefix(5).map { "\($0.key) → \($0.value)" })
-                let sampleTvgIds = Array(tvgMap.keys.prefix(5))
-                print("[Dispatcharr] XMLTV extended mapping: \(xmltvIdToChannelId.count)/\(xmltvChannels.count) channels matched (tvgId keys: \(sampleTvgIds), XMLTV: \(sampleXmltvIds))")
             }
 
             var mapped = [Int: [Program]]()
