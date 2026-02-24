@@ -45,7 +45,6 @@ struct PVRApp: App {
                 .environmentObject(appState)
                 .environmentObject(client)
                 .environmentObject(epgCache)
-                .preferredColorScheme(.dark)
                 .tint(Theme.accent)
                 #if !os(macOS)
                 .ignoresSafeArea()

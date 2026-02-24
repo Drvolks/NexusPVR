@@ -29,18 +29,18 @@ nonisolated enum NexusPVRBrand: BrandConfig {
     static let discoveryProbePath = "/services/service?method=session.initiate&ver=1.0&device=probe&format=json"
 
     // Colors
-    static let accent = Color(hex: "#00a8e8")
-    static let accentSecondary = Color(hex: "#48cae4")
-    static let background = Color(hex: "#0f0f0f")
-    static let surface = Color(hex: "#141414")
-    static let surfaceElevated = Color(hex: "#1a1a1a")
-    static let surfaceHighlight = Color(hex: "#222222")
-    static let textPrimary = Color.white
-    static let textSecondary = Color(hex: "#b3b3b3")
-    static let textTertiary = Color(hex: "#666666")
-    static let success = Color(hex: "#4caf50")
-    static let warning = Color(hex: "#ff9800")
-    static let error = Color(hex: "#f44336")
-    static let recording = Color(hex: "#e91e63")
-    static let guideNowPlaying = Color(hex: "#1e3a5f")
+    static let accent = Color(light: Color(hex: "#0077b6"), dark: Color(hex: "#00a8e8"))
+    static let accentSecondary = Color(light: Color(hex: "#0096c7"), dark: Color(hex: "#48cae4"))
+    static let background = Color(light: Color(hex: "#f2f2f7"), dark: Color(hex: "#0f0f0f"))
+    static let surface = Color(light: Color(hex: "#ffffff"), dark: Color(hex: "#141414"))
+    static let surfaceElevated = Color(light: Color(hex: "#f2f2f7"), dark: Color(hex: "#1a1a1a"))
+    static let surfaceHighlight = Color(light: Color(hex: "#e5e5ea"), dark: Color(hex: "#222222"))
+    static let textPrimary = Color(light: Color(hex: "#1c1c1e"), dark: .white)
+    static let textSecondary = Color(light: Color(hex: "#636366"), dark: Color(hex: "#b3b3b3"))
+    static let textTertiary = Color(light: Color(hex: "#aeaeb2"), dark: Color(hex: "#666666"))
+    static let success = Color(light: Color(hex: "#34a853"), dark: Color(hex: "#4caf50"))
+    static let warning = Color(light: Color(hex: "#e67e00"), dark: Color(hex: "#ff9800"))
+    static let error = Color(light: Color(hex: "#d32f2f"), dark: Color(hex: "#f44336"))
+    static let recording = Color(light: Color(hex: "#c2185b"), dark: Color(hex: "#e91e63"))
+    static let guideNowPlaying = Color(light: Color(hex: "#d0e8ff"), dark: Color(hex: "#1e3a5f"))
 }

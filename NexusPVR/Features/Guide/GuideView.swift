@@ -416,7 +416,7 @@ struct GuideView: View {
                 .foregroundStyle(isSelected ? .white : Theme.textPrimary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
-                .background(isSelected ? Theme.accent : Color.white.opacity(0.1))
+                .background(isSelected ? Theme.accent : Theme.surfaceHighlight)
                 .clipShape(Capsule())
         }
         .buttonStyle(.plain)

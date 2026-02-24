@@ -36,7 +36,6 @@ struct NavigationRouter: View {
             IOSNavigation()
             #endif
         }
-        .preferredColorScheme(.dark)
         #if DISPATCHERPVR
         .task {
             appState.startStreamCountPolling(client: client)

@@ -10,6 +10,20 @@ import SwiftUI
 // MARK: - Colors
 
 extension Color {
+    init(light: Color, dark: Color) {
+        #if os(macOS)
+        self.init(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+                ? NSColor(dark) : NSColor(light)
+        })
+        #else
+        self.init(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(dark) : UIColor(light)
+        })
+        #endif
+    }
+
     nonisolated init(hex: String) {
         let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
         var int: UInt64 = 0
