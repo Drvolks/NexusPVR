@@ -277,6 +277,74 @@ function generateEdgeCases() {
 }
 
 // ---------------------------------------------------------------------------
+// XMLTV generation
+// ---------------------------------------------------------------------------
+
+function formatXMLTVDate(date) {
+  // Format: "20260224120000 +0000"
+  const d = new Date(date);
+  const pad = (n, len = 2) => String(n).padStart(len, "0");
+  return (
+    pad(d.getUTCFullYear(), 4) +
+    pad(d.getUTCMonth() + 1) +
+    pad(d.getUTCDate()) +
+    pad(d.getUTCHours()) +
+    pad(d.getUTCMinutes()) +
+    pad(d.getUTCSeconds()) +
+    " +0000"
+  );
+}
+
+function escapeXml(str) {
+  if (!str) return "";
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function generateXMLTV(channels, programs) {
+  const lines = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<!DOCTYPE tv SYSTEM "xmltv.dtd">',
+    '<tv generator-info-name="mock-dispatcharr">',
+  ];
+
+  // Channel elements
+  for (const ch of channels) {
+    lines.push(
+      `  <channel id="${escapeXml(ch.tvg_id)}">`,
+      `    <display-name>${escapeXml(ch.name)}</display-name>`,
+      `  </channel>`
+    );
+  }
+
+  // Programme elements
+  for (const p of programs) {
+    const start = formatXMLTVDate(p.start_time);
+    const stop = formatXMLTVDate(p.end_time);
+    const channelTvgId = p.tvg_id || `ch${p.channel}.mock`;
+
+    lines.push(
+      `  <programme start="${start}" stop="${stop}" channel="${escapeXml(channelTvgId)}">`
+    );
+    lines.push(`    <title>${escapeXml(p.title)}</title>`);
+    if (p.sub_title) {
+      lines.push(`    <sub-title>${escapeXml(p.sub_title)}</sub-title>`);
+    }
+    if (p.description) {
+      lines.push(`    <desc>${escapeXml(p.description)}</desc>`);
+    }
+    lines.push(`  </programme>`);
+  }
+
+  lines.push("</tv>");
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
 // PNG generation (no dependencies)
 // ---------------------------------------------------------------------------
 
@@ -475,6 +543,18 @@ function handleRequest(req, res) {
       return end > windowStart && start < windowEnd;
     });
     return json(res, { data: filtered });
+  }
+
+  // XMLTV EPG output — full guide data in XMLTV XML format
+  if (path === "/output/epg") {
+    const allPrograms = [...PROGRAMS, ...EDGE_CASES];
+    const xml = generateXMLTV(CHANNELS, allPrograms);
+    res.writeHead(200, {
+      "Content-Type": "application/xml; charset=utf-8",
+      "Content-Length": Buffer.byteLength(xml),
+    });
+    res.end(xml);
+    return;
   }
 
   // Recordings
