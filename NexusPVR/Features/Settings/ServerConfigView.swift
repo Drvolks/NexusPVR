@@ -14,6 +14,9 @@ struct ServerConfigView: View {
     @State private var config: ServerConfig
     @State private var isConnecting = false
     @State private var connectionError: String?
+    #if DISPATCHERPVR
+    @State private var useApiKey: Bool
+    #endif
     #if os(tvOS)
     @State private var portString: String
     #endif
@@ -21,6 +24,9 @@ struct ServerConfigView: View {
     init(prefillConfig: ServerConfig? = nil) {
         let c = prefillConfig ?? ServerConfig.load()
         _config = State(initialValue: c)
+        #if DISPATCHERPVR
+        _useApiKey = State(initialValue: !c.apiKey.isEmpty)
+        #endif
         #if os(tvOS)
         _portString = State(initialValue: c.port > 0 ? String(c.port) : "")
         #endif
@@ -153,10 +159,23 @@ struct ServerConfigView: View {
                             .foregroundStyle(Theme.textSecondary)
 
                         #if DISPATCHERPVR
-                        TextField("Username", text: $config.username)
-                            .autocorrectionDisabled()
+                        if useApiKey {
+                            SecureField("API Key", text: $config.apiKey)
+                        } else {
+                            TextField("Username", text: $config.username)
+                                .autocorrectionDisabled()
 
-                        SecureField("Password", text: $config.password)
+                            SecureField("Password", text: $config.password)
+                        }
+
+                        Button {
+                            useApiKey.toggle()
+                        } label: {
+                            Text(useApiKey ? "Use Username & Password" : "Use API Key")
+                                .font(.caption)
+                                .foregroundStyle(Theme.accent)
+                        }
+                        .buttonStyle(.card)
                         #else
                         TextField("PIN", text: $config.pin)
                         #endif
@@ -287,21 +306,46 @@ struct ServerConfigView: View {
 
                         VStack(spacing: Theme.spacingSM) {
                             #if DISPATCHERPVR
-                            HStack {
-                                Text("User")
-                                    .font(.system(size: 13))
-                                    .foregroundStyle(Theme.textSecondary)
-                                    .frame(width: 60, alignment: .trailing)
-                                TextField("Username", text: $config.username)
-                                    .textFieldStyle(.roundedBorder)
+                            if useApiKey {
+                                HStack {
+                                    Text("Key")
+                                        .font(.system(size: 13))
+                                        .foregroundStyle(Theme.textSecondary)
+                                        .frame(width: 60, alignment: .trailing)
+                                    SecureField("API Key", text: $config.apiKey)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+                            } else {
+                                HStack {
+                                    Text("User")
+                                        .font(.system(size: 13))
+                                        .foregroundStyle(Theme.textSecondary)
+                                        .frame(width: 60, alignment: .trailing)
+                                    TextField("Username", text: $config.username)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+                                HStack {
+                                    Text("Pass")
+                                        .font(.system(size: 13))
+                                        .foregroundStyle(Theme.textSecondary)
+                                        .frame(width: 60, alignment: .trailing)
+                                    SecureField("Password", text: $config.password)
+                                        .textFieldStyle(.roundedBorder)
+                                }
                             }
+
                             HStack {
-                                Text("Pass")
-                                    .font(.system(size: 13))
-                                    .foregroundStyle(Theme.textSecondary)
-                                    .frame(width: 60, alignment: .trailing)
-                                SecureField("Password", text: $config.password)
-                                    .textFieldStyle(.roundedBorder)
+                                Text("")
+                                    .frame(width: 60)
+                                Button {
+                                    useApiKey.toggle()
+                                } label: {
+                                    Text(useApiKey ? "Use Username & Password" : "Use API Key")
+                                        .font(.system(size: 12))
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(Theme.accent)
+                                Spacer()
                             }
                             #else
                             HStack {
@@ -388,13 +432,25 @@ struct ServerConfigView: View {
     private var connectionSection: some View {
         Section {
             #if DISPATCHERPVR
-            LabeledContent("Username") {
-                TextField("Username", text: $config.username)
-                    .autocapitalization(.none)
+            if useApiKey {
+                LabeledContent("API Key") {
+                    SecureField("API Key", text: $config.apiKey)
+                        .autocapitalization(.none)
+                }
+            } else {
+                LabeledContent("Username") {
+                    TextField("Username", text: $config.username)
+                        .autocapitalization(.none)
+                }
+                LabeledContent("Password") {
+                    SecureField("Password", text: $config.password)
+                }
             }
-            LabeledContent("Password") {
-                SecureField("Password", text: $config.password)
+
+            Button(useApiKey ? "Use Username & Password" : "Use API Key") {
+                useApiKey.toggle()
             }
+            .foregroundStyle(Theme.accent)
             #else
             LabeledContent("PIN") {
                 TextField("Enter PIN", text: $config.pin)
@@ -414,6 +470,16 @@ struct ServerConfigView: View {
 
         isConnecting = true
         connectionError = nil
+
+        #if DISPATCHERPVR
+        // Clear unused credentials based on auth mode
+        if useApiKey {
+            config.username = ""
+            config.password = ""
+        } else {
+            config.apiKey = ""
+        }
+        #endif
 
         config.save()
         client.updateConfig(config)

@@ -21,7 +21,7 @@ nonisolated enum DispatcherPVRBrand: BrandConfig {
     // User-facing strings
     static let setupPrompt = "Connect to your Dispatcharr server to get started."
     static let serverFooter = "Enter your Dispatcharr server address. Default port is 9191."
-    static let authFooter = "Enter your Dispatcharr username and password."
+    static let authFooter = "Enter your Dispatcharr credentials or API key."
     static let connectionSuccessMessage = "Successfully connected to Dispatcharr server."
     static let configureServerMessage = "Configure your Dispatcharr server in Settings"
 
