@@ -32,13 +32,11 @@ AUTH_FLAGS=(-allowProvisioningUpdates \
 
 rm -rf "$EXPORT_DIR"
 
-# --- Bump build number once for all archives ---
+# --- Determine build number from git commit count ---
 
 cd "$SCRIPT_DIR"
-CURRENT_BUILD=$(agvtool what-version -terse)
-NEW_BUILD=$((CURRENT_BUILD + 1))
-echo "=== Bumping build number: $CURRENT_BUILD → $NEW_BUILD ==="
-agvtool new-version -all "$NEW_BUILD" > /dev/null
+BUILD_NUMBER=$(git rev-list HEAD --count)
+echo "=== Build number (git commit count): $BUILD_NUMBER ==="
 
 # --- Archive ---
 
@@ -49,6 +47,22 @@ for SCHEME in "${SCHEMES[@]}"; do
       -destination "generic/platform=$PLATFORM" \
       -archivePath "$ARCHIVE_DIR/$SCHEME-$PLATFORM.xcarchive" \
       "${AUTH_FLAGS[@]}"
+  done
+done
+
+# --- Stamp build number in archives ---
+
+for SCHEME in "${SCHEMES[@]}"; do
+  for PLATFORM in "${PLATFORMS[@]}"; do
+    ARCHIVE="$ARCHIVE_DIR/$SCHEME-$PLATFORM.xcarchive"
+    case "$PLATFORM" in
+      macOS) APP_PLIST="$ARCHIVE/Products/Applications/$SCHEME.app/Contents/Info.plist" ;;
+      *)     APP_PLIST="$ARCHIVE/Products/Applications/$SCHEME.app/Info.plist" ;;
+    esac
+    ARCHIVE_PLIST="$ARCHIVE/Info.plist"
+    echo "=== Stamping build $BUILD_NUMBER in $SCHEME ($PLATFORM) ==="
+    /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$APP_PLIST"
+    /usr/libexec/PlistBuddy -c "Set :ApplicationProperties:CFBundleVersion $BUILD_NUMBER" "$ARCHIVE_PLIST"
   done
 done
 
@@ -90,5 +104,12 @@ for SCHEME in "${SCHEMES[@]}"; do
       --apiIssuer "$ISSUER_ID"
   done
 done
+
+# --- Tag git commit with build number ---
+
+TAG="build-$BUILD_NUMBER"
+echo "=== Tagging commit as $TAG ==="
+git tag "$TAG"
+git push origin "$TAG"
 
 echo "=== All schemes and platforms archived and uploaded to TestFlight ==="
