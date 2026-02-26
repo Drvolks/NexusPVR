@@ -8,7 +8,6 @@
 import Combine
 import CryptoKit
 import Foundation
-import Network
 
 nonisolated struct DiscoveredServer: Identifiable, Equatable {
     let id: String // IP address
@@ -25,12 +24,14 @@ class ServerDiscoveryService: ObservableObject {
 
     private var scanTask: Task<Void, Never>?
     private var credentials: (username: String, password: String)?
+    private var apiKey: String?
 
-    func startScan(username: String = "", password: String = "") {
+    func startScan(username: String = "", password: String = "", apiKey: String = "") {
         guard !isScanning else { return }
         discoveredServers = []
         isScanning = true
         credentials = (!username.isEmpty && !password.isEmpty) ? (username, password) : nil
+        self.apiKey = !apiKey.isEmpty ? apiKey : nil
 
         // Demo credentials: show a fake server immediately, skip real network scan
         if username.lowercased() == "demo" && password == "demo" {
@@ -69,6 +70,7 @@ class ServerDiscoveryService: ObservableObject {
         let candidates = generateCandidateIPs(localIP: localIP, subnetMask: subnetMask)
         let port = Brand.defaultPort
         let creds = credentials
+        let key = apiKey
 
         await withTaskGroup(of: DiscoveredServer?.self) { group in
             var activeTasks = 0
@@ -87,7 +89,7 @@ class ServerDiscoveryService: ObservableObject {
                 }
 
                 group.addTask {
-                    await self.probeHost(ip, port: port, credentials: creds)
+                    await self.probeHost(ip, port: port, credentials: creds, apiKey: key)
                 }
                 activeTasks += 1
             }
@@ -166,57 +168,12 @@ class ServerDiscoveryService: ObservableObject {
 
     // MARK: - Probing
 
-    private nonisolated func probeHost(_ host: String, port: Int, credentials: (username: String, password: String)?) async -> DiscoveredServer? {
-        // TCP connect probe
-        guard await tcpProbe(host: host, port: port) else { return nil }
-
-        // HTTP verification
-        return await httpVerify(host: host, port: port, credentials: credentials)
-    }
-
-    private nonisolated func tcpProbe(host: String, port: Int) async -> Bool {
-        await withCheckedContinuation { continuation in
-            let connection = NWConnection(
-                host: NWEndpoint.Host(host),
-                port: NWEndpoint.Port(integerLiteral: UInt16(port)),
-                using: .tcp
-            )
-
-            let queue = DispatchQueue(label: "discovery.probe.\(host)")
-            let state = ProbeState()
-
-            // Timeout
-            queue.asyncAfter(deadline: .now() + 0.75) {
-                guard state.tryResume() else { return }
-                connection.cancel()
-                continuation.resume(returning: false)
-            }
-
-            connection.stateUpdateHandler = { newState in
-                switch newState {
-                case .ready:
-                    guard state.tryResume() else { return }
-                    connection.cancel()
-                    continuation.resume(returning: true)
-                case .failed, .cancelled:
-                    guard state.tryResume() else { return }
-                    connection.cancel()
-                    continuation.resume(returning: false)
-                default:
-                    break
-                }
-            }
-
-            connection.start(queue: queue)
-        }
-    }
-
-    private nonisolated func httpVerify(host: String, port: Int, credentials: (username: String, password: String)?) async -> DiscoveredServer? {
+    private nonisolated func probeHost(_ host: String, port: Int, credentials: (username: String, password: String)?, apiKey: String? = nil) async -> DiscoveredServer? {
         let baseURL = "http://\(host):\(port)"
 
         #if DISPATCHERPVR
-        // Dispatcharr: authenticate with provided credentials via JWT token endpoint
-        return await verifyDispatcharr(baseURL: baseURL, host: host, port: port, credentials: credentials)
+        // Dispatcharr: authenticate with provided credentials via JWT token endpoint or API key
+        return await verifyDispatcharr(baseURL: baseURL, host: host, port: port, credentials: credentials, apiKey: apiKey)
         #else
         // NextPVR: hit session.initiate and try default PIN
         return await verifyNextPVR(baseURL: baseURL, host: host, port: port)
@@ -224,7 +181,31 @@ class ServerDiscoveryService: ObservableObject {
     }
 
     #if DISPATCHERPVR
-    private nonisolated func verifyDispatcharr(baseURL: String, host: String, port: Int, credentials: (username: String, password: String)?) async -> DiscoveredServer? {
+    private nonisolated func verifyDispatcharr(baseURL: String, host: String, port: Int, credentials: (username: String, password: String)?, apiKey: String? = nil) async -> DiscoveredServer? {
+        // When using API key, just confirm the host is serving HTTP on this port.
+        // Any HTTP response (even 401/403) proves it's a web server.
+        // The API key itself gets validated when the user actually connects.
+        if let apiKey, !apiKey.isEmpty {
+            guard let url = URL(string: "\(baseURL)/api/channels/channels/?page_size=1") else { return nil }
+
+            var request = URLRequest(url: url)
+            request.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.timeoutInterval = 3
+
+            do {
+                let (_, response) = try await URLSession.shared.data(for: request)
+                guard let httpResponse = response as? HTTPURLResponse,
+                      (200...299).contains(httpResponse.statusCode) else {
+                    return nil
+                }
+                return DiscoveredServer(id: host, host: host, port: port, serverName: Brand.serverName, requiresAuth: false)
+            } catch {
+                return nil
+            }
+        }
+
+        // Username/password: verify via JWT token endpoint
         guard let credentials else { return nil }
 
         guard let url = URL(string: "\(baseURL)/api/accounts/token/") else { return nil }
@@ -316,19 +297,4 @@ class ServerDiscoveryService: ObservableObject {
         return digest.map { String(format: "%02x", $0) }.joined()
     }
     #endif
-}
-
-/// Thread-safe one-shot flag for probe continuation resumption
-private nonisolated final class ProbeState: @unchecked Sendable {
-    private var resumed = false
-    private let lock = NSLock()
-
-    /// Returns true if this is the first call (i.e., we should resume). Subsequent calls return false.
-    func tryResume() -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        guard !resumed else { return false }
-        resumed = true
-        return true
-    }
 }

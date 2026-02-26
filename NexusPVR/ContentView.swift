@@ -33,6 +33,8 @@ struct ContentView: View {
     #if DISPATCHERPVR
     @State private var discoveryUsername = ""
     @State private var discoveryPassword = ""
+    @State private var discoveryApiKey = ""
+    @State private var useApiKey = false
     @State private var hasStartedDiscovery = false
     @FocusState private var findServersFocused: Bool
     #endif
@@ -136,6 +138,8 @@ struct ContentView: View {
                 hasStartedDiscovery = false
                 discoveryUsername = ""
                 discoveryPassword = ""
+                discoveryApiKey = ""
+                useApiKey = false
                 #else
                 discovery.startScan()
                 #endif
@@ -197,6 +201,7 @@ struct ContentView: View {
                     pin: "",
                     username: discoveryUsername,
                     password: discoveryPassword,
+                    apiKey: discoveryApiKey,
                     useHTTPS: false
                 ))
                 #else
@@ -222,35 +227,53 @@ struct ContentView: View {
                 .multilineTextAlignment(.center)
 
             VStack(spacing: Theme.spacingSM) {
-                TextField("Username", text: $discoveryUsername)
-                    #if os(iOS)
-                    .autocapitalization(.none)
-                    #endif
-                    .textContentType(.username)
-                    #if !os(tvOS)
-                    .padding(Theme.spacingMD)
-                    .background(Theme.surface)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
-                    #endif
-
-                SecureField("Password", text: $discoveryPassword)
-                    .textContentType(.password)
-                    #if !os(tvOS)
-                    .padding(Theme.spacingMD)
-                    .background(Theme.surface)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
-                    #endif
-                    .onSubmit {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            findServersFocused = true
+                if useApiKey {
+                    SecureField("API Key", text: $discoveryApiKey)
+                        .textContentType(.password)
+                        #if os(iOS)
+                        .autocapitalization(.none)
+                        #endif
+                        #if !os(tvOS)
+                        .padding(Theme.spacingMD)
+                        .background(Theme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
+                        #endif
+                        .onSubmit {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                findServersFocused = true
+                            }
                         }
-                    }
+                } else {
+                    TextField("Username", text: $discoveryUsername)
+                        #if os(iOS)
+                        .autocapitalization(.none)
+                        #endif
+                        .textContentType(.username)
+                        #if !os(tvOS)
+                        .padding(Theme.spacingMD)
+                        .background(Theme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
+                        #endif
+
+                    SecureField("Password", text: $discoveryPassword)
+                        .textContentType(.password)
+                        #if !os(tvOS)
+                        .padding(Theme.spacingMD)
+                        .background(Theme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
+                        #endif
+                        .onSubmit {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                findServersFocused = true
+                            }
+                        }
+                }
             }
             .frame(maxWidth: 400)
 
             Button {
                 hasStartedDiscovery = true
-                discovery.startScan(username: discoveryUsername, password: discoveryPassword)
+                discovery.startScan(username: discoveryUsername, password: discoveryPassword, apiKey: useApiKey ? discoveryApiKey : "")
             } label: {
                 HStack {
                     Image(systemName: "magnifyingglass")
@@ -259,7 +282,14 @@ struct ContentView: View {
             }
             .focused($findServersFocused)
             .buttonStyle(AccentButtonStyle())
-            .disabled(discoveryUsername.isEmpty || discoveryPassword.isEmpty)
+            .disabled(useApiKey ? discoveryApiKey.isEmpty : (discoveryUsername.isEmpty || discoveryPassword.isEmpty))
+
+            Button {
+                useApiKey.toggle()
+            } label: {
+                Text(useApiKey ? "Use Username & Password" : "Use API Key")
+            }
+            .buttonStyle(AccentButtonStyle())
         }
         .padding(.horizontal, Theme.spacingLG)
     }
@@ -365,6 +395,7 @@ struct ContentView: View {
                 pin: "",
                 username: discoveryUsername,
                 password: discoveryPassword,
+                apiKey: discoveryApiKey,
                 useHTTPS: false
             )
             #else

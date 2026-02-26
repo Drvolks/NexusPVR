@@ -16,6 +16,8 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
     private(set) var config: ServerConfig
     private var accessToken: String?
     private var refreshToken: String?
+    /// When true, use `X-API-Key` header instead of `Bearer` JWT
+    private var useApiKeyAuth = false
     private let session: URLSession
     /// Maps tvg_id (e.g. "TSN1.ca") → channel id for EPG lookups
     private var tvgIdToChannelId: [String: Int] = [:]
@@ -44,6 +46,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         config = newConfig
         accessToken = nil
         refreshToken = nil
+        useApiKeyAuth = false
         isAuthenticated = false
     }
 
@@ -54,6 +57,42 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
 
         guard config.isConfigured else {
             throw PVRClientError.notConfigured
+        }
+
+        // API key auth: use X-API-Key header, no JWT flow needed
+        if !config.apiKey.isEmpty {
+            isConnecting = true
+            defer { isConnecting = false }
+
+            guard let url = URL(string: "\(baseURL)/api/channels/channels/?page_size=1") else {
+                throw PVRClientError.invalidResponse
+            }
+
+            var request = URLRequest(url: url)
+            request.setValue(config.apiKey, forHTTPHeaderField: "X-API-Key")
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+            do {
+                let (_, response) = try await session.data(for: request)
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw PVRClientError.invalidResponse
+                }
+                if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+                    throw PVRClientError.authenticationFailed
+                }
+                guard (200...299).contains(httpResponse.statusCode) else {
+                    throw PVRClientError.invalidResponse
+                }
+                accessToken = config.apiKey
+                refreshToken = nil
+                useApiKeyAuth = true
+                isAuthenticated = true
+            } catch let error as PVRClientError {
+                throw error
+            } catch {
+                throw PVRClientError.networkError(error)
+            }
+            return
         }
 
         isConnecting = true
@@ -91,6 +130,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
             let tokenResponse = try JSONDecoder().decode(TokenResponse.self, from: data)
             accessToken = tokenResponse.access
             refreshToken = tokenResponse.refresh
+            useApiKeyAuth = false
             isAuthenticated = true
         } catch let error as PVRClientError {
             throw error
@@ -102,6 +142,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
     func disconnect() {
         accessToken = nil
         refreshToken = nil
+        useApiKeyAuth = false
         isAuthenticated = false
     }
 
@@ -148,7 +189,11 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
 
         var request = URLRequest(url: url)
         request.httpMethod = method
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        if useApiKeyAuth {
+            request.setValue(accessToken, forHTTPHeaderField: "X-API-Key")
+        } else {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -159,6 +204,12 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
             let (data, response) = try await session.data(for: request)
 
             if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 401 {
+                if useApiKeyAuth {
+                    // API key auth doesn't support refresh — re-authenticate
+                    isAuthenticated = false
+                    try await authenticate()
+                    return try await authenticatedRequest(url, method: method, body: body)
+                }
                 // Try refreshing the token
                 do {
                     try await refreshAccessToken()
@@ -199,12 +250,22 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
 
         var request = URLRequest(url: url)
         request.httpMethod = method
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        if useApiKeyAuth {
+            request.setValue(accessToken, forHTTPHeaderField: "X-API-Key")
+        } else {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
 
         let (_, response) = try await session.data(for: request)
 
         if let httpResponse = response as? HTTPURLResponse {
             if httpResponse.statusCode == 401 {
+                if useApiKeyAuth {
+                    isAuthenticated = false
+                    try await authenticate()
+                    try await authenticatedRequestNoContent(url, method: method)
+                    return
+                }
                 do {
                     try await refreshAccessToken()
                     try await authenticatedRequestNoContent(url, method: method)
@@ -530,6 +591,9 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         guard !config.isDemoMode else { return DemoDataProvider.channelIconURL(channelId: channelId) }
         guard let logoId = channelIdToLogoId[channelId],
               let token = accessToken else { return nil }
+        if useApiKeyAuth {
+            return URL(string: "\(baseURL)/api/channels/logos/\(logoId)/cache/?api_key=\(token)")
+        }
         return URL(string: "\(baseURL)/api/channels/logos/\(logoId)/cache/?token=\(token)")
     }
 

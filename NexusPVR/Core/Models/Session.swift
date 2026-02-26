@@ -39,6 +39,7 @@ nonisolated struct ServerConfig: Codable, Equatable {
     var pin: String
     var username: String
     var password: String
+    var apiKey: String
     var useHTTPS: Bool
 
     var baseURL: String {
@@ -47,7 +48,7 @@ nonisolated struct ServerConfig: Codable, Equatable {
     }
 
     static var `default`: ServerConfig {
-        ServerConfig(host: "", port: Brand.defaultPort, pin: Brand.defaultPIN, username: "", password: "", useHTTPS: false)
+        ServerConfig(host: "", port: Brand.defaultPort, pin: Brand.defaultPIN, username: "", password: "", apiKey: "", useHTTPS: false)
     }
 
     var isDemoMode: Bool {
@@ -61,15 +62,16 @@ nonisolated struct ServerConfig: Codable, Equatable {
 
     // Coding keys with defaults for backward compatibility
     enum CodingKeys: String, CodingKey {
-        case host, port, pin, username, password, useHTTPS
+        case host, port, pin, username, password, apiKey, useHTTPS
     }
 
-    init(host: String, port: Int, pin: String, username: String = "", password: String = "", useHTTPS: Bool) {
+    init(host: String, port: Int, pin: String, username: String = "", password: String = "", apiKey: String = "", useHTTPS: Bool) {
         self.host = host
         self.port = port
         self.pin = pin
         self.username = username
         self.password = password
+        self.apiKey = apiKey
         self.useHTTPS = useHTTPS
     }
 
@@ -80,6 +82,7 @@ nonisolated struct ServerConfig: Codable, Equatable {
         pin = try container.decodeIfPresent(String.self, forKey: .pin) ?? ""
         username = try container.decodeIfPresent(String.self, forKey: .username) ?? ""
         password = try container.decodeIfPresent(String.self, forKey: .password) ?? ""
+        apiKey = try container.decodeIfPresent(String.self, forKey: .apiKey) ?? ""
         useHTTPS = try container.decode(Bool.self, forKey: .useHTTPS)
     }
 }
@@ -170,7 +173,7 @@ nonisolated extension ServerConfig {
         guard let data = UserDefaults(suiteName: appGroupSuite)?.data(forKey: storageKey),
               let config = try? JSONDecoder().decode(ServerConfig.self, from: data),
               config.isConfigured else {
-            return ServerConfig(host: "", port: 8866, pin: "", username: "", password: "", useHTTPS: false)
+            return ServerConfig(host: "", port: 8866, pin: "", username: "", password: "", apiKey: "", useHTTPS: false)
         }
         return config
     }
