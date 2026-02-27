@@ -80,8 +80,8 @@ struct TopicProgramRow: View {
 
                     Spacer()
 
-                    // Action button
-                    if !program.hasEnded {
+                    // Action button (hidden for streamers who can't record)
+                    if !program.hasEnded && appState.userLevel >= 1 {
                         Button {
                             toggleRecording()
                         } label: {
@@ -152,7 +152,9 @@ struct TopicProgramRow: View {
             onShowDetails?(existingRecordingId, existingRecording)
         }
         .task {
-            await checkIfScheduled()
+            if appState.userLevel >= 1 {
+                await checkIfScheduled()
+            }
         }
     }
 
@@ -256,8 +258,12 @@ struct TopicProgramRowTV: View {
     @State private var existingRecording: Recording?
     @State private var earlierScheduled: Recording?
 
+    private var canRecord: Bool { appState.userLevel >= 1 }
+
     private var actionLabel: String {
-        if isRecording {
+        if !canRecord {
+            return program.isCurrentlyAiring ? "Watch" : "Details"
+        } else if isRecording {
             return "Recording"
         } else if isScheduled {
             return "Scheduled"
@@ -269,7 +275,9 @@ struct TopicProgramRowTV: View {
     }
 
     private var actionIcon: String {
-        if isRecording {
+        if !canRecord {
+            return program.isCurrentlyAiring ? "play.circle.fill" : "info.circle"
+        } else if isRecording {
             return "record.circle"
         } else if isScheduled {
             return "checkmark.circle.fill"
@@ -281,7 +289,9 @@ struct TopicProgramRowTV: View {
     }
 
     private var actionColor: Color {
-        if isRecording {
+        if !canRecord {
+            return Theme.accent
+        } else if isRecording {
             return Theme.recording
         } else if isScheduled {
             return Theme.success
@@ -293,7 +303,8 @@ struct TopicProgramRowTV: View {
     }
 
     private var isActionable: Bool {
-        existingRecording != nil || !program.hasEnded
+        if !canRecord { return true }
+        return existingRecording != nil || !program.hasEnded
     }
 
     var body: some View {
@@ -407,6 +418,10 @@ struct TopicProgramRowTV: View {
     }
 
     private func performAction() {
+        if !canRecord {
+            onShowDetails?()
+            return
+        }
         if !program.hasEnded {
             toggleRecording()
         } else if let existing = existingRecording {
@@ -416,6 +431,7 @@ struct TopicProgramRowTV: View {
 
 
     private func checkIfScheduled() async {
+        guard canRecord else { return }
         do {
             let (completed, recording, scheduled) = try await client.getAllRecordings()
             let allRecordings = completed + recording + scheduled

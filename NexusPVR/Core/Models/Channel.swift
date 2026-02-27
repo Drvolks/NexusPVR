@@ -14,6 +14,7 @@ nonisolated struct Channel: Identifiable, Decodable, Hashable, Sendable {
     let hasIcon: Bool
     let streamURL: String?
     let groupId: Int?
+    let logoURL: String?
 
     enum CodingKeys: String, CodingKey {
         case id = "channelId"
@@ -23,13 +24,14 @@ nonisolated struct Channel: Identifiable, Decodable, Hashable, Sendable {
         case streamURL = "channelDetails"
     }
 
-    init(id: Int, name: String, number: Int, hasIcon: Bool = false, streamURL: String? = nil, groupId: Int? = nil) {
+    init(id: Int, name: String, number: Int, hasIcon: Bool = false, streamURL: String? = nil, groupId: Int? = nil, logoURL: String? = nil) {
         self.id = id
         self.name = name
         self.number = number
         self.hasIcon = hasIcon
         self.streamURL = streamURL
         self.groupId = groupId
+        self.logoURL = logoURL
     }
 
     init(from decoder: Decoder) throws {
@@ -40,6 +42,7 @@ nonisolated struct Channel: Identifiable, Decodable, Hashable, Sendable {
         hasIcon = try container.decodeIfPresent(Bool.self, forKey: .hasIcon) ?? false
         streamURL = try container.decodeIfPresent(String.self, forKey: .streamURL)?.trimmingCharacters(in: .whitespaces)
         groupId = nil
+        logoURL = nil
     }
 
     func iconURL(baseURL: String) -> URL? {

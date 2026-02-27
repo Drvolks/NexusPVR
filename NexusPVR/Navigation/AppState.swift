@@ -36,9 +36,15 @@ enum Tab: String, Identifiable {
     var label: String { rawValue }
 
     static var allCases: [Tab] {
-        var cases: [Tab] = [.guide, .recordings, .topics, .search]
+        allCases(userLevel: 10)
+    }
+
+    static func allCases(userLevel: Int) -> [Tab] {
+        var cases: [Tab] = [.guide]
+        if userLevel >= 1 { cases.append(.recordings) }
+        cases.append(contentsOf: [.topics, .search])
         #if DISPATCHERPVR
-        cases.append(.stats)
+        if userLevel >= 1 { cases.append(.stats) }
         #endif
         cases.append(.settings)
         return cases
@@ -46,10 +52,12 @@ enum Tab: String, Identifiable {
 
     #if os(iOS)
     /// Tabs shown in the iOS collapsible nav bar (search is integrated into the bar itself)
-    static var iOSTabs: [Tab] {
-        var cases: [Tab] = [.guide, .recordings, .topics]
+    static func iOSTabs(userLevel: Int) -> [Tab] {
+        var cases: [Tab] = [.guide]
+        if userLevel >= 1 { cases.append(.recordings) }
+        cases.append(.topics)
         #if DISPATCHERPVR
-        cases.append(.stats)
+        if userLevel >= 1 { cases.append(.stats) }
         #endif
         cases.append(.settings)
         return cases
@@ -58,10 +66,12 @@ enum Tab: String, Identifiable {
 
     #if os(macOS)
     /// Tabs shown in the macOS sidebar (search is integrated into the guide floating bar)
-    static var macOSTabs: [Tab] {
-        var cases: [Tab] = [.guide, .recordings, .topics]
+    static func macOSTabs(userLevel: Int) -> [Tab] {
+        var cases: [Tab] = [.guide]
+        if userLevel >= 1 { cases.append(.recordings) }
+        cases.append(.topics)
         #if DISPATCHERPVR
-        cases.append(.stats)
+        if userLevel >= 1 { cases.append(.stats) }
         #endif
         cases.append(.settings)
         return cases
@@ -70,10 +80,12 @@ enum Tab: String, Identifiable {
 
     #if os(tvOS)
     /// Tabs shown in the tvOS nav bar (search is integrated into the guide filter panel)
-    static var tvOSTabs: [Tab] {
-        var cases: [Tab] = [.guide, .recordings, .topics]
+    static func tvOSTabs(userLevel: Int) -> [Tab] {
+        var cases: [Tab] = [.guide]
+        if userLevel >= 1 { cases.append(.recordings) }
+        cases.append(.topics)
         #if DISPATCHERPVR
-        cases.append(.stats)
+        if userLevel >= 1 { cases.append(.stats) }
         #endif
         cases.append(.settings)
         return cases
@@ -118,6 +130,11 @@ final class AppState: ObservableObject {
     @Published var hasM3UErrors = false
     /// User role level from Dispatcharr (0=Streamer, 1=Standard, 10=Admin)
     @Published var userLevel: Int = 10
+    #else
+    /// NexusPVR users always have full access
+    var userLevel: Int { 10 }
+    #endif
+    #if DISPATCHERPVR
     /// Whether the current user can create/modify/delete recordings
     var canManageRecordings: Bool { userLevel >= 10 }
     private var streamCountTask: Task<Void, Never>?
