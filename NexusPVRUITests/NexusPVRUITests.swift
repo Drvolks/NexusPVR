@@ -18,7 +18,8 @@ final class NexusPVREndToEndTests: XCTestCase {
 
     #if os(tvOS)
     /// Track the current tvOS tab index for minimal navigation
-    /// Guide=0, Recordings=1, Topics=2, Search=3, Settings=4
+    /// Guide=0, Recordings=1, Topics=2, Settings=3
+    /// (DispatcherPVR: Guide=0, Recordings=1, Topics=2, Stats=3, Settings=4)
     static var currentTVTabIndex: Int = 0 // Start on Guide
     #endif
 
@@ -192,6 +193,9 @@ final class NexusPVREndToEndTests: XCTestCase {
         // If there's a "Recording" segment, we need one more right press
         remote.press(.right)
         Thread.sleep(forTimeInterval: 1)
+        #elseif os(iOS)
+        selectRecordingsFilter("Scheduled", in: app)
+        Thread.sleep(forTimeInterval: 1)
         #else
         selectSegment("Scheduled", in: app)
         Thread.sleep(forTimeInterval: 1)
@@ -215,6 +219,9 @@ final class NexusPVREndToEndTests: XCTestCase {
         remote.press(.left)
         Thread.sleep(forTimeInterval: 0.5)
         remote.press(.left)
+        Thread.sleep(forTimeInterval: 1)
+        #elseif os(iOS)
+        selectRecordingsFilter("Completed", in: app)
         Thread.sleep(forTimeInterval: 1)
         #else
         selectSegment("Completed", in: app)
@@ -310,7 +317,11 @@ final class NexusPVREndToEndTests: XCTestCase {
         Thread.sleep(forTimeInterval: 2)
 
         // Select the new keyword tab so its programs are visible
+        #if os(iOS)
+        selectKeywordTab(keyword, in: app)
+        #else
         selectSegment(keyword, in: app)
+        #endif
         Thread.sleep(forTimeInterval: 1)
         #endif
 
@@ -332,26 +343,45 @@ final class NexusPVREndToEndTests: XCTestCase {
         let skip = Set(["The", "the", "And", "and", "With", "with", "From", "from", "Episode", "Season"])
         let searchQuery = words.first(where: { !skip.contains($0) }) ?? words.first!
 
-        navigateToTab("Search", app: app)
-        Thread.sleep(forTimeInterval: 1)
-
+        // Search is no longer a separate tab — use the floating search bar
         #if os(tvOS)
+        // tvOS: search via the guide filter panel
+        navigateToTab("Guide", app: app)
+        Thread.sleep(forTimeInterval: 1)
+        let remote = XCUIRemote.shared
+        // Open the filter panel by pressing left from the guide content
+        remote.press(.left)
+        Thread.sleep(forTimeInterval: 1)
+        // Look for the search/programs text field in the filter panel
         let searchField = app.textFields.firstMatch
-        XCTAssertTrue(searchField.waitForExistence(timeout: 3), "Search field should exist")
-        // Focus the text field
-        XCUIRemote.shared.press(.select)
+        XCTAssertTrue(searchField.waitForExistence(timeout: 3), "Search field should exist in filter panel")
+        // Focus and activate the text field
+        for _ in 0..<5 {
+            if searchField.hasFocus { break }
+            remote.press(.down)
+            Thread.sleep(forTimeInterval: 0.3)
+        }
+        remote.press(.select)
         Thread.sleep(forTimeInterval: 0.5)
-        // Type query and submit with return key to trigger .onSubmit
         searchField.typeText(searchQuery + "\n")
         Thread.sleep(forTimeInterval: 2)
         #else
-        let searchField = app.searchFields.firstMatch
-        XCTAssertTrue(searchField.waitForExistence(timeout: 3), "Search field should exist")
-        tap(searchField, app: app)
-        searchField.typeText(searchQuery)
+        // iOS/macOS: use the floating search bar (visible on guide tab)
+        navigateToTab("Search", app: app) // navigateToTab handles "Search" by going to Guide
+        Thread.sleep(forTimeInterval: 1)
+
+        // Find and use the search text field in the floating nav bar
+        let searchField = app.textFields["Search..."].firstMatch
+        let fallbackField = app.textFields.firstMatch
+        let field = searchField.waitForExistence(timeout: 2) ? searchField : fallbackField
+        XCTAssertTrue(field.waitForExistence(timeout: 3), "Search field should exist")
         #if os(macOS)
-        searchField.typeText("\n")
+        field.click()
+        #else
+        field.tap()
         #endif
+        field.typeText(searchQuery)
+        field.typeText("\n")
         Thread.sleep(forTimeInterval: 2)
         #endif
 
@@ -365,29 +395,14 @@ final class NexusPVREndToEndTests: XCTestCase {
         )
 
         #if os(iOS)
-        // Fully exit search mode: clear text, tap close, then cancel
-        let closeBtn = app.buttons["close"].firstMatch
-        if closeBtn.waitForExistence(timeout: 1) {
-            closeBtn.tap()
-            Thread.sleep(forTimeInterval: 0.3)
-        }
-        let clearButton = app.buttons["Clear text"].firstMatch
+        // Dismiss keyboard and clear search by tapping neutral area
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
+        Thread.sleep(forTimeInterval: 0.5)
+        // Clear search text via the X button if visible
+        let clearButton = app.buttons.matching(NSPredicate(format: "identifier == 'xmark.circle.fill' OR label CONTAINS 'Clear'")).firstMatch
         if clearButton.waitForExistence(timeout: 1) {
             clearButton.tap()
             Thread.sleep(forTimeInterval: 0.3)
-        }
-        let cancelButton = app.buttons["Cancel"].firstMatch
-        if cancelButton.waitForExistence(timeout: 1) {
-            cancelButton.tap()
-            Thread.sleep(forTimeInterval: 0.5)
-        }
-        // Tap neutral area to dismiss keyboard
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
-        Thread.sleep(forTimeInterval: 0.5)
-        // Verify search is dismissed — close button should be gone
-        if app.buttons["close"].firstMatch.exists {
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
-            Thread.sleep(forTimeInterval: 0.5)
         }
         #endif
     }
@@ -397,16 +412,9 @@ final class NexusPVREndToEndTests: XCTestCase {
         let app = Self.app!
 
         #if os(iOS)
-        // Ensure search is fully dismissed before navigating
-        let closeBtn = app.buttons["close"].firstMatch
-        if closeBtn.exists {
-            closeBtn.tap()
-            Thread.sleep(forTimeInterval: 0.3)
-            let cancel = app.buttons["Cancel"].firstMatch
-            if cancel.exists { cancel.tap(); Thread.sleep(forTimeInterval: 0.3) }
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
-            Thread.sleep(forTimeInterval: 0.5)
-        }
+        // Dismiss keyboard if active before navigating
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
+        Thread.sleep(forTimeInterval: 0.3)
         #endif
 
         navigateToTab("Settings", app: app)
@@ -533,7 +541,11 @@ final class NexusPVREndToEndTests: XCTestCase {
         remote.press(.menu)
         Thread.sleep(forTimeInterval: 1.0)
         // Navigate to the target tab
-        let tabs = ["Guide", "Recordings", "Topics", "Search", "Settings"]
+        #if DISPATCHERPVR
+        let tabs = ["Guide", "Recordings", "Topics", "Stats", "Settings"]
+        #else
+        let tabs = ["Guide", "Recordings", "Topics", "Settings"]
+        #endif
         guard let targetIndex = tabs.firstIndex(of: tabName) else { return }
         // Calculate direction from current tracked position
         let currentIndex = Self.currentTVTabIndex
@@ -558,14 +570,18 @@ final class NexusPVREndToEndTests: XCTestCase {
         remote.press(.select)
         Thread.sleep(forTimeInterval: 1.0)
         #elseif os(macOS)
+        // macOS: Search is not a sidebar tab — navigate to Guide instead
+        // (search is accessed via the floating search bar on the guide tab)
+        let effectiveTab = (tabName == "Search") ? "Guide" : tabName
+
         // Try multiple macOS sidebar element types
         for query in [
-            app.outlines.buttons[tabName].firstMatch,
-            app.outlines.staticTexts[tabName].firstMatch,
-            app.cells[tabName].firstMatch,
-            app.staticTexts[tabName].firstMatch,
-            app.buttons[tabName].firstMatch,
-            app.cells.containing(.staticText, identifier: tabName).firstMatch,
+            app.outlines.buttons[effectiveTab].firstMatch,
+            app.outlines.staticTexts[effectiveTab].firstMatch,
+            app.cells[effectiveTab].firstMatch,
+            app.staticTexts[effectiveTab].firstMatch,
+            app.buttons[effectiveTab].firstMatch,
+            app.cells.containing(.staticText, identifier: effectiveTab).firstMatch,
         ] {
             if query.waitForExistence(timeout: 0.5) {
                 query.click()
@@ -573,6 +589,30 @@ final class NexusPVREndToEndTests: XCTestCase {
             }
         }
         #else
+        // iOS: Search is not a tab — use the floating search bar instead
+        if tabName == "Search" {
+            // Search is accessed via the search bar in the floating nav, not a tab.
+            // Ensure we're on the Guide tab first (search bar is visible on guide/search).
+            let expandButton = app.buttons["nav-expand-button"].firstMatch
+            if expandButton.waitForExistence(timeout: 2) {
+                expandButton.tap()
+                Thread.sleep(forTimeInterval: 0.5)
+                let guideTab = app.buttons["tab-Guide"].firstMatch
+                if guideTab.waitForExistence(timeout: 2) {
+                    guideTab.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+                    Thread.sleep(forTimeInterval: 1)
+                }
+            }
+            return
+        }
+
+        // iOS: Tap the expand button to reveal tab buttons, then tap the target tab
+        let expandButton = app.buttons["nav-expand-button"].firstMatch
+        if expandButton.waitForExistence(timeout: 2) {
+            expandButton.tap()
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+
         let tabButton = app.buttons["tab-\(tabName)"].firstMatch
         // If not hittable, try dismissing keyboard/overlays
         if tabButton.exists && !tabButton.isHittable {
@@ -666,6 +706,40 @@ final class NexusPVREndToEndTests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.3)
         }
         XCTFail("Could not find a future program with a Record button")
+        #endif
+    }
+
+    /// Select a recordings filter option via the Menu dropdown (iOS) or segmented picker (macOS)
+    private func selectRecordingsFilter(_ filter: String, in app: XCUIApplication) {
+        #if os(iOS)
+        let filterMenu = app.buttons["recordings-filter"].firstMatch
+        if filterMenu.waitForExistence(timeout: 2) {
+            tap(filterMenu, app: app)
+            Thread.sleep(forTimeInterval: 0.5)
+            let option = app.buttons[filter].firstMatch
+            if option.waitForExistence(timeout: 2) {
+                tap(option, app: app)
+            }
+        }
+        #else
+        selectSegment(filter, in: app)
+        #endif
+    }
+
+    /// Select a keyword tab via the Menu dropdown (iOS) or segmented picker (macOS)
+    private func selectKeywordTab(_ keyword: String, in app: XCUIApplication) {
+        #if os(iOS)
+        let keywordMenu = app.buttons["keyword-tabs"].firstMatch
+        if keywordMenu.waitForExistence(timeout: 2) {
+            tap(keywordMenu, app: app)
+            Thread.sleep(forTimeInterval: 0.5)
+            let option = app.buttons[keyword].firstMatch
+            if option.waitForExistence(timeout: 2) {
+                tap(option, app: app)
+            }
+        }
+        #else
+        selectSegment(keyword, in: app)
         #endif
     }
 
