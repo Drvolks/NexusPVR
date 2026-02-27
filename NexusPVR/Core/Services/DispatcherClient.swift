@@ -57,6 +57,59 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         isAuthenticated = false
     }
 
+    // MARK: - Network Logging
+
+    private func sanitizePath(_ url: URL?) -> String {
+        guard let url else { return "?" }
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let sensitiveKeys: Set<String> = ["username", "password", "api_key", "token"]
+        if let items = components?.queryItems {
+            components?.queryItems = items.map { item in
+                if sensitiveKeys.contains(item.name.lowercased()) {
+                    return URLQueryItem(name: item.name, value: "***")
+                }
+                return item
+            }
+        }
+        let path = components?.path ?? url.path
+        if let query = components?.query, !query.isEmpty {
+            return "\(path)?\(query)"
+        }
+        return path
+    }
+
+    private func loggedData(for request: URLRequest) async throws -> (Data, URLResponse) {
+        let start = CFAbsoluteTimeGetCurrent()
+        let method = request.httpMethod ?? "GET"
+        let path = sanitizePath(request.url)
+        do {
+            let (data, response) = try await session.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode
+            let ok = status.map { (200...399).contains($0) } ?? false
+            let ms = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
+            NetworkEventLog.shared.log(NetworkEvent(
+                timestamp: Date(), method: method, path: path,
+                statusCode: status, isSuccess: ok,
+                durationMs: ms, responseSize: data.count,
+                errorDetail: ok ? nil : String(data: Data(data.prefix(1024)), encoding: .utf8)
+            ))
+            return (data, response)
+        } catch {
+            let ms = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
+            NetworkEventLog.shared.log(NetworkEvent(
+                timestamp: Date(), method: method, path: path,
+                statusCode: nil, isSuccess: false,
+                durationMs: ms, responseSize: 0,
+                errorDetail: error.localizedDescription
+            ))
+            throw error
+        }
+    }
+
+    private func loggedData(from url: URL) async throws -> (Data, URLResponse) {
+        try await loggedData(for: URLRequest(url: url))
+    }
+
     // MARK: - Authentication
 
     func authenticate() async throws {
@@ -81,7 +134,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
             request.setValue("application/json", forHTTPHeaderField: "Accept")
 
             do {
-                let (_, response) = try await session.data(for: request)
+                let (_, response) = try await loggedData(for: request)
                 guard let httpResponse = response as? HTTPURLResponse else {
                     throw PVRClientError.invalidResponse
                 }
@@ -121,7 +174,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         request.httpBody = try JSONEncoder().encode(body)
 
         do {
-            let (data, response) = try await session.data(for: request)
+            let (data, response) = try await loggedData(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw PVRClientError.invalidResponse
@@ -156,7 +209,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         let encodedPass = config.password.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? config.password
         guard let xcURL = URL(string: "\(baseURL)/player_api.php?username=\(encodedUser)&password=\(encodedPass)") else { return false }
 
-        let (_, xcResponse) = try await session.data(for: URLRequest(url: xcURL))
+        let (_, xcResponse) = try await loggedData(from: xcURL)
         guard let httpResponse = xcResponse as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else { return false }
 
@@ -211,7 +264,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         let body = ["refresh": refreshToken]
         request.httpBody = try JSONEncoder().encode(body)
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await loggedData(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             // Refresh failed, need full re-auth
@@ -248,7 +301,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         }
 
         do {
-            let (data, response) = try await session.data(for: request)
+            let (data, response) = try await loggedData(for: request)
 
             if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 401 {
                 if useApiKeyAuth {
@@ -303,7 +356,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         }
 
-        let (_, response) = try await session.data(for: request)
+        let (_, response) = try await loggedData(for: request)
 
         if let httpResponse = response as? HTTPURLResponse {
             if httpResponse.statusCode == 401 {
@@ -708,7 +761,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         }
 
         let start = CFAbsoluteTimeGetCurrent()
-        let (data, response) = try await session.data(for: URLRequest(url: url))
+        let (data, response) = try await loggedData(from: url)
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
             throw PVRClientError.invalidResponse
@@ -821,7 +874,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         }
 
         let start = CFAbsoluteTimeGetCurrent()
-        let (data, response) = try await session.data(for: URLRequest(url: url))
+        let (data, response) = try await loggedData(from: url)
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
             throw PVRClientError.invalidResponse
@@ -853,7 +906,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         // Fetch categories for group names
         if let catURL = URL(string: "\(baseURL)/player_api.php?username=\(encodedUser)&password=\(encodedPass)&action=get_live_categories") {
             do {
-                let (catData, catResponse) = try await session.data(for: URLRequest(url: catURL))
+                let (catData, catResponse) = try await loggedData(from: catURL)
                 if let httpCatResponse = catResponse as? HTTPURLResponse,
                    (200...299).contains(httpCatResponse.statusCode) {
                     let categories = try JSONDecoder().decode([XCCategory].self, from: catData)
@@ -879,7 +932,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         }
 
         let start = CFAbsoluteTimeGetCurrent()
-        let (data, response) = try await session.data(for: URLRequest(url: url))
+        let (data, response) = try await loggedData(from: url)
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
             throw PVRClientError.invalidResponse

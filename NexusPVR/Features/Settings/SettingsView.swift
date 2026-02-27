@@ -16,6 +16,7 @@ struct SettingsView: View {
     @State private var showingUnlinkConfirm = false
     @State private var seekBackwardSeconds: Int = UserPreferences.load().seekBackwardSeconds
     @State private var seekForwardSeconds: Int = UserPreferences.load().seekForwardSeconds
+    @ObservedObject private var eventLog = NetworkEventLog.shared
 
 
     var body: some View {
@@ -35,6 +36,7 @@ struct SettingsView: View {
             List {
                 serverSection
                 playbackSection
+                eventLogLinkSection
             }
             .navigationTitle("Settings")
             #if os(macOS)
@@ -170,6 +172,24 @@ struct SettingsView: View {
                 }
                 .focusSection()
 
+                // Event Log
+                NavigationLink(destination: EventLogView()) {
+                    HStack {
+                        Image(systemName: "list.bullet.rectangle")
+                            .foregroundStyle(Theme.accent)
+                        Text("Event Log")
+                            .foregroundStyle(Theme.textPrimary)
+                        Spacer()
+                        Text("\(eventLog.events.count)")
+                            .foregroundStyle(Theme.textTertiary)
+                    }
+                    .padding()
+                    .background(Theme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
+                }
+                .buttonStyle(.card)
+                .focusSection()
+
             }
             .padding(.vertical)
             .padding(.horizontal, 40)
@@ -274,6 +294,21 @@ struct SettingsView: View {
             var prefs = UserPreferences.load()
             prefs.seekForwardSeconds = seekForwardSeconds
             prefs.save()
+        }
+    }
+
+    private var eventLogLinkSection: some View {
+        Section {
+            NavigationLink(destination: EventLogView()) {
+                HStack {
+                    Label("Event Log", systemImage: "list.bullet.rectangle")
+                    Spacer()
+                    if !eventLog.events.isEmpty {
+                        Text("\(eventLog.events.count)")
+                            .foregroundStyle(Theme.textTertiary)
+                    }
+                }
+            }
         }
     }
 
