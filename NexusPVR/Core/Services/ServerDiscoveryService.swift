@@ -186,7 +186,8 @@ class ServerDiscoveryService: ObservableObject {
         // Any HTTP response (even 401/403) proves it's a web server.
         // The API key itself gets validated when the user actually connects.
         if let apiKey, !apiKey.isEmpty {
-            guard let url = URL(string: "\(baseURL)/api/channels/channels/?page_size=1") else { return nil }
+            // Use /api/accounts/users/me/ — accessible to all authenticated users regardless of role
+            guard let url = URL(string: "\(baseURL)/api/accounts/users/me/") else { return nil }
 
             var request = URLRequest(url: url)
             request.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
@@ -222,9 +223,28 @@ class ServerDiscoveryService: ObservableObject {
             let (_, response) = try await URLSession.shared.data(for: request)
             guard let httpResponse = response as? HTTPURLResponse,
                   httpResponse.statusCode == 200 else {
-                return nil
+                // JWT failed — try XC API as fallback (password may be an XC password, not Django)
+                return await verifyDispatcharrXC(baseURL: baseURL, host: host, port: port, credentials: credentials)
             }
 
+            return DiscoveredServer(id: host, host: host, port: port, serverName: Brand.serverName, requiresAuth: false)
+        } catch {
+            return nil
+        }
+    }
+
+    private nonisolated func verifyDispatcharrXC(baseURL: String, host: String, port: Int, credentials: (username: String, password: String)?) async -> DiscoveredServer? {
+        guard let credentials else { return nil }
+        let encodedUser = credentials.username.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? credentials.username
+        let encodedPass = credentials.password.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? credentials.password
+        guard let xcURL = URL(string: "\(baseURL)/player_api.php?username=\(encodedUser)&password=\(encodedPass)") else { return nil }
+        var xcRequest = URLRequest(url: xcURL)
+        xcRequest.timeoutInterval = 3
+
+        do {
+            let (_, xcResponse) = try await URLSession.shared.data(for: xcRequest)
+            guard let httpResponse = xcResponse as? HTTPURLResponse,
+                  (200...299).contains(httpResponse.statusCode) else { return nil }
             return DiscoveredServer(id: host, host: host, port: port, serverName: Brand.serverName, requiresAuth: false)
         } catch {
             return nil

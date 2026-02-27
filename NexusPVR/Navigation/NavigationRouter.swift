@@ -38,7 +38,9 @@ struct NavigationRouter: View {
         }
         #if DISPATCHERPVR
         .task {
-            appState.startStreamCountPolling(client: client)
+            if appState.userLevel >= 1 {
+                appState.startStreamCountPolling(client: client)
+            }
         }
         #endif
     }
@@ -252,7 +254,7 @@ struct IOSNavigation: View {
             // Tab buttons — appear when expanded
             if isNavExpanded {
                 HStack(spacing: 0) {
-                    ForEach(Tab.iOSTabs) { tab in
+                    ForEach(Tab.iOSTabs(userLevel: appState.userLevel)) { tab in
                         Button {
                             appState.selectedTab = tab
                             withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) {
@@ -636,7 +638,7 @@ struct TVOSNavigation: View {
 
     private var tvOSNavBar: some View {
         HStack(spacing: 0) {
-            ForEach(Tab.tvOSTabs) { tab in
+            ForEach(Tab.tvOSTabs(userLevel: appState.userLevel)) { tab in
                 Button {
                     appState.selectedTab = tab
                     navBarEnabled = false
@@ -730,7 +732,7 @@ struct MacOSNavigation: View {
             } else {
                 // Show regular navigation with sidebar
                 NavigationSplitView {
-                    List(Tab.macOSTabs, selection: $appState.selectedTab) { tab in
+                    List(Tab.macOSTabs(userLevel: appState.userLevel), selection: $appState.selectedTab) { tab in
                         HStack {
                             Label(tab.label, systemImage: tab.icon)
                             #if DISPATCHERPVR

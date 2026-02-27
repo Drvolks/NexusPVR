@@ -18,6 +18,8 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
     private var refreshToken: String?
     /// When true, use `X-API-Key` header instead of `Bearer` JWT
     private var useApiKeyAuth = false
+    /// When true, use output/XC endpoints instead of REST API (for Streamer users)
+    var useOutputEndpoints = false
     private let session: URLSession
     /// Maps tvg_id (e.g. "TSN1.ca") → channel id for EPG lookups
     private var tvgIdToChannelId: [String: Int] = [:]
@@ -25,6 +27,10 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
     private var channelIdToLogoId: [Int: Int] = [:]
     /// Maps channel id → UUID for stream URLs
     private var channelIdToUUID: [Int: String] = [:]
+    /// Direct logo URLs from M3U/XC parsing, keyed by channel ID
+    private var channelLogoURLs: [Int: String] = [:]
+    /// Channel groups extracted from M3U group-title or XC categories
+    private var outputChannelGroups: [ChannelGroup] = []
 
     init(config: ServerConfig? = nil) {
         self.config = config ?? ServerConfig.load()
@@ -47,6 +53,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         accessToken = nil
         refreshToken = nil
         useApiKeyAuth = false
+        useOutputEndpoints = false
         isAuthenticated = false
     }
 
@@ -64,7 +71,8 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
             isConnecting = true
             defer { isConnecting = false }
 
-            guard let url = URL(string: "\(baseURL)/api/channels/channels/?page_size=1") else {
+            // Probe /api/accounts/users/me/ — accessible to all authenticated users regardless of role
+            guard let url = URL(string: "\(baseURL)/api/accounts/users/me/") else {
                 throw PVRClientError.invalidResponse
             }
 
@@ -120,6 +128,8 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
             }
 
             if httpResponse.statusCode == 401 || httpResponse.statusCode == 400 {
+                // JWT failed — try XC API as fallback (password may be XC, not Django)
+                if try await authenticateViaXC() { return }
                 throw PVRClientError.authenticationFailed
             }
 
@@ -139,6 +149,24 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         }
     }
 
+    /// Try authenticating via XC API (for streamer users with XC credentials)
+    private func authenticateViaXC() async throws -> Bool {
+        guard !config.username.isEmpty, !config.password.isEmpty else { return false }
+        let encodedUser = config.username.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? config.username
+        let encodedPass = config.password.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? config.password
+        guard let xcURL = URL(string: "\(baseURL)/player_api.php?username=\(encodedUser)&password=\(encodedPass)") else { return false }
+
+        let (_, xcResponse) = try await session.data(for: URLRequest(url: xcURL))
+        guard let httpResponse = xcResponse as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else { return false }
+
+        // XC auth succeeded — mark as authenticated without JWT tokens
+        useApiKeyAuth = false
+        useOutputEndpoints = true
+        isAuthenticated = true
+        return true
+    }
+
     func disconnect() {
         accessToken = nil
         refreshToken = nil
@@ -154,6 +182,10 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
 
     func fetchUserLevel() async throws -> Int {
         guard !config.isDemoMode else { return 10 }
+        // XC-only users have no JWT/API key — they are always streamers (level 0)
+        if useOutputEndpoints && accessToken == nil {
+            return 0
+        }
         guard let url = URL(string: "\(baseURL)/api/accounts/users/me/") else {
             throw PVRClientError.invalidResponse
         }
@@ -329,6 +361,12 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
 
     func getChannels() async throws -> [Channel] {
         guard !config.isDemoMode else { return DemoDataProvider.channels }
+        if useOutputEndpoints {
+            if !config.password.isEmpty && !config.username.isEmpty && config.apiKey.isEmpty {
+                return try await getChannelsFromXC()
+            }
+            return try await getChannelsFromM3U()
+        }
         // Request large page to minimize pagination round-trips
         guard let url = URL(string: "\(baseURL)/api/channels/channels/?page_size=10000") else {
             throw PVRClientError.invalidResponse
@@ -404,6 +442,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
 
     func getChannelProfiles() async throws -> [ChannelProfile] {
         guard !config.isDemoMode else { return DemoDataProvider.channelProfiles }
+        if useOutputEndpoints { return [] }
         guard let url = URL(string: "\(baseURL)/api/channels/profiles/") else {
             throw PVRClientError.invalidResponse
         }
@@ -413,6 +452,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
 
     func getChannelGroups() async throws -> [ChannelGroup] {
         guard !config.isDemoMode else { return DemoDataProvider.channelGroups }
+        if useOutputEndpoints { return outputChannelGroups }
         guard let url = URL(string: "\(baseURL)/api/channels/groups/") else {
             throw PVRClientError.invalidResponse
         }
@@ -447,6 +487,9 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
 
     func getAllListings(for channels: [Channel]) async throws -> [Int: [Program]] {
         guard !config.isDemoMode else { return DemoDataProvider.allListings(for: channels) }
+        if useOutputEndpoints {
+            return try await getAllListingsFromEPG(channels: channels)
+        }
 
         if !isAuthenticated {
             try await authenticate()
@@ -577,6 +620,26 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
 
     func liveStreamURL(channelId: Int) async throws -> URL {
         guard !config.isDemoMode else { return DemoDataProvider.demoVideoURL }
+
+        if useOutputEndpoints {
+            // XC credentials: use /live/{user}/{pass}/{id}
+            if !config.password.isEmpty && !config.username.isEmpty && config.apiKey.isEmpty {
+                let encodedPass = config.password.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? config.password
+                guard let url = URL(string: "\(baseURL)/live/\(config.username)/\(encodedPass)/\(channelId)") else {
+                    throw PVRClientError.invalidResponse
+                }
+                return url
+            }
+            // API key: use proxy UUID (already populated from M3U)
+            guard let uuid = channelIdToUUID[channelId] else {
+                throw PVRClientError.apiError("No stream UUID for channel \(channelId)")
+            }
+            guard let url = URL(string: "\(baseURL)/proxy/ts/stream/\(uuid)") else {
+                throw PVRClientError.invalidResponse
+            }
+            return url
+        }
+
         guard let uuid = channelIdToUUID[channelId] else {
             throw PVRClientError.apiError("No stream UUID for channel \(channelId)")
         }
@@ -604,6 +667,9 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
 
     func channelIconURL(channelId: Int) -> URL? {
         guard !config.isDemoMode else { return DemoDataProvider.channelIconURL(channelId: channelId) }
+        if let urlString = channelLogoURLs[channelId], let url = URL(string: urlString) {
+            return url
+        }
         guard let logoId = channelIdToLogoId[channelId],
               let token = accessToken else { return nil }
         if useApiKeyAuth {
@@ -633,6 +699,322 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         return items
     }
 
+    // MARK: - M3U / XC / XMLTV Parsers (Streamer endpoints)
+
+    /// Fetch channels from the unauthenticated M3U output endpoint
+    private func getChannelsFromM3U() async throws -> [Channel] {
+        guard let url = URL(string: "\(baseURL)/output/m3u?tvg_id_source=channel_number") else {
+            throw PVRClientError.invalidResponse
+        }
+
+        let start = CFAbsoluteTimeGetCurrent()
+        let (data, response) = try await session.data(for: URLRequest(url: url))
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            throw PVRClientError.invalidResponse
+        }
+
+        guard let content = String(data: data, encoding: .utf8) else {
+            throw PVRClientError.invalidResponse
+        }
+
+        let lines = content.components(separatedBy: .newlines)
+        var channels: [Channel] = []
+        channelLogoURLs = [:]
+        channelIdToUUID = [:]
+        var groupSet: [String: Int] = [:] // group-title → generated ID
+        var nextGroupId = 1
+
+        let extinfPattern = try NSRegularExpression(pattern: #"#EXTINF:[^,]*,(.*)"#)
+        let attrPattern = try NSRegularExpression(pattern: #"(\w[\w-]*)="([^"]*)""#)
+
+        var i = 0
+        while i < lines.count {
+            let line = lines[i]
+            i += 1
+
+            guard line.hasPrefix("#EXTINF:") else { continue }
+
+            // Extract attributes
+            let fullRange = NSRange(line.startIndex..., in: line)
+            var attrs: [String: String] = [:]
+            var channelName = ""
+
+            if let nameMatch = extinfPattern.firstMatch(in: line, range: fullRange),
+               let nameRange = Range(nameMatch.range(at: 1), in: line) {
+                channelName = String(line[nameRange])
+            }
+
+            for match in attrPattern.matches(in: line, range: fullRange) {
+                if let keyRange = Range(match.range(at: 1), in: line),
+                   let valRange = Range(match.range(at: 2), in: line) {
+                    attrs[String(line[keyRange])] = String(line[valRange])
+                }
+            }
+
+            // Find stream URL (next non-# non-empty line)
+            var streamURL: String?
+            while i < lines.count {
+                let nextLine = lines[i].trimmingCharacters(in: .whitespaces)
+                i += 1
+                if nextLine.isEmpty || nextLine.hasPrefix("#") { continue }
+                streamURL = nextLine
+                break
+            }
+
+            let tvgId = attrs["tvg-id"]
+            let tvgName = attrs["tvg-name"] ?? channelName
+            let tvgLogo = attrs["tvg-logo"]
+            let tvgChno = attrs["tvg-chno"].flatMap { Int($0) }
+            let groupTitle = attrs["group-title"]
+
+            let chno = tvgChno ?? (Int(tvgId ?? "") ?? channels.count + 1)
+
+            // Resolve group ID
+            var groupId: Int?
+            if let groupTitle, !groupTitle.isEmpty {
+                if let existing = groupSet[groupTitle] {
+                    groupId = existing
+                } else {
+                    groupId = nextGroupId
+                    groupSet[groupTitle] = nextGroupId
+                    nextGroupId += 1
+                }
+            }
+
+            // Extract UUID from proxy stream URL if available
+            if let streamURL, let uuidRange = streamURL.range(of: "/proxy/ts/stream/") {
+                let uuid = String(streamURL[uuidRange.upperBound...])
+                channelIdToUUID[chno] = uuid
+            }
+
+            if let tvgLogo, !tvgLogo.isEmpty {
+                channelLogoURLs[chno] = tvgLogo
+            }
+
+            channels.append(Channel(
+                id: chno,
+                name: tvgName,
+                number: chno,
+                hasIcon: tvgLogo != nil && !tvgLogo!.isEmpty,
+                streamURL: streamURL,
+                groupId: groupId,
+                logoURL: tvgLogo
+            ))
+        }
+
+        // Build channel groups
+        outputChannelGroups = groupSet.map { ChannelGroup(id: $0.value, name: $0.key) }
+            .sorted { $0.id < $1.id }
+
+        print("[Dispatcharr] Parsed \(channels.count) channels from M3U in \(String(format: "%.0f", (CFAbsoluteTimeGetCurrent() - start) * 1000))ms")
+        return channels
+    }
+
+    /// Fetch channels from the XC live streams API
+    private func getChannelsFromXC() async throws -> [Channel] {
+        let encodedUser = config.username.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? config.username
+        let encodedPass = config.password.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? config.password
+
+        guard let url = URL(string: "\(baseURL)/player_api.php?username=\(encodedUser)&password=\(encodedPass)&action=get_live_streams") else {
+            throw PVRClientError.invalidResponse
+        }
+
+        let start = CFAbsoluteTimeGetCurrent()
+        let (data, response) = try await session.data(for: URLRequest(url: url))
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            throw PVRClientError.invalidResponse
+        }
+
+        let streams = try JSONDecoder().decode([XCLiveStream].self, from: data)
+
+        channelLogoURLs = [:]
+        var channels: [Channel] = []
+
+        for stream in streams {
+            if let icon = stream.streamIcon, !icon.isEmpty {
+                channelLogoURLs[stream.streamId] = icon
+            }
+
+            let groupId = stream.categoryId.flatMap { Int($0) }
+
+            channels.append(Channel(
+                id: stream.streamId,
+                name: stream.name,
+                number: stream.num,
+                hasIcon: stream.streamIcon != nil && !stream.streamIcon!.isEmpty,
+                streamURL: nil,
+                groupId: groupId,
+                logoURL: stream.streamIcon
+            ))
+        }
+
+        // Fetch categories for group names
+        if let catURL = URL(string: "\(baseURL)/player_api.php?username=\(encodedUser)&password=\(encodedPass)&action=get_live_categories") {
+            do {
+                let (catData, catResponse) = try await session.data(for: URLRequest(url: catURL))
+                if let httpCatResponse = catResponse as? HTTPURLResponse,
+                   (200...299).contains(httpCatResponse.statusCode) {
+                    let categories = try JSONDecoder().decode([XCCategory].self, from: catData)
+                    outputChannelGroups = categories.compactMap { cat in
+                        guard let id = Int(cat.categoryId) else { return nil }
+                        return ChannelGroup(id: id, name: cat.categoryName)
+                    }
+                }
+            } catch {
+                // Non-fatal: groups just won't have names
+                outputChannelGroups = []
+            }
+        }
+
+        print("[Dispatcharr] Parsed \(channels.count) channels from XC API in \(String(format: "%.0f", (CFAbsoluteTimeGetCurrent() - start) * 1000))ms")
+        return channels
+    }
+
+    /// Fetch EPG data from the XMLTV output endpoint
+    private func getAllListingsFromEPG(channels: [Channel]) async throws -> [Int: [Program]] {
+        guard let url = URL(string: "\(baseURL)/output/epg?tvg_id_source=channel_number") else {
+            throw PVRClientError.invalidResponse
+        }
+
+        let start = CFAbsoluteTimeGetCurrent()
+        let (data, response) = try await session.data(for: URLRequest(url: url))
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            throw PVRClientError.invalidResponse
+        }
+
+        // Build channel number lookup from the channels array
+        let channelNumberToId: [String: Int] = Dictionary(
+            channels.map { (String($0.number), $0.id) },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        let delegate = XMLTVParserDelegate(channelNumberToId: channelNumberToId)
+        let parser = XMLParser(data: data)
+        parser.delegate = delegate
+        parser.parse()
+
+        print("[Dispatcharr] Parsed \(delegate.programs.values.reduce(0) { $0 + $1.count }) programs from XMLTV in \(String(format: "%.0f", (CFAbsoluteTimeGetCurrent() - start) * 1000))ms")
+        return delegate.programs
+    }
+}
+
+// MARK: - XMLTV Parser
+
+private class XMLTVParserDelegate: NSObject, XMLParserDelegate {
+    var programs: [Int: [Program]] = [:]
+    private let channelNumberToId: [String: Int]
+
+    private var currentElement = ""
+    private var currentChannelAttr = ""
+    private var currentStartAttr = ""
+    private var currentStopAttr = ""
+    private var currentTitle = ""
+    private var currentSubTitle = ""
+    private var currentDesc = ""
+    private var currentCategory = ""
+    private var inProgramme = false
+
+    private static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyyMMddHHmmss Z"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+
+    init(channelNumberToId: [String: Int]) {
+        self.channelNumberToId = channelNumberToId
+    }
+
+    func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
+        currentElement = elementName
+
+        if elementName == "programme" {
+            inProgramme = true
+            currentChannelAttr = attributeDict["channel"] ?? ""
+            currentStartAttr = attributeDict["start"] ?? ""
+            currentStopAttr = attributeDict["stop"] ?? ""
+            currentTitle = ""
+            currentSubTitle = ""
+            currentDesc = ""
+            currentCategory = ""
+        }
+    }
+
+    func parser(_ parser: XMLParser, foundCharacters string: String) {
+        guard inProgramme else { return }
+        switch currentElement {
+        case "title": currentTitle += string
+        case "sub-title": currentSubTitle += string
+        case "desc": currentDesc += string
+        case "category": currentCategory += string
+        default: break
+        }
+    }
+
+    func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
+        if elementName == "programme" {
+            inProgramme = false
+
+            guard let channelId = channelNumberToId[currentChannelAttr],
+                  let startDate = Self.dateFormatter.date(from: currentStartAttr),
+                  let stopDate = Self.dateFormatter.date(from: currentStopAttr),
+                  stopDate > startDate else {
+                return
+            }
+
+            let idString = "\(currentChannelAttr)-\(currentStartAttr)"
+            let programId = abs(idString.hashValue)
+
+            let genres: [String]? = currentCategory.isEmpty ? nil : [currentCategory]
+
+            let program = Program(
+                id: programId,
+                name: currentTitle,
+                subtitle: currentSubTitle.isEmpty ? nil : currentSubTitle,
+                desc: currentDesc.isEmpty ? nil : currentDesc,
+                start: Int(startDate.timeIntervalSince1970),
+                end: Int(stopDate.timeIntervalSince1970),
+                genres: genres,
+                channelId: channelId
+            )
+
+            programs[channelId, default: []].append(program)
+        }
+
+        if elementName != "programme" {
+            currentElement = ""
+        }
+    }
+}
+
+// MARK: - XC API Models
+
+private nonisolated struct XCLiveStream: Decodable {
+    let num: Int
+    let name: String
+    let streamId: Int
+    let streamIcon: String?
+    let categoryId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case num, name
+        case streamId = "stream_id"
+        case streamIcon = "stream_icon"
+        case categoryId = "category_id"
+    }
+}
+
+private nonisolated struct XCCategory: Decodable {
+    let categoryId: String
+    let categoryName: String
+
+    enum CodingKeys: String, CodingKey {
+        case categoryId = "category_id"
+        case categoryName = "category_name"
+    }
 }
 
 // MARK: - API Response Models

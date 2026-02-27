@@ -236,6 +236,9 @@ struct SettingsView: View {
         client.disconnect()
         ServerConfig.clear()
         client.updateConfig(.default)
+        #if DISPATCHERPVR
+        client.useOutputEndpoints = false
+        #endif
         appState.guideChannelFilter = ""
         appState.guideGroupFilter = nil
         appState.searchQuery = ""

@@ -107,6 +107,7 @@ struct ContentView: View {
             #if DISPATCHERPVR
             if client.isAuthenticated, let level = try? await client.fetchUserLevel() {
                 appState.userLevel = level
+                client.useOutputEndpoints = level < 1
             }
             #endif
 
@@ -134,8 +135,19 @@ struct ContentView: View {
         .onChange(of: client.isConfigured) { _, isConfigured in
             if isConfigured {
                 discovery.stopScan()
-                // Load EPG cache for newly configured server
-                Task { await epgCache.loadData(using: client) }
+                // Authenticate, fetch user level, then load EPG — all sequentially
+                Task {
+                    if !client.isAuthenticated {
+                        try? await client.authenticate()
+                    }
+                    #if DISPATCHERPVR
+                    if client.isAuthenticated, let level = try? await client.fetchUserLevel() {
+                        appState.userLevel = level
+                        client.useOutputEndpoints = level < 1
+                    }
+                    #endif
+                    await epgCache.loadData(using: client)
+                }
             } else {
                 // Server was unlinked — reset and restart discovery
                 epgCache.invalidate()
@@ -414,15 +426,6 @@ struct ContentView: View {
             #endif
             config.save()
             client.updateConfig(config)
-
-            Task {
-                try? await client.authenticate()
-                #if DISPATCHERPVR
-                if let level = try? await client.fetchUserLevel() {
-                    appState.userLevel = level
-                }
-                #endif
-            }
         }
     }
 }
