@@ -89,31 +89,46 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
     }
 
     private func loggedData(from url: URL) async throws -> (Data, URLResponse) {
-        let start = CFAbsoluteTimeGetCurrent()
         let method = "GET"
         let path = sanitizePath(url)
-        do {
-            let (data, response) = try await session.data(from: url)
-            let status = (response as? HTTPURLResponse)?.statusCode
-            let ok = status.map { (200...399).contains($0) } ?? false
-            let ms = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
-            NetworkEventLog.shared.log(NetworkEvent(
-                timestamp: Date(), method: method, path: path,
-                statusCode: status, isSuccess: ok,
-                durationMs: ms, responseSize: data.count,
-                errorDetail: ok ? nil : String(data: Data(data.prefix(1024)), encoding: .utf8)
-            ))
-            return (data, response)
-        } catch {
-            let ms = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
-            NetworkEventLog.shared.log(NetworkEvent(
-                timestamp: Date(), method: method, path: path,
-                statusCode: nil, isSuccess: false,
-                durationMs: ms, responseSize: 0,
-                errorDetail: error.localizedDescription
-            ))
-            throw error
+        var lastError: Error?
+
+        for attempt in 1...3 {
+            let start = CFAbsoluteTimeGetCurrent()
+            do {
+                let (data, response) = try await session.data(from: url)
+                let status = (response as? HTTPURLResponse)?.statusCode
+                let ok = status.map { (200...399).contains($0) } ?? false
+                let ms = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
+                NetworkEventLog.shared.log(NetworkEvent(
+                    timestamp: Date(), method: method, path: path,
+                    statusCode: status, isSuccess: ok,
+                    durationMs: ms, responseSize: data.count,
+                    errorDetail: ok ? nil : String(data: Data(data.prefix(1024)), encoding: .utf8)
+                ))
+                return (data, response)
+            } catch {
+                let ms = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
+                lastError = error
+
+                let isTransient = (error as? URLError)?.code == .notConnectedToInternet && ms < 100
+                NetworkEventLog.shared.log(NetworkEvent(
+                    timestamp: Date(), method: method, path: path,
+                    statusCode: nil, isSuccess: false,
+                    durationMs: ms, responseSize: 0,
+                    errorDetail: error.localizedDescription + (isTransient && attempt < 3 ? " (retrying \(attempt)/3)" : "")
+                ))
+
+                if isTransient && attempt < 3 {
+                    try? await Task.sleep(for: .seconds(0.5))
+                    continue
+                }
+
+                throw error
+            }
         }
+
+        throw lastError!
     }
 
     // MARK: - Authentication
