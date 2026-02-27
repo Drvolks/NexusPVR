@@ -295,7 +295,7 @@ struct ContentView: View {
             } label: {
                 HStack {
                     Image(systemName: "magnifyingglass")
-                    Text("Find Servers")
+                    Text("Find or Configure Server")
                 }
             }
             .focused($findServersFocused)
