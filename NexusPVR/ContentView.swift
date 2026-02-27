@@ -104,6 +104,12 @@ struct ContentView: View {
                 }
             }
 
+            #if DISPATCHERPVR
+            if client.isAuthenticated, let level = try? await client.fetchUserLevel() {
+                appState.userLevel = level
+            }
+            #endif
+
             isCheckingCloud = false
 
             // Load EPG cache once authenticated
@@ -411,6 +417,11 @@ struct ContentView: View {
 
             Task {
                 try? await client.authenticate()
+                #if DISPATCHERPVR
+                if let level = try? await client.fetchUserLevel() {
+                    appState.userLevel = level
+                }
+                #endif
             }
         }
     }

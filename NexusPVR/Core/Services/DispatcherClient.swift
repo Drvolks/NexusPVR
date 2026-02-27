@@ -146,6 +146,21 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         isAuthenticated = false
     }
 
+    // MARK: - User Info
+
+    private struct UserMeResponse: Decodable {
+        let user_level: Int
+    }
+
+    func fetchUserLevel() async throws -> Int {
+        guard !config.isDemoMode else { return 10 }
+        guard let url = URL(string: "\(baseURL)/api/accounts/users/me/") else {
+            throw PVRClientError.invalidResponse
+        }
+        let response: UserMeResponse = try await authenticatedRequest(url)
+        return response.user_level
+    }
+
     // MARK: - Token Refresh
 
     private func refreshAccessToken() async throws {

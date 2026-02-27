@@ -239,6 +239,9 @@ struct SettingsView: View {
         appState.guideChannelFilter = ""
         appState.guideGroupFilter = nil
         appState.searchQuery = ""
+        #if DISPATCHERPVR
+        appState.userLevel = 10
+        #endif
     }
 
     private var playbackSection: some View {

@@ -177,22 +177,34 @@ struct RecordingDetailView: View {
                             .buttonStyle(AccentButtonStyle())
                         }
 
-                        Button(role: .destructive) {
-                            deleteRecording()
-                        } label: {
-                            HStack {
-                                if isDeleting {
-                                    ProgressView()
-                                        .tint(.white)
-                                } else {
-                                    Image(systemName: "trash")
+                        #if DISPATCHERPVR
+                        let canManage = appState.canManageRecordings
+                        #else
+                        let canManage = true
+                        #endif
+
+                        if canManage {
+                            Button(role: .destructive) {
+                                deleteRecording()
+                            } label: {
+                                HStack {
+                                    if isDeleting {
+                                        ProgressView()
+                                            .tint(.white)
+                                    } else {
+                                        Image(systemName: "trash")
+                                    }
+                                    Text(recording.recordingStatus.isScheduled ? "Cancel Recording" : "Delete")
                                 }
-                                Text(recording.recordingStatus.isScheduled ? "Cancel Recording" : "Delete")
+                                .frame(maxWidth: .infinity)
                             }
-                            .frame(maxWidth: .infinity)
+                            .buttonStyle(SecondaryButtonStyle())
+                            .disabled(isDeleting)
+                        } else {
+                            Label("Managing recordings requires admin permissions", systemImage: "lock.fill")
+                                .font(.subheadline)
+                                .foregroundStyle(Theme.warning)
                         }
-                        .buttonStyle(SecondaryButtonStyle())
-                        .disabled(isDeleting)
                     }
                 }
                 .padding(Theme.spacingLG)
@@ -344,22 +356,34 @@ struct RecordingDetailView: View {
                 .buttonStyle(AccentButtonStyle())
             }
 
-            Button(role: .destructive) {
-                deleteRecording()
-            } label: {
-                HStack {
-                    if isDeleting {
-                        ProgressView()
-                            .tint(.white)
-                    } else {
-                        Image(systemName: "trash")
+            #if DISPATCHERPVR
+            let canManage = appState.canManageRecordings
+            #else
+            let canManage = true
+            #endif
+
+            if canManage {
+                Button(role: .destructive) {
+                    deleteRecording()
+                } label: {
+                    HStack {
+                        if isDeleting {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "trash")
+                        }
+                        Text(recording.recordingStatus.isScheduled ? "Cancel Recording" : "Delete")
                     }
-                    Text(recording.recordingStatus.isScheduled ? "Cancel Recording" : "Delete")
+                    .frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: .infinity)
+                .buttonStyle(SecondaryButtonStyle())
+                .disabled(isDeleting)
+            } else {
+                Label("Managing recordings requires admin permissions", systemImage: "lock.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.warning)
             }
-            .buttonStyle(SecondaryButtonStyle())
-            .disabled(isDeleting)
         }
         .padding(.top, Theme.spacingMD)
     }

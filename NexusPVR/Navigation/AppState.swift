@@ -116,6 +116,10 @@ final class AppState: ObservableObject {
     @Published var activeStreamCount = 0
     // M3U account error indicator for badge
     @Published var hasM3UErrors = false
+    /// User role level from Dispatcharr (0=Streamer, 1=Standard, 10=Admin)
+    @Published var userLevel: Int = 10
+    /// Whether the current user can create/modify/delete recordings
+    var canManageRecordings: Bool { userLevel >= 10 }
     private var streamCountTask: Task<Void, Never>?
 
     func startStreamCountPolling(client: DispatcherClient) {

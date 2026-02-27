@@ -184,7 +184,13 @@ struct ProgramDetailView: View {
                             .buttonStyle(AccentButtonStyle())
                         }
 
-                        if !program.hasEnded {
+                        #if DISPATCHERPVR
+                        let canRecord = appState.canManageRecordings
+                        #else
+                        let canRecord = true
+                        #endif
+
+                        if !program.hasEnded && canRecord {
                             if isScheduled {
                                 Button {
                                     scheduleRecording()
@@ -225,6 +231,10 @@ struct ProgramDetailView: View {
                                 .disabled(isScheduling)
                                 .accessibilityIdentifier("record-button")
                             }
+                        } else if !program.hasEnded && !canRecord {
+                            Label("Recording requires admin permissions", systemImage: "lock.fill")
+                                .font(.subheadline)
+                                .foregroundStyle(Theme.warning)
                         }
                     }
                 }
@@ -394,7 +404,13 @@ struct ProgramDetailView: View {
                 .accessibilityIdentifier("watch-live-button")
             }
 
-            if !program.hasEnded {
+            #if DISPATCHERPVR
+            let canRecord = appState.canManageRecordings
+            #else
+            let canRecord = true
+            #endif
+
+            if !program.hasEnded && canRecord {
                 if isScheduled {
                     Button {
                         scheduleRecording()
@@ -435,6 +451,10 @@ struct ProgramDetailView: View {
                     .disabled(isScheduling)
                     .accessibilityIdentifier("record-button")
                 }
+            } else if !program.hasEnded && !canRecord {
+                Label("Recording requires admin permissions", systemImage: "lock.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.warning)
             }
         }
         #if !os(tvOS)
