@@ -36,6 +36,7 @@ nonisolated struct UserPreferences: Codable {
     var keywords: [String] = []
     var seekBackwardSeconds: Int = 10
     var seekForwardSeconds: Int = 30
+    var audioChannels: String = "auto"
 
     // Migration: keep old property for decoding existing data
     private enum CodingKeys: String, CodingKey {
@@ -43,6 +44,7 @@ nonisolated struct UserPreferences: Codable {
         case seekBackwardSeconds
         case seekForwardSeconds
         case seekTimeSeconds // legacy
+        case audioChannels
     }
 
     init() {}
@@ -59,6 +61,7 @@ nonisolated struct UserPreferences: Codable {
         } else {
             seekForwardSeconds = 30
         }
+        audioChannels = try container.decodeIfPresent(String.self, forKey: .audioChannels) ?? "auto"
     }
 
     func encode(to encoder: Encoder) throws {
@@ -66,6 +69,7 @@ nonisolated struct UserPreferences: Codable {
         try container.encode(keywords, forKey: .keywords)
         try container.encode(seekBackwardSeconds, forKey: .seekBackwardSeconds)
         try container.encode(seekForwardSeconds, forKey: .seekForwardSeconds)
+        try container.encode(audioChannels, forKey: .audioChannels)
     }
 
     private static let storageKey = "UserPreferences"

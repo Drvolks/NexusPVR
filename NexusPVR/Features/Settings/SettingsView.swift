@@ -16,6 +16,7 @@ struct SettingsView: View {
     @State private var showingUnlinkConfirm = false
     @State private var seekBackwardSeconds: Int = UserPreferences.load().seekBackwardSeconds
     @State private var seekForwardSeconds: Int = UserPreferences.load().seekForwardSeconds
+    @State private var audioChannels: String = UserPreferences.load().audioChannels
     @ObservedObject private var eventLog = NetworkEventLog.shared
 
 
@@ -168,6 +169,36 @@ struct SettingsView: View {
                                 }
                             }
                         }
+
+                        Divider()
+                            .background(Theme.textTertiary)
+
+                        // Audio Output
+                        VStack(spacing: Theme.spacingSM) {
+                            Text("Audio Output")
+                                .foregroundStyle(Theme.textPrimary)
+
+                            HStack(spacing: Theme.spacingMD) {
+                                ForEach(["auto", "stereo"], id: \.self) { mode in
+                                    Button {
+                                        audioChannels = mode
+                                        var prefs = UserPreferences.load()
+                                        prefs.audioChannels = mode
+                                        prefs.save()
+                                    } label: {
+                                        Text(mode == "auto" ? "Auto" : "Stereo")
+                                            .font(.callout)
+                                            .fontWeight(.medium)
+                                            .padding(.horizontal, Theme.spacingLG)
+                                            .padding(.vertical, Theme.spacingMD)
+                                            .background(audioChannels == mode ? Theme.accent : Theme.surfaceElevated)
+                                            .foregroundStyle(audioChannels == mode ? .white : Theme.textPrimary)
+                                            .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
+                                    }
+                                    .buttonStyle(.card)
+                                }
+                            }
+                        }
                     }
                 }
                 .focusSection()
@@ -282,6 +313,11 @@ struct SettingsView: View {
                 Text("45 seconds").tag(45)
                 Text("60 seconds").tag(60)
             }
+
+            Picker("Audio Output", selection: $audioChannels) {
+                Text("Auto").tag("auto")
+                Text("Stereo").tag("stereo")
+            }
         } header: {
             Text("Playback")
         }
@@ -293,6 +329,11 @@ struct SettingsView: View {
         .onChange(of: seekForwardSeconds) {
             var prefs = UserPreferences.load()
             prefs.seekForwardSeconds = seekForwardSeconds
+            prefs.save()
+        }
+        .onChange(of: audioChannels) {
+            var prefs = UserPreferences.load()
+            prefs.audioChannels = audioChannels
             prefs.save()
         }
     }

@@ -45,6 +45,7 @@ struct PlayerView: View {
     @State private var videoCodec: String?
     @State private var videoHeight: Int?
     @State private var hwDecoder: String?
+    @State private var audioChannelLayout: String?
 
     init(url: URL, title: String, recordingId: Int? = nil, resumePosition: Int? = nil) {
         self.url = url
@@ -90,10 +91,11 @@ struct PlayerView: View {
                     savePlaybackPosition()
                     appState.stopPlayback()
                 },
-                onVideoInfoUpdate: { codec, height, hwdec in
+                onVideoInfoUpdate: { codec, height, hwdec, audioChannels in
                     videoCodec = codec
                     videoHeight = height
                     hwDecoder = hwdec
+                    audioChannelLayout = audioChannels
                 }
             )
                 .ignoresSafeArea()
@@ -113,10 +115,11 @@ struct PlayerView: View {
                     savePlaybackPosition()
                     markAsWatched()
                 },
-                onVideoInfoUpdate: { codec, height, hwdec in
+                onVideoInfoUpdate: { codec, height, hwdec, audioChannels in
                     videoCodec = codec
                     videoHeight = height
                     hwDecoder = hwdec
+                    audioChannelLayout = audioChannels
                 }
             )
                 .ignoresSafeArea()
@@ -489,6 +492,9 @@ struct PlayerView: View {
             } else if videoCodec != nil {
                 badgeText("SW", color: .orange)
             }
+            if let audio = audioChannelLayout {
+                badgeText(audio, color: .white)
+            }
         }
     }
 
@@ -557,10 +563,11 @@ class MPVPlayerCore: NSObject {
     private let eventLoopGroup = DispatchGroup()
     var onPositionUpdate: ((Double, Double) -> Void)?
     var onPlaybackEnded: (() -> Void)?
-    var onVideoInfoUpdate: ((String?, Int?, String?) -> Void)?
+    var onVideoInfoUpdate: ((String?, Int?, String?, String?) -> Void)?
     private var lastCodec: String?
     private var lastHeight: Int?
     private var lastHwdec: String?
+    private var lastAudioChannels: String?
 
     // Performance stats accumulation
     private var fpsSamples: [Double] = []
@@ -616,11 +623,12 @@ class MPVPlayerCore: NSObject {
             let position = self.getTimePosition()
             let duration = self.getDuration()
             let info = self.getVideoInfo()
-            let changed = info.codec != self.lastCodec || info.height != self.lastHeight || info.hwdec != self.lastHwdec
+            let changed = info.codec != self.lastCodec || info.height != self.lastHeight || info.hwdec != self.lastHwdec || info.audioChannels != self.lastAudioChannels
             if changed {
                 self.lastCodec = info.codec
                 self.lastHeight = info.height
                 self.lastHwdec = info.hwdec
+                self.lastAudioChannels = info.audioChannels
             }
             // Log performance stats every 5 seconds
             statsCounter += 1
@@ -630,7 +638,7 @@ class MPVPlayerCore: NSObject {
             DispatchQueue.main.async {
                 self.onPositionUpdate?(position, duration)
                 if changed {
-                    self.onVideoInfoUpdate?(info.codec, info.height, info.hwdec)
+                    self.onVideoInfoUpdate?(info.codec, info.height, info.hwdec, info.audioChannels)
                 }
             }
         }
@@ -730,12 +738,13 @@ class MPVPlayerCore: NSObject {
         }
     }
 
-    func getVideoInfo() -> (codec: String?, height: Int?, hwdec: String?) {
-        guard let mpv = mpv else { return (nil, nil, nil) }
+    func getVideoInfo() -> (codec: String?, height: Int?, hwdec: String?, audioChannels: String?) {
+        guard let mpv = mpv else { return (nil, nil, nil, nil) }
 
         var codec: String?
         var height: Int?
         var hwdec: String?
+        var audioChannels: String?
 
         if let cString = mpv_get_property_string(mpv, "video-codec") {
             codec = String(cString: cString)
@@ -752,7 +761,21 @@ class MPVPlayerCore: NSObject {
             mpv_free(cString)
         }
 
-        return (codec, height, hwdec)
+        if let cString = mpv_get_property_string(mpv, "audio-params/channel-count") {
+            let count = String(cString: cString)
+            mpv_free(cString)
+            if let n = Int(count) {
+                switch n {
+                case 1: audioChannels = "Mono"
+                case 2: audioChannels = "Stereo"
+                case 6: audioChannels = "5.1"
+                case 8: audioChannels = "7.1"
+                default: audioChannels = "\(n)ch"
+                }
+            }
+        }
+
+        return (codec, height, hwdec, audioChannels)
     }
 
     func setup(errorBinding: Binding<String?>?) -> Bool {
@@ -828,7 +851,8 @@ class MPVPlayerCore: NSObject {
         mpv_set_option_string(mpv, "ao", "audiounit")
         mpv_set_option_string(mpv, "audio-buffer", "0.2")
         #endif
-        mpv_set_option_string(mpv, "audio-channels", "stereo")
+        let audioChannels = UserPreferences.load().audioChannels
+        mpv_set_option_string(mpv, "audio-channels", audioChannels)
         mpv_set_option_string(mpv, "volume", "100")
         mpv_set_option_string(mpv, "audio-fallback-to-null", "yes")
         mpv_set_option_string(mpv, "audio-stream-silence", "yes")  // Output silence while audio buffers (avoid muting)
@@ -1009,7 +1033,7 @@ class MPVPlayerCore: NSObject {
             print("MPV: Playback started/restarted")
             let info = getVideoInfo()
             DispatchQueue.main.async { [weak self] in
-                self?.onVideoInfoUpdate?(info.codec, info.height, info.hwdec)
+                self?.onVideoInfoUpdate?(info.codec, info.height, info.hwdec, info.audioChannels)
             }
 
         case MPV_EVENT_AUDIO_RECONFIG:
@@ -1066,7 +1090,7 @@ struct MPVContainerView: NSViewRepresentable {
     let seekForwardTime: Int
 
     var onPlaybackEnded: (() -> Void)?
-    var onVideoInfoUpdate: ((String?, Int?, String?) -> Void)?
+    var onVideoInfoUpdate: ((String?, Int?, String?, String?) -> Void)?
 
     func makeNSView(context: Context) -> MPVPlayerNSView {
         let view = MPVPlayerNSView()
@@ -1125,7 +1149,7 @@ class MPVPlayerNSView: NSView {
     private var metalLayer: CAMetalLayer?
     var onPositionUpdate: ((Double, Double) -> Void)?
     var onPlaybackEnded: (() -> Void)?
-    var onVideoInfoUpdate: ((String?, Int?, String?) -> Void)?
+    var onVideoInfoUpdate: ((String?, Int?, String?, String?) -> Void)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -1164,8 +1188,8 @@ class MPVPlayerNSView: NSView {
         player?.onPlaybackEnded = { [weak self] in
             self?.onPlaybackEnded?()
         }
-        player?.onVideoInfoUpdate = { [weak self] codec, height, hwdec in
-            self?.onVideoInfoUpdate?(codec, height, hwdec)
+        player?.onVideoInfoUpdate = { [weak self] codec, height, hwdec, audioChannels in
+            self?.onVideoInfoUpdate?(codec, height, hwdec, audioChannels)
         }
     }
 
@@ -1225,7 +1249,7 @@ struct MPVContainerView: UIViewRepresentable {
     var onDismiss: (() -> Void)?
     #endif
 
-    var onVideoInfoUpdate: ((String?, Int?, String?) -> Void)?
+    var onVideoInfoUpdate: ((String?, Int?, String?, String?) -> Void)?
 
     func makeUIView(context: Context) -> MPVPlayerGLView {
         let view = MPVPlayerGLView(frame: .zero)
@@ -1305,7 +1329,7 @@ class MPVPlayerGLView: GLKView {
     let renderQueue = DispatchQueue(label: "nexuspvr.opengl", qos: .userInteractive)
     var onPositionUpdate: ((Double, Double) -> Void)?
     var onPlaybackEnded: (() -> Void)?
-    var onVideoInfoUpdate: ((String?, Int?, String?) -> Void)?
+    var onVideoInfoUpdate: ((String?, Int?, String?, String?) -> Void)?
 
     #if os(tvOS)
     // Callbacks for tvOS remote control
@@ -1463,8 +1487,8 @@ class MPVPlayerGLView: GLKView {
         player?.onPlaybackEnded = { [weak self] in
             self?.onPlaybackEnded?()
         }
-        player?.onVideoInfoUpdate = { [weak self] codec, height, hwdec in
-            self?.onVideoInfoUpdate?(codec, height, hwdec)
+        player?.onVideoInfoUpdate = { [weak self] codec, height, hwdec, audioChannels in
+            self?.onVideoInfoUpdate?(codec, height, hwdec, audioChannels)
         }
     }
 
