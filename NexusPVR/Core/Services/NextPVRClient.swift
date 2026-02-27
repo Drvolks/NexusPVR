@@ -67,6 +67,55 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
         isAuthenticated = false
     }
 
+    // MARK: - Network Logging
+
+    private func sanitizePath(_ url: URL?) -> String {
+        guard let url else { return "?" }
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let sensitiveKeys: Set<String> = ["md5", "sid"]
+        if let items = components?.queryItems {
+            components?.queryItems = items.map { item in
+                if sensitiveKeys.contains(item.name.lowercased()) {
+                    return URLQueryItem(name: item.name, value: "***")
+                }
+                return item
+            }
+        }
+        let path = components?.path ?? url.path
+        if let query = components?.query, !query.isEmpty {
+            return "\(path)?\(query)"
+        }
+        return path
+    }
+
+    private func loggedData(from url: URL) async throws -> (Data, URLResponse) {
+        let start = CFAbsoluteTimeGetCurrent()
+        let method = "GET"
+        let path = sanitizePath(url)
+        do {
+            let (data, response) = try await session.data(from: url)
+            let status = (response as? HTTPURLResponse)?.statusCode
+            let ok = status.map { (200...399).contains($0) } ?? false
+            let ms = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
+            NetworkEventLog.shared.log(NetworkEvent(
+                timestamp: Date(), method: method, path: path,
+                statusCode: status, isSuccess: ok,
+                durationMs: ms, responseSize: data.count,
+                errorDetail: ok ? nil : String(data: Data(data.prefix(1024)), encoding: .utf8)
+            ))
+            return (data, response)
+        } catch {
+            let ms = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
+            NetworkEventLog.shared.log(NetworkEvent(
+                timestamp: Date(), method: method, path: path,
+                statusCode: nil, isSuccess: false,
+                durationMs: ms, responseSize: 0,
+                errorDetail: error.localizedDescription
+            ))
+            throw error
+        }
+    }
+
     // MARK: - Authentication
 
     func authenticate() async throws {
@@ -84,7 +133,7 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
         do {
             // Step 1: Initiate session
             let initiateURL = URL(string: "\(baseURL)/services/service?method=session.initiate&ver=1.0&device=\(deviceName)&format=json")!
-            let (initiateData, _) = try await session.data(from: initiateURL)
+            let (initiateData, _) = try await loggedData(from: initiateURL)
             let initiateResponse = try JSONDecoder().decode(SessionInitiateResponse.self, from: initiateData)
 
             guard let tempSid = initiateResponse.sid, let salt = initiateResponse.salt else {
@@ -98,7 +147,7 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
 
             // Step 3: Login
             let loginURL = URL(string: "\(baseURL)/services/service?method=session.login&sid=\(tempSid)&md5=\(loginHash)&format=json")!
-            let (loginData, _) = try await session.data(from: loginURL)
+            let (loginData, _) = try await loggedData(from: loginURL)
             let loginResponse = try JSONDecoder().decode(SessionLoginResponse.self, from: loginData)
 
             if loginResponse.isSuccess {
@@ -151,7 +200,7 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
         }
 
         do {
-            let (data, response) = try await session.data(from: url)
+            let (data, response) = try await loggedData(from: url)
 
             if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 401 {
                 // Session expired, re-authenticate
