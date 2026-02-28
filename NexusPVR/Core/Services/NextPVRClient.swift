@@ -362,20 +362,14 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
         }
         guard let sid else { throw NextPVRError.sessionExpired }
 
-        // NextPVR v7 uses /stream endpoint with m3u8 for HLS
-        // Try different URL formats
-        let urlFormats = [
-            "\(baseURL)/stream?channel=\(channelId)&sid=\(sid)",
-            "\(baseURL)/services/service?method=channel.stream&channel_id=\(channelId)&sid=\(sid)&format=m3u8",
-            "\(baseURL)/live?channel=\(channelId)&sid=\(sid)&format=m3u8",
-            "\(baseURL)/live?channel=\(channelId)&sid=\(sid)&client=\(deviceName)",
-        ]
+        // NextPVR requires starting the stream before playing it
+        let _: APIResponse = try await request("channel.stream.start", params: [
+            "channel_id": String(channelId)
+        ])
 
-        // For now, use the first format - we can test others
-        guard let url = URL(string: urlFormats[0]) else {
+        guard let url = URL(string: "\(baseURL)/live?channel=\(channelId)&sid=\(sid)&client=\(deviceName)") else {
             throw NextPVRError.invalidResponse
         }
-
         return url
     }
 
