@@ -49,8 +49,9 @@ final class NetworkEventLog: ObservableObject {
     var formattedLog: String {
         events.map { event in
             let time = Self.timeFormatter.string(from: event.timestamp)
-            let status = event.statusCode.map { "\($0)" } ?? "ERR"
-            var line = "\(time) \(event.method) \(event.path) → \(status) (\(event.durationMs)ms)"
+            let status = event.statusCode.map { " → \($0)" } ?? (event.isSuccess ? "" : " → ERR")
+            let duration = event.durationMs > 0 ? " (\(event.durationMs)ms)" : ""
+            var line = "\(time) \(event.method) \(event.path)\(status)\(duration)"
             if let detail = event.errorDetail {
                 line += "\n  \(detail)"
             }

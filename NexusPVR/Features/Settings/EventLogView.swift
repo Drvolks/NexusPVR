@@ -124,15 +124,17 @@ struct EventLogView: View {
                         .foregroundStyle(event.isSuccess ? Theme.success : Theme.error)
                         .font(.caption)
                         .fontWeight(.medium)
-                } else {
+                } else if !event.isSuccess {
                     Text("ERR")
                         .foregroundStyle(Theme.error)
                         .font(.caption)
                         .fontWeight(.medium)
                 }
-                Text("\(event.durationMs)ms")
-                    .foregroundStyle(Theme.textTertiary)
-                    .font(.caption)
+                if event.durationMs > 0 {
+                    Text("\(event.durationMs)ms")
+                        .foregroundStyle(Theme.textTertiary)
+                        .font(.caption)
+                }
             }
             if let detail = event.errorDetail {
                 Text(detail)

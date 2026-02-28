@@ -568,6 +568,7 @@ class MPVPlayerCore: NSObject {
     private var lastHeight: Int?
     private var lastHwdec: String?
     private var lastAudioChannels: String?
+    private var hasTriedHwdecCopy = false
 
     // Performance stats accumulation
     private var fpsSamples: [Double] = []
@@ -629,6 +630,10 @@ class MPVPlayerCore: NSObject {
                 self.lastHeight = info.height
                 self.lastHwdec = info.hwdec
                 self.lastAudioChannels = info.audioChannels
+                // Log video info to event log when it first becomes available
+                if info.codec != nil {
+                    self.logVideoInfo(info)
+                }
             }
             // Log performance stats every 5 seconds
             statsCounter += 1
@@ -738,10 +743,11 @@ class MPVPlayerCore: NSObject {
         }
     }
 
-    func getVideoInfo() -> (codec: String?, height: Int?, hwdec: String?, audioChannels: String?) {
-        guard let mpv = mpv else { return (nil, nil, nil, nil) }
+    func getVideoInfo() -> (codec: String?, width: Int?, height: Int?, hwdec: String?, audioChannels: String?) {
+        guard let mpv = mpv else { return (nil, nil, nil, nil, nil) }
 
         var codec: String?
+        var width: Int?
         var height: Int?
         var hwdec: String?
         var audioChannels: String?
@@ -749,6 +755,11 @@ class MPVPlayerCore: NSObject {
         if let cString = mpv_get_property_string(mpv, "video-codec") {
             codec = String(cString: cString)
             mpv_free(cString)
+        }
+
+        var w: Int64 = 0
+        if mpv_get_property(mpv, "width", MPV_FORMAT_INT64, &w) >= 0 {
+            width = Int(w)
         }
 
         var h: Int64 = 0
@@ -775,7 +786,41 @@ class MPVPlayerCore: NSObject {
             }
         }
 
-        return (codec, height, hwdec, audioChannels)
+        return (codec, width, height, hwdec, audioChannels)
+    }
+
+    private var hasLoggedVideoInfo = false
+
+    private func logVideoInfo(_ info: (codec: String?, width: Int?, height: Int?, hwdec: String?, audioChannels: String?)) {
+        guard !hasLoggedVideoInfo, info.codec != nil else { return }
+        hasLoggedVideoInfo = true
+
+        var details: [String] = []
+        if let w = info.width, let h = info.height {
+            details.append("\(w)x\(h)")
+        }
+        if let codec = info.codec {
+            details.append(codec)
+        }
+        if let hw = info.hwdec, !hw.isEmpty, hw != "no" {
+            details.append("hwdec: \(hw)")
+        } else {
+            details.append("swdec")
+        }
+        if let audio = info.audioChannels {
+            details.append(audio)
+        }
+
+        NetworkEventLog.shared.log(NetworkEvent(
+            timestamp: Date(),
+            method: "PLAY",
+            path: details.joined(separator: " · "),
+            statusCode: nil,
+            isSuccess: true,
+            durationMs: 0,
+            responseSize: 0,
+            errorDetail: nil
+        ))
     }
 
     func setup(errorBinding: Binding<String?>?) -> Bool {
@@ -1021,6 +1066,28 @@ class MPVPlayerCore: NSObject {
                 if !logText.isEmpty && !logText.hasPrefix("Set property:") {
                     print("MPV [\(String(cString: msg.level!))]: \(logText)")
                 }
+
+                // Detect hardware surface mapping failure (e.g. 4K HEVC on iOS
+                // where OpenGL ES software renderer can't map VideoToolbox textures).
+                // Fall back to videotoolbox-copy which copies frames to CPU memory.
+                #if !os(macOS)
+                if !hasTriedHwdecCopy && logText.contains("Mapping hardware decoded surface failed") {
+                    hasTriedHwdecCopy = true
+                    print("MPV: Hardware surface mapping failed — falling back to videotoolbox-copy")
+                    mpv_set_property_string(mpv, "hwdec", "videotoolbox-copy")
+                    hasLoggedVideoInfo = false  // Re-log video info after hwdec change
+                    NetworkEventLog.shared.log(NetworkEvent(
+                        timestamp: Date(),
+                        method: "PLAY",
+                        path: "hwdec fallback → videotoolbox-copy",
+                        statusCode: nil,
+                        isSuccess: false,
+                        durationMs: 0,
+                        responseSize: 0,
+                        errorDetail: "Hardware surface mapping failed (OpenGL ES software renderer)"
+                    ))
+                }
+                #endif
             }
 
         case MPV_EVENT_START_FILE:
@@ -1034,6 +1101,9 @@ class MPVPlayerCore: NSObject {
             let info = getVideoInfo()
             DispatchQueue.main.async { [weak self] in
                 self?.onVideoInfoUpdate?(info.codec, info.height, info.hwdec, info.audioChannels)
+                if let self = self, info.codec != nil {
+                    self.logVideoInfo(info)
+                }
             }
 
         case MPV_EVENT_AUDIO_RECONFIG:
