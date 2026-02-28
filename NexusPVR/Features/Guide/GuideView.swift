@@ -119,6 +119,19 @@ struct GuideView: View {
             .onChange(of: scenePhase) {
                 if scenePhase == .active {
                     Task { await refreshRecordings() }
+                    #if os(tvOS)
+                    // Resync the guide start time so the visible window matches
+                    // the ViewModel's timelineStart (which uses current time)
+                    let now = Date()
+                    let calendar = Calendar.current
+                    let minute = calendar.component(.minute, from: now)
+                    let roundedMinute = (minute / 30) * 30
+                    if let newStart = calendar.date(bySettingHour: calendar.component(.hour, from: now),
+                                                    minute: roundedMinute, second: 0, of: now) {
+                        guideStartTime = newStart
+                        timeOffset = 0
+                    }
+                    #endif
                 }
             }
     }
@@ -862,7 +875,10 @@ struct GuideView: View {
     }
 
     private func tvOSVisiblePrograms(for channel: Channel) -> [Program] {
-        let programs = viewModel.visiblePrograms(for: channel)
+        // Use programs(for:) instead of visiblePrograms(for:) to avoid the
+        // ViewModel's time-based filter which uses live Date() and can desync
+        // from our frozen guideStartTime, causing cells to disappear.
+        let programs = viewModel.programs(for: channel)
         return programs.filter { program in
             program.endDate > visibleStart && program.startDate < visibleEnd
         }
