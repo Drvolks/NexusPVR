@@ -600,6 +600,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
 
     func getAllRecordings() async throws -> (completed: [Recording], recording: [Recording], scheduled: [Recording]) {
         guard !config.isDemoMode else { return DemoDataProvider.recordings() }
+        if useOutputEndpoints { return ([], [], []) }
         guard let url = URL(string: "\(baseURL)/api/channels/recordings/") else {
             throw PVRClientError.invalidResponse
         }
@@ -755,6 +756,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
 
     func getProxyStatus() async throws -> ProxyStatusResponse {
         guard !config.isDemoMode else { return ProxyStatusResponse(count: 0, channels: []) }
+        if useOutputEndpoints { return ProxyStatusResponse(count: 0, channels: []) }
         guard let url = URL(string: "\(baseURL)/proxy/ts/status") else {
             throw PVRClientError.invalidResponse
         }
@@ -765,6 +767,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
 
     func getM3UAccounts() async throws -> [M3UAccount] {
         guard !config.isDemoMode else { return [] }
+        if useOutputEndpoints { return [] }
         guard let url = URL(string: "\(baseURL)/api/m3u/accounts/") else {
             throw PVRClientError.invalidResponse
         }

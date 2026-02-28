@@ -141,6 +141,8 @@ final class AppState: ObservableObject {
 
     func startStreamCountPolling(client: DispatcherClient) {
         stopStreamCountPolling()
+        // Streamer users (output-only) have no access to proxy/m3u APIs
+        guard !client.useOutputEndpoints else { return }
         streamCountTask = Task { [weak self] in
             while !Task.isCancelled {
                 do {
