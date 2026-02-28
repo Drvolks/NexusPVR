@@ -362,12 +362,7 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
         }
         guard let sid else { throw NextPVRError.sessionExpired }
 
-        // NextPVR requires starting the stream before playing it
-        let _: APIResponse = try await request("channel.stream.start", params: [
-            "channel_id": String(channelId)
-        ])
-
-        guard let url = URL(string: "\(baseURL)/live?channel=\(channelId)&sid=\(sid)&client=\(deviceName)") else {
+        guard let url = URL(string: "\(baseURL)/live?channeloid=\(channelId)&client=\(deviceName)&sid=\(sid)") else {
             throw NextPVRError.invalidResponse
         }
         return url
