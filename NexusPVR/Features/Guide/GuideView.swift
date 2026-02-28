@@ -746,10 +746,18 @@ struct GuideView: View {
                     .fill(isRowFocused ? Color(white: 0.08) : Color(white: 0.05))
 
                 if programs.isEmpty {
-                    Text("No Data")
+                    // Show channel name as tappable placeholder so user can still play
+                    let isFocused = isRowFocused && focusedColumn == 0
+                    Text(channel.name)
                         .font(.headline)
                         .foregroundStyle(Theme.textTertiary)
                         .padding(.leading, 16)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                        .background(isFocused ? Theme.accent.opacity(0.3) : Color.clear)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4)
+                                .stroke(isFocused ? Theme.accent : Color.clear, lineWidth: 2)
+                        )
                 } else {
                     ForEach(Array(programs.enumerated()), id: \.element.id) { colIndex, program in
                         let isFocused = isRowFocused && colIndex == focusedColumn
@@ -1214,9 +1222,14 @@ struct GuideView: View {
         guard focusedRow < viewModel.channels.count else { return }
         let channel = viewModel.channels[focusedRow]
         let programs = tvOSVisiblePrograms(for: channel)
-        guard focusedColumn < programs.count else { return }
-        let program = programs[focusedColumn]
 
+        // No EPG data — play channel live
+        guard focusedColumn < programs.count else {
+            playLiveChannel(channel)
+            return
+        }
+
+        let program = programs[focusedColumn]
         if program.isCurrentlyAiring {
             playLiveChannel(channel)
         } else {
