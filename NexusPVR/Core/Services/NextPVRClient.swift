@@ -88,12 +88,15 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
         return path
     }
 
+    private static let retryDelays: [Double] = [1.0, 2.0, 3.0, 5.0]
+    private static let maxAttempts = 5
+
     private func loggedData(from url: URL) async throws -> (Data, URLResponse) {
         let method = "GET"
         let path = sanitizePath(url)
         var lastError: Error?
 
-        for attempt in 1...3 {
+        for attempt in 1...Self.maxAttempts {
             let start = CFAbsoluteTimeGetCurrent()
             do {
                 let (data, response) = try await session.data(from: url)
@@ -111,16 +114,18 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
                 let ms = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
                 lastError = error
 
-                let isTransient = (error as? URLError)?.code == .notConnectedToInternet && ms < 100
+                let isTransient = (error as? URLError)?.code == .notConnectedToInternet && ms < 200
+                let willRetry = isTransient && attempt < Self.maxAttempts
                 NetworkEventLog.shared.log(NetworkEvent(
                     timestamp: Date(), method: method, path: path,
                     statusCode: nil, isSuccess: false,
                     durationMs: ms, responseSize: 0,
-                    errorDetail: error.localizedDescription + (isTransient && attempt < 3 ? " (retrying \(attempt)/3)" : "")
+                    errorDetail: error.localizedDescription + (willRetry ? " (retrying \(attempt)/\(Self.maxAttempts))" : "")
                 ))
 
-                if isTransient && attempt < 3 {
-                    try? await Task.sleep(for: .seconds(0.5))
+                if willRetry {
+                    let delay = Self.retryDelays[min(attempt - 1, Self.retryDelays.count - 1)]
+                    try? await Task.sleep(for: .seconds(delay))
                     continue
                 }
 
