@@ -141,18 +141,20 @@ final class AppState: ObservableObject {
 
     func startStreamCountPolling(client: DispatcherClient) {
         stopStreamCountPolling()
-        streamCountTask = Task {
+        streamCountTask = Task { [weak self] in
             while !Task.isCancelled {
                 do {
                     let status = try await client.getProxyStatus()
-                    activeStreamCount = status.count ?? status.channels?.count ?? 0
+                    let newCount = status.count ?? status.channels?.count ?? 0
+                    self?.activeStreamCount = newCount
                 } catch {
                     // Silently ignore - badge just won't update
                 }
                 do {
                     let accounts = try await client.getM3UAccounts()
                     let activeAccounts = accounts.filter { $0.isActive && !$0.locked }
-                    hasM3UErrors = activeAccounts.contains { $0.status != "success" }
+                    let hasErrors = activeAccounts.contains { $0.status != "success" }
+                    self?.hasM3UErrors = hasErrors
                 } catch {
                     // Silently ignore
                 }

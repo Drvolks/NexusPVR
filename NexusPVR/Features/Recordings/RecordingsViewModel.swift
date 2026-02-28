@@ -56,13 +56,7 @@ final class RecordingsViewModel: ObservableObject {
     }
 
     func loadRecordings() async {
-        // Yield to allow the view to finish rendering before modifying state
-        await Task.yield()
-
-        guard client.isConfigured else {
-            error = "Server not configured"
-            return
-        }
+        guard client.isConfigured else { return }
 
         isLoading = true
         error = nil

@@ -101,17 +101,17 @@ struct GuideView: View {
                 #endif
             }
             .onChange(of: viewModel.channelSearchText) {
-                viewModel.updateKeywordMatches(keywords: keywords)
+                Task { viewModel.updateKeywordMatches(keywords: keywords) }
             }
             .onChange(of: epgCache.isFullyLoaded) {
-                viewModel.updateKeywordMatches(keywords: keywords)
+                Task { viewModel.updateKeywordMatches(keywords: keywords) }
             }
             #if !os(tvOS)
             .onChange(of: appState.guideChannelFilter) {
-                viewModel.channelSearchText = appState.guideChannelFilter
+                Task { viewModel.channelSearchText = appState.guideChannelFilter }
             }
             .onChange(of: appState.guideGroupFilter) {
-                viewModel.selectedGroupId = appState.guideGroupFilter
+                Task { viewModel.selectedGroupId = appState.guideGroupFilter }
             }
             #endif
             .onChange(of: scenePhase) {

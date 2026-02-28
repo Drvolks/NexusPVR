@@ -133,10 +133,10 @@ struct ContentView: View {
         }
         #endif
         .onChange(of: client.isConfigured) { _, isConfigured in
-            if isConfigured {
-                discovery.stopScan()
-                // Authenticate, fetch user level, then load EPG — all sequentially
-                Task {
+            Task {
+                if isConfigured {
+                    discovery.stopScan()
+                    // Authenticate, fetch user level, then load EPG — all sequentially
                     if !client.isAuthenticated {
                         try? await client.authenticate()
                     }
@@ -147,20 +147,20 @@ struct ContentView: View {
                     }
                     #endif
                     await epgCache.loadData(using: client)
+                } else {
+                    // Server was unlinked — reset and restart discovery
+                    epgCache.invalidate()
+                    sheetConfig = nil
+                    #if DISPATCHERPVR
+                    hasStartedDiscovery = false
+                    discoveryUsername = ""
+                    discoveryPassword = ""
+                    discoveryApiKey = ""
+                    useApiKey = false
+                    #else
+                    discovery.startScan()
+                    #endif
                 }
-            } else {
-                // Server was unlinked — reset and restart discovery
-                epgCache.invalidate()
-                sheetConfig = nil
-                #if DISPATCHERPVR
-                hasStartedDiscovery = false
-                discoveryUsername = ""
-                discoveryPassword = ""
-                discoveryApiKey = ""
-                useApiKey = false
-                #else
-                discovery.startScan()
-                #endif
             }
         }
     }

@@ -47,8 +47,6 @@ final class TopicsViewModel: ObservableObject {
     }
 
     func loadData() async {
-        await Task.yield()
-
         let prefs = UserPreferences.load()
         keywords = prefs.keywords
 
@@ -57,10 +55,7 @@ final class TopicsViewModel: ObservableObject {
             return
         }
 
-        guard let cache = epgCache, cache.hasLoaded else {
-            error = "EPG data not loaded"
-            return
-        }
+        guard let cache = epgCache, cache.hasLoaded else { return }
 
         isLoading = true
         error = nil

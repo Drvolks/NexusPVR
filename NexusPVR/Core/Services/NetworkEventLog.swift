@@ -27,10 +27,12 @@ final class NetworkEventLog: ObservableObject {
     @Published private(set) var events: [NetworkEvent] = []
     private let maxEvents = 200
 
-    func log(_ event: NetworkEvent) {
-        events.append(event)
-        if events.count > maxEvents {
-            events.removeFirst(events.count - maxEvents)
+    nonisolated func log(_ event: NetworkEvent) {
+        Task { @MainActor in
+            self.events.append(event)
+            if self.events.count > self.maxEvents {
+                self.events.removeFirst(self.events.count - self.maxEvents)
+            }
         }
     }
 

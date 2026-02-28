@@ -21,6 +21,8 @@ struct TopicsView: View {
     @State private var newKeyword = ""
     @Environment(\.requestNavBarFocus) private var requestNavBarFocus
     private let manageTag = "__manage__"
+    #else
+    @State private var selectedKeyword: String = ""
     #endif
 
     #if os(tvOS)
@@ -30,8 +32,8 @@ struct TopicsView: View {
     }
     #else
     private var filteredPrograms: [MatchingProgram] {
-        guard !appState.selectedTopicKeyword.isEmpty else { return viewModel.matchingPrograms }
-        return viewModel.matchingPrograms.filter { $0.matchedKeyword == appState.selectedTopicKeyword }
+        guard !selectedKeyword.isEmpty else { return viewModel.matchingPrograms }
+        return viewModel.matchingPrograms.filter { $0.matchedKeyword == selectedKeyword }
     }
     #endif
 
@@ -59,7 +61,7 @@ struct TopicsView: View {
                 #elseif os(macOS)
                 if !viewModel.keywords.isEmpty {
                     HStack {
-                        Picker("Topic", selection: $appState.selectedTopicKeyword) {
+                        Picker("Topic", selection: $selectedKeyword) {
                             ForEach(viewModel.keywords, id: \.self) { keyword in
                                 Text(keyword).tag(keyword)
                             }
@@ -67,6 +69,9 @@ struct TopicsView: View {
                         .pickerStyle(.segmented)
                         .labelsHidden()
                         .accessibilityIdentifier("keyword-tabs")
+                        .onChange(of: selectedKeyword) {
+                            Task { appState.selectedTopicKeyword = selectedKeyword }
+                        }
 
                         Spacer()
                         Button {
@@ -108,9 +113,12 @@ struct TopicsView: View {
                     selectedKeyword = viewModel.keywords.first ?? manageTag
                 }
                 #else
-                appState.topicKeywords = viewModel.keywords
-                if appState.selectedTopicKeyword.isEmpty, let first = viewModel.keywords.first {
-                    appState.selectedTopicKeyword = first
+                Task {
+                    appState.topicKeywords = viewModel.keywords
+                    if selectedKeyword.isEmpty, let first = viewModel.keywords.first {
+                        selectedKeyword = first
+                        appState.selectedTopicKeyword = first
+                    }
                 }
                 #endif
             }
@@ -134,10 +142,18 @@ struct TopicsView: View {
             await viewModel.loadData()
             #if !os(tvOS)
             appState.topicKeywords = viewModel.keywords
-            if appState.selectedTopicKeyword.isEmpty, let first = viewModel.keywords.first {
+            if selectedKeyword.isEmpty, let first = viewModel.keywords.first {
+                selectedKeyword = first
                 appState.selectedTopicKeyword = first
+            } else if !appState.selectedTopicKeyword.isEmpty {
+                selectedKeyword = appState.selectedTopicKeyword
             }
             #endif
+        }
+        .onChange(of: appState.selectedTopicKeyword) {
+            if selectedKeyword != appState.selectedTopicKeyword {
+                selectedKeyword = appState.selectedTopicKeyword
+            }
         }
         .onChange(of: scenePhase) {
             if scenePhase == .active {

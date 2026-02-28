@@ -21,9 +21,9 @@ final class StatsViewModel: ObservableObject {
 
     func startRefreshing(client: DispatcherClient, appState: AppState) {
         stopRefreshing()
-        refreshTask = Task {
+        refreshTask = Task { [weak self] in
             while !Task.isCancelled {
-                await refresh(client: client, appState: appState)
+                await self?.refresh(client: client, appState: appState)
                 try? await Task.sleep(for: .seconds(5))
             }
         }

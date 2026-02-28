@@ -170,7 +170,7 @@ struct IOSNavigation: View {
             searchDebounceTask?.cancel()
             // When on search tab, drive SearchView directly — no dropdown
             if appState.selectedTab == .search {
-                appState.searchQuery = newValue
+                Task { appState.searchQuery = newValue }
                 showSearchDropdown = false
                 return
             }
@@ -711,6 +711,7 @@ struct MacOSNavigation: View {
     @EnvironmentObject private var client: PVRClient
     @EnvironmentObject private var epgCache: EPGCache
 
+    @State private var selectedTab: Tab = .guide
     @State private var searchText = ""
     @State private var showSearchDropdown = false
     @State private var channelMatchCount = 0
@@ -732,7 +733,7 @@ struct MacOSNavigation: View {
             } else {
                 // Show regular navigation with sidebar
                 NavigationSplitView {
-                    List(Tab.macOSTabs(userLevel: appState.userLevel), selection: $appState.selectedTab) { tab in
+                    List(Tab.macOSTabs(userLevel: appState.userLevel), selection: $selectedTab) { tab in
                         HStack {
                             Label(tab.label, systemImage: tab.icon)
                             #if DISPATCHERPVR
@@ -762,7 +763,7 @@ struct MacOSNavigation: View {
                     ZStack(alignment: .bottom) {
                         // Detail content
                         Group {
-                            switch appState.selectedTab {
+                            switch selectedTab {
                             case .guide:
                                 GuideView()
                             case .topics:
@@ -793,7 +794,7 @@ struct MacOSNavigation: View {
                         }
 
                         // Floating search bar + dropdown (guide tab only)
-                        if appState.selectedTab == .guide {
+                        if selectedTab == .guide {
                             VStack(spacing: 6) {
                                 if showSearchDropdown {
                                     macSearchDropdown
@@ -843,9 +844,15 @@ struct MacOSNavigation: View {
                 }
             }
         }
-        .onChange(of: appState.selectedTab) {
+        .onChange(of: selectedTab) {
+            Task { appState.selectedTab = selectedTab }
             withAnimation(.easeInOut(duration: 0.2)) {
                 showSearchDropdown = false
+            }
+        }
+        .onChange(of: appState.selectedTab) {
+            if selectedTab != appState.selectedTab {
+                selectedTab = appState.selectedTab
             }
         }
     }

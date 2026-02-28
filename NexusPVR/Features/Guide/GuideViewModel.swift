@@ -124,14 +124,9 @@ final class GuideViewModel: ObservableObject {
     }
 
     func loadData(using client: PVRClient, epgCache: EPGCache) async {
-        await Task.yield()
-
         self.epgCache = epgCache
 
-        guard client.isConfigured else {
-            error = "Server not configured"
-            return
-        }
+        guard client.isConfigured else { return }
 
         isLoading = true
         error = nil

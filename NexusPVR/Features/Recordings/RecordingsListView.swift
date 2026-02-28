@@ -30,6 +30,7 @@ private struct RecordingsListContentView: View {
     @Binding var selectedRecording: Recording?
     @Binding var deleteError: String?
     @State private var inProgressRecording: Recording?
+    @State private var filterSelection: RecordingsFilter = .completed
 
     init(client: PVRClient, appState: AppState,
          selectedRecording: Binding<Recording?>,
@@ -69,7 +70,7 @@ private struct RecordingsListContentView: View {
                 .padding(.vertical, Theme.spacingSM)
                 .background(Theme.background)
                 #elseif os(macOS)
-                Picker("Filter", selection: $viewModel.filter) {
+                Picker("Filter", selection: $filterSelection) {
                     if viewModel.hasActiveRecordings {
                         Text("Recording").tag(RecordingsFilter.recording)
                     }
@@ -81,6 +82,14 @@ private struct RecordingsListContentView: View {
                 .padding(.horizontal)
                 .padding(.vertical, Theme.spacingSM)
                 .background(Theme.background)
+                .onChange(of: filterSelection) {
+                    Task { viewModel.filter = filterSelection }
+                }
+                .onChange(of: viewModel.filter) {
+                    if filterSelection != viewModel.filter {
+                        filterSelection = viewModel.filter
+                    }
+                }
                 #endif
 
                 // Content
@@ -135,10 +144,10 @@ private struct RecordingsListContentView: View {
         }
         #if os(iOS)
         .onChange(of: appState.recordingsFilter) {
-            viewModel.filter = appState.recordingsFilter
+            Task { viewModel.filter = appState.recordingsFilter }
         }
         .onChange(of: viewModel.hasActiveRecordings) {
-            appState.recordingsHasActive = viewModel.hasActiveRecordings
+            Task { appState.recordingsHasActive = viewModel.hasActiveRecordings }
         }
         #endif
         .onReceive(NotificationCenter.default.publisher(for: .recordingsDidChange)) { _ in
