@@ -490,6 +490,7 @@ struct GuideView: View {
     // tvOS manual focus tracking (like Rivulet approach)
     @State private var focusedRow: Int = 0
     @State private var focusedColumn: Int = 0
+    @State private var scrollTopRow: Int = 0
     @State private var timeOffset: Int = 0  // 30-minute increments from now
     @State private var guideStartTime: Date = {
         // Start from current time, rounded down to nearest 30 minutes
@@ -642,14 +643,9 @@ struct GuideView: View {
             let gridOffset = showTVFilterPanel ? tvFilterPanelWidth : 0.0
 
             ZStack(alignment: .leading) {
-                // Grid — manual offset driven by focusedRow
+                // Grid — manual offset driven by scrollTopRow (keep-in-view scrolling)
                 let visibleRows = Int(geometry.size.height / rowHeight)
-                let scrollOffset: CGFloat = {
-                    // Center the focused row, clamped to valid range
-                    let maxRow = max(0, viewModel.channels.count - visibleRows)
-                    let targetRow = max(0, min(focusedRow - visibleRows / 2, maxRow))
-                    return CGFloat(targetRow) * rowHeight
-                }()
+                let scrollOffset = CGFloat(scrollTopRow) * rowHeight
 
                 Button {
                     selectFocusedProgram()
@@ -665,7 +661,18 @@ struct GuideView: View {
                         }
                     }
                     .offset(y: -scrollOffset)
-                    .animation(.easeInOut(duration: 0.2), value: scrollOffset)
+                    .animation(.easeInOut(duration: 0.15), value: scrollTopRow)
+                }
+                .onChange(of: focusedRow) { _, newRow in
+                    // Only scroll when focused row would be outside visible area
+                    let maxTopRow = max(0, viewModel.channels.count - visibleRows)
+                    if newRow < scrollTopRow {
+                        // Focus moved above visible area
+                        scrollTopRow = max(0, newRow)
+                    } else if newRow >= scrollTopRow + visibleRows {
+                        // Focus moved below visible area
+                        scrollTopRow = min(maxTopRow, newRow - visibleRows + 1)
+                    }
                 }
                 .buttonStyle(TVGridContainerButtonStyle())
                 .onMoveCommand { direction in
@@ -1084,6 +1091,7 @@ struct GuideView: View {
         } else {
             focusedRow = 0
         }
+        scrollTopRow = 0
         focusedColumn = 0
     }
 
@@ -1102,6 +1110,7 @@ struct GuideView: View {
         } else {
             focusedRow = 0
         }
+        scrollTopRow = 0
         clampColumn()
     }
 
