@@ -407,24 +407,46 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
     /// Fetch all items from a paginated Dispatcharr endpoint
     /// - Parameter maxPages: Maximum number of pages to fetch (0 = unlimited). Prevents unbounded memory usage for large datasets.
     private func fetchAllPages<T: Decodable>(_ url: URL, maxPages: Int = 0) async throws -> [T] {
-        var allItems = [T]()
-        var nextURL: URL? = url
-        var pageCount = 0
+        // Fetch page 1 to get total count and page size
+        let firstResponse: DispatcharrListResponse<T> = try await authenticatedRequest(url)
+        var allItems = firstResponse.allItems
 
-        while let currentURL = nextURL {
-            let response: DispatcharrListResponse<T> = try await authenticatedRequest(currentURL)
-            allItems.append(contentsOf: response.allItems)
-            pageCount += 1
+        guard let totalCount = firstResponse.count, totalCount > allItems.count else {
+            return allItems
+        }
 
-            if maxPages > 0 && pageCount >= maxPages {
-                break
+        // Determine page size from the URL or from what we received
+        let pageSize = allItems.count
+        guard pageSize > 0 else { return allItems }
+        let totalPages = (totalCount + pageSize - 1) / pageSize
+        let pagesToFetch = maxPages > 0 ? min(totalPages, maxPages) : totalPages
+
+        if pagesToFetch <= 1 { return allItems }
+
+        // Fetch remaining pages concurrently
+        let results = try await withThrowingTaskGroup(of: (Int, [T]).self) { group in
+            for page in 2...pagesToFetch {
+                var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
+                var queryItems = components.queryItems ?? []
+                queryItems.removeAll { $0.name == "page" }
+                queryItems.append(URLQueryItem(name: "page", value: String(page)))
+                components.queryItems = queryItems
+
+                group.addTask {
+                    let response: DispatcharrListResponse<T> = try await self.authenticatedRequest(components.url!)
+                    return (page, response.allItems)
+                }
             }
 
-            if let next = response.next, let url = URL(string: next) {
-                nextURL = url
-            } else {
-                nextURL = nil
+            var pageResults = [(Int, [T])]()
+            for try await result in group {
+                pageResults.append(result)
             }
+            return pageResults.sorted { $0.0 < $1.0 }
+        }
+
+        for (_, items) in results {
+            allItems.append(contentsOf: items)
         }
 
         return allItems

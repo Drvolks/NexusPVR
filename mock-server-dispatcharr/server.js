@@ -128,10 +128,10 @@ function generateShowName(genre, channelName) {
 function generateEPG(channels) {
   const now = new Date();
   const dayMs = 24 * 60 * 60 * 1000;
-  // Start at midnight yesterday, end at midnight 7 days from now
+  // Start at midnight yesterday, end at midnight tomorrow
   const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const windowStart = new Date(todayMidnight.getTime() - dayMs);
-  const windowEnd = new Date(todayMidnight.getTime() + 7 * dayMs);
+  const windowEnd = new Date(todayMidnight.getTime() + 2 * dayMs);
   const programs = [];
   let programId = 1;
 
@@ -508,6 +508,13 @@ function handleRequest(req, res) {
   // Channel groups
   if (path === "/api/channels/groups/") {
     return json(res, CHANNEL_GROUPS);
+  }
+
+  // EPG programs — paginated list of all programs (used by DispatcherClient)
+  if (path === "/api/epg/programs/") {
+    const allPrograms = [...PROGRAMS, ...EDGE_CASES];
+    const baseUrl = `http://${req.headers.host}${path}`;
+    return json(res, paginate(allPrograms, page, baseUrl, pageSize));
   }
 
   // EPG data lookup

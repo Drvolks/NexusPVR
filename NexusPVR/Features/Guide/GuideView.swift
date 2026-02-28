@@ -657,20 +657,30 @@ struct GuideView: View {
 
             ZStack(alignment: .leading) {
                 // Grid — manual offset driven by scrollTopRow (keep-in-view scrolling)
+                let totalRows = viewModel.channels.count
                 let visibleRows = Int(geometry.size.height / rowHeight)
                 let scrollOffset = CGFloat(scrollTopRow) * rowHeight
+
+                // Virtualization: only render visible rows + buffer
+                let buffer = 3
+                let firstRow = max(0, scrollTopRow - buffer)
+                let lastRow = min(totalRows - 1, scrollTopRow + visibleRows - 1 + buffer)
 
                 Button {
                     selectFocusedProgram()
                 } label: {
                     VStack(spacing: 0) {
-                        ForEach(Array(viewModel.channels.enumerated()), id: \.element.id) { rowIndex, channel in
-                            tvOSChannelRow(
-                                channel: channel,
-                                rowIndex: rowIndex,
-                                gridWidth: gridWidth,
-                                pxPerMinute: pxPerMinute
-                            )
+                        if totalRows > 0 {
+                            Color.clear.frame(height: CGFloat(firstRow) * rowHeight)
+                            ForEach(firstRow...lastRow, id: \.self) { rowIndex in
+                                tvOSChannelRow(
+                                    channel: viewModel.channels[rowIndex],
+                                    rowIndex: rowIndex,
+                                    gridWidth: gridWidth,
+                                    pxPerMinute: pxPerMinute
+                                )
+                            }
+                            Color.clear.frame(height: CGFloat(max(0, totalRows - 1 - lastRow)) * rowHeight)
                         }
                     }
                     .offset(y: -scrollOffset)
