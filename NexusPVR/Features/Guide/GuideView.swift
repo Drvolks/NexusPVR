@@ -777,7 +777,7 @@ struct GuideView: View {
     }
 
     private func tvOSChannelCell(channel: Channel, isSelected: Bool) -> some View {
-        CachedAsyncImage(url: client.channelIconURL(channelId: channel.id)) { image in
+        CachedAsyncImage(url: try? client.channelIconURL(channelId: channel.id)) { image in
             image
                 .resizable()
                 .aspectRatio(contentMode: .fit)
@@ -1309,7 +1309,7 @@ struct GuideView: View {
     private func channelCell(_ channel: Channel) -> some View {
         #if os(tvOS)
         // tvOS: non-interactive channel icon - logo fills the cell
-        CachedAsyncImage(url: client.channelIconURL(channelId: channel.id)) { image in
+        CachedAsyncImage(url: try? client.channelIconURL(channelId: channel.id)) { image in
             image
                 .resizable()
                 .aspectRatio(contentMode: .fit)
@@ -1326,7 +1326,7 @@ struct GuideView: View {
             playLiveChannel(channel)
         } label: {
             ZStack {
-                CachedAsyncImage(url: client.channelIconURL(channelId: channel.id)) { image in
+                CachedAsyncImage(url: try? client.channelIconURL(channelId: channel.id)) { image in
                     image
                         .resizable()
                         .aspectRatio(contentMode: .fit)

@@ -94,7 +94,7 @@ struct ProgramDetailView: View {
                 VStack(alignment: .leading, spacing: Theme.spacingMD) {
                     // Row 1: Icon | Channel name
                     HStack(spacing: Theme.spacingMD) {
-                        CachedAsyncImage(url: client.channelIconURL(channelId: channel.id)) { image in
+                        CachedAsyncImage(url: try? client.channelIconURL(channelId: channel.id)) { image in
                             image
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
@@ -263,7 +263,7 @@ struct ProgramDetailView: View {
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: Theme.spacingSM) {
             HStack {
-                CachedAsyncImage(url: client.channelIconURL(channelId: channel.id)) { image in
+                CachedAsyncImage(url: try? client.channelIconURL(channelId: channel.id)) { image in
                     image
                         .resizable()
                         .aspectRatio(contentMode: .fit)
