@@ -1105,13 +1105,18 @@ class MPVPlayerCore: NSObject {
                     }
                 }
 
-                // Detect hardware surface mapping failure (e.g. 4K HEVC on iOS
-                // where OpenGL ES software renderer can't map VideoToolbox textures).
+                // Detect hardware decoding texture failures on iOS/tvOS where
+                // OpenGL ES can't handle certain VideoToolbox surface formats
+                // (e.g. p010 for 10-bit HDR, or standard 4K HEVC textures).
                 // Fall back to videotoolbox-copy which copies frames to CPU memory.
                 #if !os(macOS)
-                if !hasTriedHwdecCopy && logText.contains("Mapping hardware decoded surface failed") {
+                if !hasTriedHwdecCopy && level == "error" && (
+                    logText.contains("texture") ||
+                    logText.contains("hardware decod") ||
+                    logText.contains("surface failed")
+                ) {
                     hasTriedHwdecCopy = true
-                    print("MPV: Hardware surface mapping failed — falling back to videotoolbox-copy")
+                    print("MPV: Hardware texture failure — falling back to videotoolbox-copy")
                     mpv_set_property_string(mpv, "hwdec", "videotoolbox-copy")
                     hasLoggedVideoInfo = false  // Re-log video info after hwdec change
                     NetworkEventLog.shared.log(NetworkEvent(
@@ -1122,7 +1127,7 @@ class MPVPlayerCore: NSObject {
                         isSuccess: false,
                         durationMs: 0,
                         responseSize: 0,
-                        errorDetail: "Hardware surface mapping failed (OpenGL ES software renderer)"
+                        errorDetail: logText
                     ))
                 }
                 #endif
