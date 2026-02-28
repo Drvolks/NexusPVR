@@ -166,16 +166,25 @@ struct PlayerView: View {
                 controlsOverlay
             }
 
-            // Error message
+            // Error message — auto-dismisses player after 3 seconds
             if let error = errorMessage {
                 VStack {
                     Spacer()
-                    Text(error)
-                        .foregroundStyle(.white)
-                        .padding()
-                        .background(Color.red.opacity(0.8))
-                        .cornerRadius(8)
-                        .padding()
+                    VStack(spacing: Theme.spacingSM) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.title2)
+                        Text(error)
+                    }
+                    .foregroundStyle(.white)
+                    .padding()
+                    .background(Color.red.opacity(0.8))
+                    .cornerRadius(Theme.cornerRadiusSM)
+                    .padding()
+                }
+                .onAppear {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                        appState.stopPlayback()
+                    }
                 }
             }
 
@@ -569,6 +578,8 @@ class MPVPlayerCore: NSObject {
     private var lastHwdec: String?
     private var lastAudioChannels: String?
     private var hasTriedHwdecCopy = false
+    private var currentURLPath: String?
+    private var lastPlaybackError: String?
 
     // Performance stats accumulation
     private var fpsSamples: [Double] = []
@@ -946,6 +957,7 @@ class MPVPlayerCore: NSObject {
         }
 
         let urlString = url.absoluteString
+        currentURLPath = url.path
         print("MPV: Loading URL: \(urlString)")
 
         // Use mpv_command_string for simpler string-based command
@@ -1067,6 +1079,32 @@ class MPVPlayerCore: NSObject {
                     print("MPV [\(String(cString: msg.level!))]: \(logText)")
                 }
 
+                // Log mpv errors and HTTP warnings to the event log
+                let level = String(cString: msg.level!)
+                if level == "error" || (level == "warn" && logText.contains("http:")) {
+                    NetworkEventLog.shared.log(NetworkEvent(
+                        timestamp: Date(),
+                        method: "PLAY",
+                        path: currentURLPath ?? "mpv",
+                        statusCode: nil,
+                        isSuccess: false,
+                        durationMs: 0,
+                        responseSize: 0,
+                        errorDetail: logText
+                    ))
+                }
+
+                // Capture HTTP errors for on-screen display.
+                // Prefer HTTP errors (e.g. "503 Service Unavailable") over generic
+                // "Failed to open" messages that follow.
+                if level == "warn" && logText.contains("HTTP error") {
+                    lastPlaybackError = logText
+                } else if level == "error" && lastPlaybackError == nil {
+                    if logText.contains("Failed to open") || logText.contains("Failed to recognize") {
+                        lastPlaybackError = logText
+                    }
+                }
+
                 // Detect hardware surface mapping failure (e.g. 4K HEVC on iOS
                 // where OpenGL ES software renderer can't map VideoToolbox textures).
                 // Fall back to videotoolbox-copy which copies frames to CPU memory.
@@ -1125,10 +1163,28 @@ class MPVPlayerCore: NSObject {
                 } else if reason == MPV_END_FILE_REASON_ERROR {
                     let error = data.error
                     let errorStr = String(cString: mpv_error_string(error))
+                    let path = currentURLPath ?? "unknown"
+                    let detail = lastPlaybackError ?? errorStr
                     print("MPV: Playback error: \(errorStr)")
-                    DispatchQueue.main.async { [weak self] in
-                        self?.errorBinding?.wrappedValue = "Playback error: \(errorStr)"
+
+                    // Log to event log (no weak self — NetworkEventLog is a singleton)
+                    NetworkEventLog.shared.log(NetworkEvent(
+                        timestamp: Date(),
+                        method: "PLAY",
+                        path: path,
+                        statusCode: nil,
+                        isSuccess: false,
+                        durationMs: 0,
+                        responseSize: 0,
+                        errorDetail: detail
+                    ))
+
+                    // Show error on screen
+                    let errorBinding = self.errorBinding
+                    DispatchQueue.main.async {
+                        errorBinding?.wrappedValue = detail
                     }
+                    lastPlaybackError = nil
                 }
             }
 
