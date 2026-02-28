@@ -739,7 +739,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         return url
     }
 
-    func channelIconURL(channelId: Int) -> URL? {
+    func channelIconURL(channelId: Int) throws -> URL? {
         guard !config.isDemoMode else { return DemoDataProvider.channelIconURL(channelId: channelId) }
         if let urlString = channelLogoURLs[channelId], let url = URL(string: urlString) {
             return url

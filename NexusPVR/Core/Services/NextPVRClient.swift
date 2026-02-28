@@ -368,7 +368,7 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
             "\(baseURL)/stream?channel=\(channelId)&sid=\(sid)",
             "\(baseURL)/services/service?method=channel.stream&channel_id=\(channelId)&sid=\(sid)&format=m3u8",
             "\(baseURL)/live?channel=\(channelId)&sid=\(sid)&format=m3u8",
-            "\(baseURL)/live?channel=\(channelId)&client=\(deviceName)",
+            "\(baseURL)/live?channel=\(channelId)&sid=\(sid)&client=\(deviceName)",
         ]
 
         // For now, use the first format - we can test others
@@ -391,8 +391,9 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
         return url
     }
 
-    func channelIconURL(channelId: Int) -> URL? {
+    func channelIconURL(channelId: Int) throws -> URL? {
+        guard let sid else { throw NextPVRError.sessionExpired }
         guard !config.isDemoMode else { return DemoDataProvider.channelIconURL(channelId: channelId) }
-        return URL(string: "\(baseURL)/service?method=channel.icon&channel_id=\(channelId)")
+        return URL(string: "\(baseURL)/service?method=channel.icon&channel_id=\(channelId)&sid=\(sid)")
     }
 }

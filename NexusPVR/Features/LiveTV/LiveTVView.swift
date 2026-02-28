@@ -165,7 +165,7 @@ struct ChannelCard: View {
         VStack(alignment: .leading, spacing: Theme.spacingSM) {
             // Channel icon and number
             HStack {
-                CachedAsyncImage(url: client.channelIconURL(channelId: channel.id)) { image in
+                CachedAsyncImage(url: try? client.channelIconURL(channelId: channel.id)) { image in
                     image
                         .resizable()
                         .aspectRatio(contentMode: .fit)

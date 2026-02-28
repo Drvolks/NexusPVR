@@ -39,7 +39,7 @@ struct SearchResultRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: Theme.spacingMD) {
             // Channel icon
-            CachedAsyncImage(url: client.channelIconURL(channelId: channel.id)) { image in
+            CachedAsyncImage(url: try? client.channelIconURL(channelId: channel.id)) { image in
                 image
                     .resizable()
                     .aspectRatio(contentMode: .fit)
@@ -279,7 +279,7 @@ struct SearchResultRowTV: View {
         } label: {
             HStack(alignment: .center, spacing: Theme.spacingLG) {
                 // Channel icon
-                CachedAsyncImage(url: client.channelIconURL(channelId: channel.id)) { image in
+                CachedAsyncImage(url: try? client.channelIconURL(channelId: channel.id)) { image in
                     image
                         .resizable()
                         .aspectRatio(contentMode: .fit)

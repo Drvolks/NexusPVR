@@ -52,5 +52,5 @@ protocol PVRClientProtocol: ObservableObject {
     func setRecordingPosition(recordingId: Int, positionSeconds: Int) async throws
     func liveStreamURL(channelId: Int) async throws -> URL
     func recordingStreamURL(recordingId: Int) async throws -> URL
-    func channelIconURL(channelId: Int) -> URL?
+    func channelIconURL(channelId: Int) throws -> URL?
 }

@@ -69,7 +69,7 @@ struct RecordingDetailView: View {
                     // Channel icon + name
                     HStack(spacing: Theme.spacingMD) {
                         if let channelId = recording.channelId {
-                            CachedAsyncImage(url: client.channelIconURL(channelId: channelId)) { image in
+                            CachedAsyncImage(url: try? client.channelIconURL(channelId: channelId)) { image in
                                 image
                                     .resizable()
                                     .aspectRatio(contentMode: .fit)
