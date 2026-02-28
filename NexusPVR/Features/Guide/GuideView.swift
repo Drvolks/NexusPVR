@@ -646,33 +646,30 @@ struct GuideView: View {
             let gridOffset = showTVFilterPanel ? tvFilterPanelWidth : 0.0
 
             ZStack(alignment: .leading) {
-                // Grid Button — captures focus when filter panel is closed
+                // Grid — manual offset driven by focusedRow
+                let visibleRows = Int(geometry.size.height / rowHeight)
+                let scrollOffset: CGFloat = {
+                    // Center the focused row, clamped to valid range
+                    let maxRow = max(0, viewModel.channels.count - visibleRows)
+                    let targetRow = max(0, min(focusedRow - visibleRows / 2, maxRow))
+                    return CGFloat(targetRow) * rowHeight
+                }()
+
                 Button {
                     selectFocusedProgram()
                 } label: {
                     VStack(spacing: 0) {
-                        ScrollViewReader { verticalProxy in
-                            ScrollView(.vertical, showsIndicators: false) {
-                                LazyVStack(spacing: 0) {
-                                    ForEach(Array(viewModel.channels.enumerated()), id: \.element.id) { rowIndex, channel in
-                                        tvOSChannelRow(
-                                            channel: channel,
-                                            rowIndex: rowIndex,
-                                            gridWidth: gridWidth,
-                                            pxPerMinute: pxPerMinute
-                                        )
-                                        .id(rowIndex)
-                                    }
-                                }
-                                .id("grid-\(viewModel.selectedGroupId ?? -1)-\(viewModel.selectedProfileId ?? -1)-\(viewModel.channelSearchText)")
-                            }
-                            .onChange(of: focusedRow) { _, newRow in
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    verticalProxy.scrollTo(newRow, anchor: .center)
-                                }
-                            }
+                        ForEach(Array(viewModel.channels.enumerated()), id: \.element.id) { rowIndex, channel in
+                            tvOSChannelRow(
+                                channel: channel,
+                                rowIndex: rowIndex,
+                                gridWidth: gridWidth,
+                                pxPerMinute: pxPerMinute
+                            )
                         }
                     }
+                    .offset(y: -scrollOffset)
+                    .animation(.easeInOut(duration: 0.2), value: scrollOffset)
                 }
                 .buttonStyle(TVGridContainerButtonStyle())
                 .onMoveCommand { direction in
