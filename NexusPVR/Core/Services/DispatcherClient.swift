@@ -78,32 +78,52 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         return path
     }
 
+    private static let retryDelays: [Double] = [1.0, 2.0, 3.0, 5.0]
+    private static let maxAttempts = 5
+
     private func loggedData(for request: URLRequest) async throws -> (Data, URLResponse) {
-        let start = CFAbsoluteTimeGetCurrent()
         let method = request.httpMethod ?? "GET"
         let path = sanitizePath(request.url)
-        do {
-            let (data, response) = try await session.data(for: request)
-            let status = (response as? HTTPURLResponse)?.statusCode
-            let ok = status.map { (200...399).contains($0) } ?? false
-            let ms = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
-            NetworkEventLog.shared.log(NetworkEvent(
-                timestamp: Date(), method: method, path: path,
-                statusCode: status, isSuccess: ok,
-                durationMs: ms, responseSize: data.count,
-                errorDetail: ok ? nil : String(data: Data(data.prefix(1024)), encoding: .utf8)
-            ))
-            return (data, response)
-        } catch {
-            let ms = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
-            NetworkEventLog.shared.log(NetworkEvent(
-                timestamp: Date(), method: method, path: path,
-                statusCode: nil, isSuccess: false,
-                durationMs: ms, responseSize: 0,
-                errorDetail: error.localizedDescription
-            ))
-            throw error
+        var lastError: Error?
+
+        for attempt in 1...Self.maxAttempts {
+            let start = CFAbsoluteTimeGetCurrent()
+            do {
+                let (data, response) = try await session.data(for: request)
+                let status = (response as? HTTPURLResponse)?.statusCode
+                let ok = status.map { (200...399).contains($0) } ?? false
+                let ms = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
+                NetworkEventLog.shared.log(NetworkEvent(
+                    timestamp: Date(), method: method, path: path,
+                    statusCode: status, isSuccess: ok,
+                    durationMs: ms, responseSize: data.count,
+                    errorDetail: ok ? nil : String(data: Data(data.prefix(1024)), encoding: .utf8)
+                ))
+                return (data, response)
+            } catch {
+                let ms = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
+                lastError = error
+
+                let isTransient = (error as? URLError)?.code == .notConnectedToInternet && ms < 200
+                let willRetry = isTransient && attempt < Self.maxAttempts
+                NetworkEventLog.shared.log(NetworkEvent(
+                    timestamp: Date(), method: method, path: path,
+                    statusCode: nil, isSuccess: false,
+                    durationMs: ms, responseSize: 0,
+                    errorDetail: error.localizedDescription + (willRetry ? " (retrying \(attempt)/\(Self.maxAttempts))" : "")
+                ))
+
+                if willRetry {
+                    let delay = Self.retryDelays[min(attempt - 1, Self.retryDelays.count - 1)]
+                    try? await Task.sleep(for: .seconds(delay))
+                    continue
+                }
+
+                throw error
+            }
         }
+
+        throw lastError!
     }
 
     private func loggedData(from url: URL) async throws -> (Data, URLResponse) {
