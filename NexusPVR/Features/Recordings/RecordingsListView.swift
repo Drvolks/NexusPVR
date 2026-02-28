@@ -111,10 +111,12 @@ private struct RecordingsListContentView: View {
                     .environmentObject(appState)
             }
             .confirmationDialog("Play Recording", isPresented: .constant(inProgressRecording != nil), presenting: inProgressRecording) { recording in
+                #if !DISPATCHERPVR
                 Button("Play from Beginning") {
                     playRecording(recording)
                     inProgressRecording = nil
                 }
+                #endif
                 if recording.channelId != nil {
                     Button("Watch Live") {
                         playRecordingLive(recording)
@@ -236,11 +238,13 @@ private struct RecordingsListContentView: View {
                     )
                     .contextMenu {
                         if recording.recordingStatus == .recording {
+                            #if !DISPATCHERPVR
                             Button {
                                 playRecording(recording)
                             } label: {
                                 Label("Play from Beginning", systemImage: "play.fill")
                             }
+                            #endif
                             if recording.channelId != nil {
                                 Button {
                                     playRecordingLive(recording)
@@ -295,11 +299,13 @@ private struct RecordingsListContentView: View {
                     }
                     .contextMenu {
                         if recording.recordingStatus == .recording {
+                            #if !DISPATCHERPVR
                             Button {
                                 playRecording(recording)
                             } label: {
                                 Label("Play from Beginning", systemImage: "play.fill")
                             }
+                            #endif
                             if recording.channelId != nil {
                                 Button {
                                     playRecordingLive(recording)

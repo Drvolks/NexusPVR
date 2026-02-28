@@ -61,6 +61,7 @@ struct GuideView: View {
             .confirmationDialog("Recording in Progress",
                                 isPresented: .constant(inProgressProgram != nil),
                                 presenting: inProgressProgram) { info in
+                #if !DISPATCHERPVR
                 Button("Watch from Beginning") {
                     Task {
                         do {
@@ -72,6 +73,7 @@ struct GuideView: View {
                     }
                     inProgressProgram = nil
                 }
+                #endif
                 Button("Watch Live") {
                     playLiveChannel(info.channel)
                     inProgressProgram = nil
@@ -1234,6 +1236,7 @@ struct GuideView: View {
     @ViewBuilder
     private func tvOSContextMenuItems(program: Program, channel: Channel) -> some View {
         if program.isCurrentlyAiring, let recId = viewModel.activeRecordingId(for: program, channelId: channel.id) {
+            #if !DISPATCHERPVR
             Button {
                 Task {
                     do {
@@ -1246,6 +1249,7 @@ struct GuideView: View {
             } label: {
                 Label("Watch from Beginning", systemImage: "play.fill")
             }
+            #endif
             Button {
                 playLiveChannel(channel)
             } label: {
@@ -1389,6 +1393,7 @@ struct GuideView: View {
                 .focusEffectDisabled()
                 .contextMenu {
                     if program.isCurrentlyAiring, let recId = viewModel.activeRecordingId(for: program, channelId: channel.id) {
+                        #if !DISPATCHERPVR
                         Button {
                             Task {
                                 do {
@@ -1401,6 +1406,7 @@ struct GuideView: View {
                         } label: {
                             Label("Watch from Beginning", systemImage: "play.fill")
                         }
+                        #endif
 
                         Button {
                             playLiveChannel(channel)
@@ -1436,6 +1442,7 @@ struct GuideView: View {
                 .buttonStyle(.plain)
                 .contextMenu {
                     if program.isCurrentlyAiring, let recId = viewModel.activeRecordingId(for: program, channelId: channel.id) {
+                        #if !DISPATCHERPVR
                         Button {
                             Task {
                                 do {
@@ -1448,6 +1455,7 @@ struct GuideView: View {
                         } label: {
                             Label("Watch from Beginning", systemImage: "play.fill")
                         }
+                        #endif
 
                         Button {
                             playLiveChannel(channel)
