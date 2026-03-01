@@ -380,6 +380,10 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
         return url
     }
 
+    func streamAuthHeaders() -> [String: String] {
+        [:]  // NextPVR uses SID in URL
+    }
+
     func channelIconURL(channelId: Int) throws -> URL? {
         guard let sid else { throw NextPVRError.sessionExpired }
         guard !config.isDemoMode else { return DemoDataProvider.channelIconURL(channelId: channelId) }

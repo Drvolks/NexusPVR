@@ -148,6 +148,11 @@ private struct RecordingsListContentView: View {
         .onChange(of: appState.recordingsFilter) {
             Task { viewModel.filter = appState.recordingsFilter }
         }
+        .onChange(of: viewModel.filter) {
+            if appState.recordingsFilter != viewModel.filter {
+                appState.recordingsFilter = viewModel.filter
+            }
+        }
         .onChange(of: viewModel.hasActiveRecordings) {
             Task { appState.recordingsHasActive = viewModel.hasActiveRecordings }
         }
@@ -234,7 +239,9 @@ private struct RecordingsListContentView: View {
                         onShowDetails: { selectedRecording = recording },
                         onDelete: {
                             deleteRecording(recording)
-                        }
+                        },
+                        durationMismatch: viewModel.durationMismatches[recording.id],
+                        durationVerified: viewModel.durationVerified.contains(recording.id)
                     )
                     .contextMenu {
                         if recording.recordingStatus == .recording {
@@ -279,7 +286,7 @@ private struct RecordingsListContentView: View {
         #else
         List {
             ForEach(vm.filteredRecordings) { recording in
-                RecordingRow(recording: recording)
+                RecordingRow(recording: recording, durationMismatch: viewModel.durationMismatches[recording.id], durationVerified: viewModel.durationVerified.contains(recording.id))
                     .contentShape(Rectangle())
                     .onTapGesture {
                         if recording.recordingStatus == .recording {

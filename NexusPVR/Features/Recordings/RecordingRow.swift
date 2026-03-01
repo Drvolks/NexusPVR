@@ -73,8 +73,55 @@ struct WatchProgressCircle: View {
     }
 }
 
+private func formatDuration(_ seconds: Int) -> String {
+    let hours = seconds / 3600
+    let minutes = (seconds % 3600) / 60
+    if hours > 0 && minutes > 0 {
+        return "\(hours)h \(minutes)m"
+    } else if hours > 0 {
+        return "\(hours)h"
+    } else if minutes > 0 {
+        return "\(minutes)m"
+    } else {
+        return "\(seconds)s"
+    }
+}
+
+/// Determines if the file size suggests a complete recording (timestamp issue)
+/// or a truncated file, and returns the appropriate warning label.
+@ViewBuilder
+private func durationWarningLabel(recording: Recording, mismatch: (expected: Int, detected: Int)) -> some View {
+    // Check if file size is reasonable for the expected duration
+    // 0.2 MB/s (1.6 Mbps) is a very conservative minimum for any video
+    let fileSeemsComplete: Bool = {
+        guard let size = recording.size, mismatch.expected > 0 else { return false }
+        let bytesPerSecond = Double(size) / Double(mismatch.expected)
+        return bytesPerSecond >= 200_000
+    }()
+
+    if fileSeemsComplete {
+        Label {
+            Text("Detected stream duration \(formatDuration(mismatch.detected)), playback may be impacted")
+        } icon: {
+            Image(systemName: "exclamationmark.triangle.fill")
+        }
+        .font(.caption)
+        .foregroundStyle(Theme.warning)
+    } else {
+        Label {
+            Text("Duration mismatch: expected \(formatDuration(mismatch.expected)), detected \(formatDuration(mismatch.detected))")
+        } icon: {
+            Image(systemName: "exclamationmark.triangle.fill")
+        }
+        .font(.caption)
+        .foregroundStyle(Theme.warning)
+    }
+}
+
 struct RecordingRow: View {
     let recording: Recording
+    var durationMismatch: (expected: Int, detected: Int)?
+    var durationVerified: Bool = false
 
     private var watchProgress: Double? {
         guard let position = recording.playbackPosition,
@@ -92,11 +139,11 @@ struct RecordingRow: View {
 
     private func recordingProgress(at date: Date) -> Double? {
         guard recording.recordingStatus == .recording,
-              let startTime = recording.startTime,
-              let duration = recording.duration,
-              duration > 0 else { return nil }
-        let elapsed = date.timeIntervalSince1970 - Double(startTime)
-        return min(max(elapsed / Double(duration), 0), 1)
+              let recordingStart = recording.recordingStartTime,
+              let totalDuration = recording.totalRecordingDuration,
+              totalDuration > 0 else { return nil }
+        let elapsed = date.timeIntervalSince1970 - Double(recordingStart)
+        return min(max(elapsed / Double(totalDuration), 0), 1)
     }
 
     var body: some View {
@@ -145,11 +192,16 @@ struct RecordingRow: View {
                     if let duration = recording.durationMinutes {
                         Text("\(duration) min")
                             .font(.caption)
-                            .foregroundStyle(Theme.textTertiary)
+                            .foregroundStyle(durationVerified ? Theme.success : Theme.textTertiary)
                     }
                 }
 
-                // Row 4: Recording progress bar
+                // Row 4: Duration mismatch warning
+                if let mismatch = durationMismatch {
+                    durationWarningLabel(recording: recording, mismatch: mismatch)
+                }
+
+                // Row 5: Recording progress bar
                 if recording.recordingStatus == .recording {
                     TimelineView(.periodic(from: .now, by: 30)) { context in
                         if let progress = recordingProgress(at: context.date) {
@@ -234,6 +286,8 @@ struct RecordingRowTV: View {
     let onPlay: () -> Void
     let onShowDetails: () -> Void
     let onDelete: () -> Void
+    var durationMismatch: (expected: Int, detected: Int)?
+    var durationVerified: Bool = false
 
     private var watchProgress: Double? {
         guard let position = recording.playbackPosition,
@@ -293,11 +347,11 @@ struct RecordingRowTV: View {
 
     private func recordingProgress(at date: Date) -> Double? {
         guard recording.recordingStatus == .recording,
-              let startTime = recording.startTime,
-              let duration = recording.duration,
-              duration > 0 else { return nil }
-        let elapsed = date.timeIntervalSince1970 - Double(startTime)
-        return min(max(elapsed / Double(duration), 0), 1)
+              let recordingStart = recording.recordingStartTime,
+              let totalDuration = recording.totalRecordingDuration,
+              totalDuration > 0 else { return nil }
+        let elapsed = date.timeIntervalSince1970 - Double(recordingStart)
+        return min(max(elapsed / Double(totalDuration), 0), 1)
     }
 
     private var actionColor: Color {
@@ -371,9 +425,6 @@ struct RecordingRowTV: View {
                             }
                         }
 
-                        if let duration = recording.durationMinutes {
-                            Label("\(duration) min", systemImage: "clock")
-                        }
                     }
                     .font(.caption)
                     .foregroundStyle(Theme.textTertiary)
@@ -385,6 +436,11 @@ struct RecordingRowTV: View {
                                 RecordingProgressBar(progress: progress)
                             }
                         }
+                    }
+
+                    // Duration mismatch warning
+                    if let mismatch = durationMismatch {
+                        durationWarningLabel(recording: recording, mismatch: mismatch)
                     }
                 }
 
@@ -403,6 +459,12 @@ struct RecordingRowTV: View {
                         Text(size)
                             .font(.caption)
                             .foregroundStyle(Theme.textTertiary)
+                    }
+
+                    if let duration = recording.durationMinutes {
+                        Text("\(duration) min")
+                            .font(.caption)
+                            .foregroundStyle(durationVerified ? Theme.success : Theme.textTertiary)
                     }
                 }
                 .padding(.horizontal, Theme.spacingMD)

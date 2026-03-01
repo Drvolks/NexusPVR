@@ -57,6 +57,8 @@ nonisolated struct Recording: Identifiable, Codable, Hashable {
     let quality: String?
     let genres: [String]?
     let playbackPosition: Int?  // Resume position in seconds
+    let prePadding: Int?   // Minutes before program start
+    let postPadding: Int?  // Minutes after program end
 
     var startDate: Date? {
         guard let startTime else { return nil }
@@ -71,6 +73,21 @@ nonisolated struct Recording: Identifiable, Codable, Hashable {
     var durationMinutes: Int? {
         guard let duration else { return nil }
         return duration / 60
+    }
+
+    /// Total recording duration including pre/post padding, in seconds
+    var totalRecordingDuration: Int? {
+        guard let duration else { return nil }
+        let pre = (prePadding ?? 0) * 60
+        let post = (postPadding ?? 0) * 60
+        return duration + pre + post
+    }
+
+    /// Actual recording start time including pre-padding
+    var recordingStartTime: Int? {
+        guard let startTime else { return nil }
+        let pre = (prePadding ?? 0) * 60
+        return startTime - pre
     }
 
     var recordingStatus: RecordingStatus {
@@ -92,7 +109,7 @@ nonisolated struct Recording: Identifiable, Codable, Hashable {
          channelId: Int? = nil, status: String? = nil, file: String? = nil,
          recurring: Bool? = nil, recurringParent: Int? = nil, epgEventId: Int? = nil,
          size: Int64? = nil, quality: String? = nil, genres: [String]? = nil,
-         playbackPosition: Int? = nil) {
+         playbackPosition: Int? = nil, prePadding: Int? = nil, postPadding: Int? = nil) {
         self.id = id
         self.name = name
         self.subtitle = subtitle
@@ -110,6 +127,8 @@ nonisolated struct Recording: Identifiable, Codable, Hashable {
         self.quality = quality
         self.genres = genres
         self.playbackPosition = playbackPosition
+        self.prePadding = prePadding
+        self.postPadding = postPadding
     }
 
     enum CodingKeys: String, CodingKey {
@@ -130,6 +149,8 @@ nonisolated struct Recording: Identifiable, Codable, Hashable {
         case quality
         case genres
         case playbackPosition
+        case prePadding
+        case postPadding
     }
 }
 

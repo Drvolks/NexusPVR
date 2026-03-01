@@ -761,6 +761,14 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         return url
     }
 
+    func streamAuthHeaders() -> [String: String] {
+        guard let token = accessToken else { return [:] }
+        if useApiKeyAuth {
+            return ["X-API-Key": token]
+        }
+        return ["Authorization": "Bearer \(token)"]
+    }
+
     func channelIconURL(channelId: Int) throws -> URL? {
         guard !config.isDemoMode else { return DemoDataProvider.channelIconURL(channelId: channelId) }
         if let urlString = channelLogoURLs[channelId], let url = URL(string: urlString) {
