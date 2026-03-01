@@ -101,6 +101,34 @@ struct PlayerView: View {
                 cleanupAction: $cleanupAction
             )
                 .ignoresSafeArea()
+            #elseif os(iOS)
+            MPVContainerView(
+                url: url,
+                isPlaying: $isPlaying,
+                errorMessage: $errorMessage,
+                currentPosition: $currentPosition,
+                duration: $duration,
+                seekForward: $seekForward,
+                seekBackward: $seekBackward,
+                seekToPosition: $seekToPositionFunc,
+                seekBackwardTime: seekBackwardTime,
+                seekForwardTime: seekForwardTime,
+                onPlaybackEnded: {
+                    savePlaybackPosition()
+                    markAsWatched()
+                },
+                onVideoInfoUpdate: { codec, height, hwdec, audioChannels in
+                    videoCodec = codec
+                    videoHeight = height
+                    hwDecoder = hwdec
+                    audioChannelLayout = audioChannels
+                },
+                cleanupAction: $cleanupAction
+            )
+                .ignoresSafeArea()
+                .onTapGesture {
+                    toggleControls()
+                }
             #else
             MPVContainerView(
                 url: url,
@@ -502,14 +530,31 @@ struct PlayerView: View {
                 badgeText(formatCodecName(codec), color: .white)
             }
             if let hw = hwDecoder, !hw.isEmpty, hw != "no" {
-                badgeText("HW", color: .green)
+                badgeText(metalTaggedDecodeBadge(base: "HW"), color: .green)
             } else if videoCodec != nil {
-                badgeText("SW", color: .orange)
+                badgeText(metalTaggedDecodeBadge(base: "SW"), color: .orange)
             }
             if let audio = audioChannelLayout {
                 badgeText(audio, color: .white)
             }
         }
+    }
+
+    private func metalTaggedDecodeBadge(base: String) -> String {
+        guard isUsingMetalRenderer else { return base }
+        return "\(base) (M)"
+    }
+
+    private var isUsingMetalRenderer: Bool {
+        #if os(tvOS)
+        return UserPreferences.load().tvosGPUAPI == .metal
+        #elseif os(iOS)
+        return UserPreferences.load().iosGPUAPI == .metal
+        #elseif os(macOS)
+        return UserPreferences.load().macosGPUAPI == .metal
+        #else
+        return false
+        #endif
     }
 
     private func badgeText(_ text: String, color: Color) -> some View {
@@ -851,8 +896,16 @@ class MPVPlayerCore: NSObject {
 
         // Video output
         #if os(macOS)
+        let gpuAPI = UserPreferences.load().macosGPUAPI
         mpv_set_option_string(mpv, "vo", "gpu")
-        mpv_set_option_string(mpv, "gpu-api", "opengl")
+        if gpuAPI == .metal {
+            mpv_set_option_string(mpv, "gpu-api", "metal")
+            mpv_set_option_string(mpv, "gpu-context", "metal")
+            print("MPV: macOS GPU API = Metal")
+        } else {
+            mpv_set_option_string(mpv, "gpu-api", "opengl")
+            print("MPV: macOS GPU API = OpenGL")
+        }
         #elseif os(tvOS)
         let gpuAPI = UserPreferences.load().tvosGPUAPI
         if gpuAPI == .metal {
@@ -866,11 +919,27 @@ class MPVPlayerCore: NSObject {
             mpv_set_option_string(mpv, "opengl-es", "yes")
             print("MPV: tvOS GPU API = OpenGL")
         }
+        #elseif os(iOS)
+        let gpuAPI = UserPreferences.load().iosGPUAPI
+        if gpuAPI == .metal {
+            mpv_set_option_string(mpv, "vo", "gpu")
+            mpv_set_option_string(mpv, "gpu-api", "metal")
+            mpv_set_option_string(mpv, "gpu-context", "metal")
+            print("MPV: iOS GPU API = Metal")
+        } else {
+            mpv_set_option_string(mpv, "vo", "libmpv")
+            mpv_set_option_string(mpv, "gpu-api", "opengl")
+            mpv_set_option_string(mpv, "opengl-es", "yes")
+            print("MPV: iOS GPU API = OpenGL")
+        }
         #else
         mpv_set_option_string(mpv, "vo", "libmpv")
         mpv_set_option_string(mpv, "gpu-api", "opengl")
         mpv_set_option_string(mpv, "opengl-es", "yes")
         #endif
+
+        // Keep video letterboxed to source aspect ratio across view size changes.
+        mpv_set_option_string(mpv, "keepaspect", "yes")
 
         // Enable yt-dlp for direct YouTube URL support (optional)
         mpv_set_option_string(mpv, "ytdl", "no")
@@ -1018,7 +1087,7 @@ class MPVPlayerCore: NSObject {
         }
     }
 
-    #if os(macOS) || os(tvOS)
+    #if os(macOS) || os(tvOS) || os(iOS)
     func setWindowID(_ layer: CAMetalLayer) {
         guard let mpv = mpv else { return }
 
@@ -1026,7 +1095,8 @@ class MPVPlayerCore: NSObject {
         let wid = Int64(Int(bitPattern: Unmanaged.passUnretained(layer).toOpaque()))
         var widValue = wid
 
-        let result = mpv_set_option(mpv, "wid", MPV_FORMAT_INT64, &widValue)
+        // wid can change at runtime on rotation/resize; use property update.
+        let result = mpv_set_property(mpv, "wid", MPV_FORMAT_INT64, &widValue)
         if result < 0 {
             let errorStr = String(cString: mpv_error_string(result))
             print("MPV: Failed to set wid: \(errorStr)")
@@ -1553,8 +1623,10 @@ struct MPVContainerView: UIViewRepresentable {
 }
 
 #else
-// iOS implementation — OpenGL ES via GLKView + libmpv render API
+// iOS implementation — runtime-selected renderer (OpenGL/Metal)
 struct MPVContainerView: UIViewRepresentable {
+    typealias UIViewType = UIView
+
     let url: URL
     @Binding var isPlaying: Bool
     @Binding var errorMessage: String?
@@ -1568,9 +1640,9 @@ struct MPVContainerView: UIViewRepresentable {
 
     var onPlaybackEnded: (() -> Void)?
     var onVideoInfoUpdate: ((String?, Int?, String?, String?) -> Void)?
+    @Binding var cleanupAction: (() -> Void)?
 
-    func makeUIView(context: Context) -> MPVPlayerGLView {
-        let view = MPVPlayerGLView(frame: .zero)
+    private func configureCommonCallbacks(for view: MPVPlayerGLView) {
         view.setup(errorBinding: $errorMessage)
         view.onPositionUpdate = { position, dur in
             DispatchQueue.main.async {
@@ -1580,10 +1652,21 @@ struct MPVContainerView: UIViewRepresentable {
         }
         view.onPlaybackEnded = onPlaybackEnded
         view.onVideoInfoUpdate = onVideoInfoUpdate
-        view.loadURL(url)
-        view.startPositionPolling()
-        context.coordinator.playerView = view
+    }
 
+    private func configureCommonCallbacks(for view: MPVPlayerMetalView) {
+        view.setup(errorBinding: $errorMessage)
+        view.onPositionUpdate = { position, dur in
+            DispatchQueue.main.async {
+                self.currentPosition = position
+                self.duration = dur
+            }
+        }
+        view.onPlaybackEnded = onPlaybackEnded
+        view.onVideoInfoUpdate = onVideoInfoUpdate
+    }
+
+    private func setupSeekBindings(for view: MPVPlayerGLView) {
         DispatchQueue.main.async {
             self.seekForward = {
                 view.seek(seconds: self.seekForwardTime)
@@ -1595,15 +1678,65 @@ struct MPVContainerView: UIViewRepresentable {
                 view.seekTo(position: position)
             }
         }
+    }
 
+    private func setupSeekBindings(for view: MPVPlayerMetalView) {
+        DispatchQueue.main.async {
+            self.seekForward = {
+                view.seek(seconds: self.seekForwardTime)
+            }
+            self.seekBackward = {
+                view.seek(seconds: -self.seekBackwardTime)
+            }
+            self.seekToPosition = { position in
+                view.seekTo(position: position)
+            }
+        }
+    }
+
+    func makeUIView(context: Context) -> UIView {
+        if UserPreferences.load().iosGPUAPI == .metal {
+            let view = MPVPlayerMetalView(frame: .zero)
+            configureCommonCallbacks(for: view)
+            view.loadURL(url)
+            view.startPositionPolling()
+            context.coordinator.playerView = view
+            DispatchQueue.main.async {
+                self.cleanupAction = { view.cleanup() }
+            }
+            setupSeekBindings(for: view)
+            return view
+        }
+
+        let view = MPVPlayerGLView(frame: .zero)
+        configureCommonCallbacks(for: view)
+        view.loadURL(url)
+        view.startPositionPolling()
+        context.coordinator.playerView = view
+        DispatchQueue.main.async {
+            self.cleanupAction = { view.cleanup() }
+        }
+
+        setupSeekBindings(for: view)
         return view
     }
 
-    func updateUIView(_ uiView: MPVPlayerGLView, context: Context) {
-        if isPlaying {
-            uiView.play()
-        } else {
-            uiView.pause()
+    func updateUIView(_ uiView: UIView, context: Context) {
+        if let metalView = uiView as? MPVPlayerMetalView {
+            if isPlaying {
+                metalView.play()
+            } else {
+                metalView.pause()
+            }
+            return
+        }
+        if let glView = uiView as? MPVPlayerGLView {
+            if isPlaying {
+                glView.play()
+            } else {
+                glView.pause()
+            }
+            return
         }
     }
 
@@ -1611,19 +1744,23 @@ struct MPVContainerView: UIViewRepresentable {
         Coordinator()
     }
 
-    static func dismantleUIView(_ uiView: MPVPlayerGLView, coordinator: Coordinator) {
-        uiView.cleanup()
+    static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) {
+        if let metalView = uiView as? MPVPlayerMetalView {
+            metalView.cleanup()
+        } else {
+            (uiView as? MPVPlayerGLView)?.cleanup()
+        }
     }
 
     class Coordinator {
-        var playerView: MPVPlayerGLView?
+        var playerView: UIView?
     }
 }
 #endif
 
-// MARK: - tvOS Metal View
+// MARK: - iOS/tvOS Metal View
 
-#if os(tvOS)
+#if os(iOS) || os(tvOS)
 class MPVPlayerMetalView: UIView {
     private var player: MPVPlayerCore?
     private var metalLayer: CAMetalLayer?
@@ -1631,16 +1768,20 @@ class MPVPlayerMetalView: UIView {
     var onPlaybackEnded: (() -> Void)?
     var onVideoInfoUpdate: ((String?, Int?, String?, String?) -> Void)?
 
+    #if os(tvOS)
     // tvOS remote control callbacks
     var onPlayPause: (() -> Void)?
     var onSeekForward: (() -> Void)?
     var onSeekBackward: (() -> Void)?
     var onSelect: (() -> Void)?
     var onMenu: (() -> Void)?
+    #endif
 
     override class var layerClass: AnyClass { CAMetalLayer.self }
 
+    #if os(tvOS)
     override var canBecomeFocused: Bool { true }
+    #endif
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -1657,13 +1798,44 @@ class MPVPlayerMetalView: UIView {
         metalLayer?.backgroundColor = UIColor.black.cgColor
         metalLayer?.pixelFormat = .bgra8Unorm
         isOpaque = true
+        clipsToBounds = true
         backgroundColor = .black
         isUserInteractionEnabled = true
+        autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        updateDrawableSize()
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
         metalLayer?.frame = bounds
+        updateDrawableSize()
+        #if os(iOS)
+        if let metalLayer = metalLayer {
+            player?.setWindowID(metalLayer)
+        }
+        #endif
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        updateDrawableSize()
+    }
+
+    private func updateDrawableSize() {
+        guard let metalLayer else { return }
+        #if os(iOS)
+        let scale = window?.screen.nativeScale ?? UIScreen.main.nativeScale
+        #else
+        let scale = UIScreen.main.scale
+        #endif
+        metalLayer.contentsScale = scale
+
+        let drawableWidth = max(bounds.width * scale, 1)
+        let drawableHeight = max(bounds.height * scale, 1)
+        let drawableSize = CGSize(width: drawableWidth, height: drawableHeight)
+        if metalLayer.drawableSize != drawableSize {
+            metalLayer.drawableSize = drawableSize
+        }
     }
 
     func setup(errorBinding: Binding<String?>?) {
@@ -1717,8 +1889,8 @@ class MPVPlayerMetalView: UIView {
         onVideoInfoUpdate = nil
     }
 
+    #if os(tvOS)
     // MARK: - tvOS Remote Control
-
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         for press in presses {
             switch press.type {
@@ -1743,6 +1915,7 @@ class MPVPlayerMetalView: UIView {
         }
         super.pressesBegan(presses, with: event)
     }
+    #endif
 }
 #endif
 

@@ -17,7 +17,9 @@ struct SettingsView: View {
     @State private var seekBackwardSeconds: Int = UserPreferences.load().seekBackwardSeconds
     @State private var seekForwardSeconds: Int = UserPreferences.load().seekForwardSeconds
     @State private var audioChannels: String = UserPreferences.load().audioChannels
-    @State private var tvosGPUAPI: TVOSGPUAPI = UserPreferences.load().tvosGPUAPI
+    @State private var tvosGPUAPI: GPUAPI = UserPreferences.load().tvosGPUAPI
+    @State private var iosGPUAPI: GPUAPI = UserPreferences.load().iosGPUAPI
+    @State private var macosGPUAPI: GPUAPI = UserPreferences.load().macosGPUAPI
     @ObservedObject private var eventLog = NetworkEventLog.shared
 
 
@@ -200,23 +202,17 @@ struct SettingsView: View {
                                 }
                             }
                         }
-                    }
-                }
-                .focusSection()
 
-                #if DEBUG
-                // Debug: Test Stream
-                TVSettingsSection(
-                    title: "Debug",
-                    icon: "ladybug"
-                ) {
-                    VStack(spacing: Theme.spacingMD) {
+                        Divider()
+                            .background(Theme.textTertiary)
+
+                        // GPU API
                         VStack(spacing: Theme.spacingSM) {
                             Text("GPU API")
                                 .foregroundStyle(Theme.textPrimary)
 
                             HStack(spacing: Theme.spacingMD) {
-                                ForEach(TVOSGPUAPI.allCases, id: \.self) { api in
+                                ForEach(GPUAPI.allCases, id: \.self) { api in
                                     Button {
                                         tvosGPUAPI = api
                                         var prefs = UserPreferences.load()
@@ -235,32 +231,33 @@ struct SettingsView: View {
                                     .buttonStyle(.card)
                                 }
                             }
-
-                            Text("Applied on next playback start.")
-                                .font(.footnote)
-                                .foregroundStyle(Theme.textTertiary)
                         }
-
-                        Divider()
-                            .background(Theme.textTertiary)
-
-                        Button {
-                            let url = URL(filePath: "")
-                            appState.playStream(url: url, title: "Test MKV Stream")
-                        } label: {
-                            HStack {
-                                Image(systemName: "play.circle")
-                                    .foregroundStyle(Theme.accent)
-                                Text("Test MKV Stream")
-                                    .foregroundStyle(Theme.textPrimary)
-                                Spacer()
-                            }
-                            .padding()
-                            .background(Theme.surfaceElevated)
-                            .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
-                        }
-                        .buttonStyle(.card)
                     }
+                }
+                .focusSection()
+
+                #if DEBUG
+                // Debug: Test Stream
+                TVSettingsSection(
+                    title: "Debug",
+                    icon: "ladybug"
+                ) {
+                    Button {
+                        let url = URL(filePath: "")
+                        appState.playStream(url: url, title: "Test MKV Stream")
+                    } label: {
+                        HStack {
+                            Image(systemName: "play.circle")
+                                .foregroundStyle(Theme.accent)
+                            Text("Test MKV Stream")
+                                .foregroundStyle(Theme.textPrimary)
+                            Spacer()
+                        }
+                        .padding()
+                        .background(Theme.surfaceElevated)
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
+                    }
+                    .buttonStyle(.card)
                 }
                 .focusSection()
                 #endif
@@ -380,6 +377,18 @@ struct SettingsView: View {
                 Text("Auto").tag("auto")
                 Text("Stereo").tag("stereo")
             }
+
+            #if os(iOS)
+            Picker("GPU API", selection: $iosGPUAPI) {
+                Text("OpenGL").tag(GPUAPI.opengl)
+                Text("Metal (Experimental)").tag(GPUAPI.metal)
+            }
+            #elseif os(macOS)
+            Picker("GPU API", selection: $macosGPUAPI) {
+                Text("OpenGL").tag(GPUAPI.opengl)
+                Text("Metal (Experimental)").tag(GPUAPI.metal)
+            }
+            #endif
         } header: {
             Text("Playback")
         }
@@ -398,6 +407,19 @@ struct SettingsView: View {
             prefs.audioChannels = audioChannels
             prefs.save()
         }
+        #if os(iOS)
+        .onChange(of: iosGPUAPI) {
+            var prefs = UserPreferences.load()
+            prefs.iosGPUAPI = iosGPUAPI
+            prefs.save()
+        }
+        #elseif os(macOS)
+        .onChange(of: macosGPUAPI) {
+            var prefs = UserPreferences.load()
+            prefs.macosGPUAPI = macosGPUAPI
+            prefs.save()
+        }
+        #endif
     }
 
     private var eventLogLinkSection: some View {
