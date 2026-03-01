@@ -617,13 +617,13 @@ class MPVPlayerCore: NSObject {
             self.mpvGL = nil
         }
 
-        // Wake the event loop so it sees isDestroyed and exits
+        // Tell mpv to quit gracefully — this shuts down the VO thread, audio, etc.
+        // Critical for vo=gpu+wid where mpv owns the render loop.
         if let mpv = mpv {
-            mpv_wakeup(mpv)
+            mpv_command_string(mpv, "quit")
         }
 
-        // Wait for the event loop thread to finish before freeing mpv
-        // (mpv API is not safe to call concurrently with mpv_terminate_destroy)
+        // Wait for the event loop thread to finish (it exits on MPV_EVENT_SHUTDOWN)
         eventLoopGroup.wait()
 
         if let mpv = mpv {
