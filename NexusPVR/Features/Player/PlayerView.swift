@@ -960,6 +960,13 @@ class MPVPlayerCore: NSObject {
         currentURLPath = url.path
         print("MPV: Loading URL: \(urlString)")
 
+        // Fix TS timing issues (genpts regenerates PTS, igndts ignores broken DTS)
+        if url.pathExtension.lowercased() == "ts" {
+            mpv_set_property_string(mpv, "demuxer-lavf-o", "fflags=+genpts+igndts")
+        } else {
+            mpv_set_property_string(mpv, "demuxer-lavf-o", "")
+        }
+
         // Use mpv_command_string for simpler string-based command
         let command = "loadfile \"\(urlString)\" replace"
         let result = mpv_command_string(mpv, command)
