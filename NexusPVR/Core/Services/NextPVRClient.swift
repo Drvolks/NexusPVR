@@ -44,6 +44,9 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
     private var sid: String?
     private let session: URLSession
     private let deviceName = Brand.deviceName
+    private let liveClientName: String
+
+    private static let liveClientIDKey = "NextPVRLiveClientID"
 
     init(config: ServerConfig? = nil) {
         self.config = config ?? ServerConfig.load()
@@ -51,6 +54,17 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
         configuration.timeoutIntervalForRequest = 30
         configuration.timeoutIntervalForResource = 300
         self.session = URLSession(configuration: configuration)
+        self.liveClientName = Self.makeLiveClientName()
+    }
+
+    private static func makeLiveClientName() -> String {
+        let defaults = UserDefaults.standard
+        if let existing = defaults.string(forKey: liveClientIDKey), !existing.isEmpty {
+            return "\(Brand.deviceName)-\(existing)"
+        }
+        let id = String(UUID().uuidString.prefix(8))
+        defaults.set(id, forKey: liveClientIDKey)
+        return "\(Brand.deviceName)-\(id)"
     }
 
     var baseURL: String {
@@ -362,7 +376,13 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
         }
         guard let sid else { throw NextPVRError.sessionExpired }
 
-        guard let url = URL(string: "\(baseURL)/live?channeloid=\(channelId)&client=\(deviceName)&sid=\(sid)") else {
+        var components = URLComponents(string: "\(baseURL)/live")
+        components?.queryItems = [
+            URLQueryItem(name: "channeloid", value: String(channelId)),
+            URLQueryItem(name: "client", value: liveClientName),
+            URLQueryItem(name: "sid", value: sid)
+        ]
+        guard let url = components?.url else {
             throw NextPVRError.invalidResponse
         }
         return url
