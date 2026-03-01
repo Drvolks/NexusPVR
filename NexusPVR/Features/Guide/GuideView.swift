@@ -1391,6 +1391,20 @@ struct GuideView: View {
             Color.clear
                 .frame(width: hourWidth * CGFloat(viewModel.hoursToShow.count))
 
+            if programs.isEmpty {
+                // Show channel name as placeholder so user can still tap to play
+                Button {
+                    playLiveChannel(channel)
+                } label: {
+                    Text(channel.name)
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.textTertiary)
+                        .padding(.leading, Theme.spacingMD)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+            }
+
             // Program cells
             ForEach(programs) { program in
                 let isScheduled = viewModel.isScheduledRecording(program)
