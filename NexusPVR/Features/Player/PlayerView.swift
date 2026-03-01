@@ -884,6 +884,10 @@ class MPVPlayerCore: NSObject {
         mpv_set_option_string(mpv, "keep-open", "yes")
         mpv_set_option_string(mpv, "idle", "yes")
 
+        // Frame dropping — allow mpv to drop frames when video can't keep up with audio
+        // Prevents progressive A/V desync on slower hardware (e.g. 4K HEVC on older Apple TV)
+        mpv_set_option_string(mpv, "framedrop", "vo")
+
         // Buffering for streaming - wait for video to buffer before starting
         mpv_set_option_string(mpv, "cache", "yes")
         mpv_set_option_string(mpv, "cache-secs", "120")
