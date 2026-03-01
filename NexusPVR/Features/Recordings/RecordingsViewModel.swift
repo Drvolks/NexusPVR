@@ -153,7 +153,7 @@ final class RecordingsViewModel: ObservableObject {
             print("Duration probe: MISMATCH (cached) '\(recording.name)' — expected \(expectedDuration)s, detected \(detectedSeconds)s")
             durationMismatches[recording.id] = (expected: expectedDuration, detected: detectedSeconds)
         } else {
-            print("Duration probe: OK (cached) '\(recording.name)' — expected \(expectedDuration)s, detected \(detectedSeconds)s")
+            //print("Duration probe: OK (cached) '\(recording.name)' — expected \(expectedDuration)s, detected \(detectedSeconds)s")
             durationVerified.insert(recording.id)
         }
     }
