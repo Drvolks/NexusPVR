@@ -33,6 +33,9 @@ final class NetworkEventLog: ObservableObject {
             if self.events.count > self.maxEvents {
                 self.events.removeFirst(self.events.count - self.maxEvents)
             }
+            #if DEBUG
+            print(Self.consoleLine(for: event))
+            #endif
         }
     }
 
@@ -48,14 +51,18 @@ final class NetworkEventLog: ObservableObject {
 
     var formattedLog: String {
         events.map { event in
-            let time = Self.timeFormatter.string(from: event.timestamp)
-            let status = event.statusCode.map { " → \($0)" } ?? (event.isSuccess ? "" : " → ERR")
-            let duration = event.durationMs > 0 ? " (\(event.durationMs)ms)" : ""
-            var line = "\(time) \(event.method) \(event.path)\(status)\(duration)"
-            if let detail = event.errorDetail {
-                line += "\n  \(detail)"
-            }
-            return line
+            Self.consoleLine(for: event)
         }.joined(separator: "\n")
+    }
+
+    private static func consoleLine(for event: NetworkEvent) -> String {
+        let time = timeFormatter.string(from: event.timestamp)
+        let status = event.statusCode.map { " → \($0)" } ?? (event.isSuccess ? "" : " → ERR")
+        let duration = event.durationMs > 0 ? " (\(event.durationMs)ms)" : ""
+        var line = "\(time) \(event.method) \(event.path)\(status)\(duration)"
+        if let detail = event.errorDetail {
+            line += "\n  \(detail)"
+        }
+        return line
     }
 }

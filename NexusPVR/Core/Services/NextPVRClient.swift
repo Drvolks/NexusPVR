@@ -102,8 +102,39 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
         return path
     }
 
-    private static let retryDelays: [Double] = [1.0, 2.0, 3.0, 5.0]
+    private static let retryDelays: [Double] = [0.5, 1.0, 2.0, 4.0, 6.0]
     private static let maxAttempts = 5
+    private static let retryableHTTPStatusCodes: Set<Int> = [408, 425, 429, 500, 502, 503, 504]
+    private static let retryableURLErrorCodes: Set<URLError.Code> = [
+        .timedOut,
+        .cannotFindHost,
+        .cannotConnectToHost,
+        .networkConnectionLost,
+        .dnsLookupFailed,
+        .notConnectedToInternet,
+        .internationalRoamingOff,
+        .callIsActive,
+        .dataNotAllowed,
+        .cannotLoadFromNetwork
+    ]
+
+    private func isRetryableNetworkError(_ error: Error) -> Bool {
+        if let urlError = error as? URLError {
+            return Self.retryableURLErrorCodes.contains(urlError.code)
+        }
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            let code = URLError.Code(rawValue: nsError.code)
+            return Self.retryableURLErrorCodes.contains(code)
+        }
+        return false
+    }
+
+    private func retryDelay(for attempt: Int) -> Double {
+        let base = Self.retryDelays[min(attempt - 1, Self.retryDelays.count - 1)]
+        // Small deterministic jitter to avoid hammering in lockstep.
+        return base + Double(attempt) * 0.15
+    }
 
     private func loggedData(from url: URL) async throws -> (Data, URLResponse) {
         let method = "GET"
@@ -117,6 +148,19 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
                 let status = (response as? HTTPURLResponse)?.statusCode
                 let ok = status.map { (200...399).contains($0) } ?? false
                 let ms = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
+                let shouldRetryHTTP = status.map { Self.retryableHTTPStatusCodes.contains($0) } ?? false
+
+                if shouldRetryHTTP && attempt < Self.maxAttempts {
+                    NetworkEventLog.shared.log(NetworkEvent(
+                        timestamp: Date(), method: method, path: path,
+                        statusCode: status, isSuccess: false,
+                        durationMs: ms, responseSize: data.count,
+                        errorDetail: "Transient HTTP \(status ?? -1), retrying \(attempt)/\(Self.maxAttempts)"
+                    ))
+                    try? await Task.sleep(for: .seconds(retryDelay(for: attempt)))
+                    continue
+                }
+
                 NetworkEventLog.shared.log(NetworkEvent(
                     timestamp: Date(), method: method, path: path,
                     statusCode: status, isSuccess: ok,
@@ -128,7 +172,7 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
                 let ms = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
                 lastError = error
 
-                let isTransient = (error as? URLError)?.code == .notConnectedToInternet && ms < 200
+                let isTransient = isRetryableNetworkError(error)
                 let willRetry = isTransient && attempt < Self.maxAttempts
                 NetworkEventLog.shared.log(NetworkEvent(
                     timestamp: Date(), method: method, path: path,
@@ -138,8 +182,7 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
                 ))
 
                 if willRetry {
-                    let delay = Self.retryDelays[min(attempt - 1, Self.retryDelays.count - 1)]
-                    try? await Task.sleep(for: .seconds(delay))
+                    try? await Task.sleep(for: .seconds(retryDelay(for: attempt)))
                     continue
                 }
 
@@ -151,6 +194,14 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
     }
 
     // MARK: - Authentication
+
+    /// Stream URLs use SID directly and bypass API request 401 handling.
+    /// Renewing the session at stream start avoids stale-SID playback failures.
+    private func refreshSessionForStreaming() async throws {
+        sid = nil
+        isAuthenticated = false
+        try await authenticate()
+    }
 
     func authenticate() async throws {
         guard !config.isDemoMode else { isAuthenticated = true; return }
@@ -371,9 +422,7 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
 
     func liveStreamURL(channelId: Int) async throws -> URL {
         guard !config.isDemoMode else { return DemoDataProvider.demoVideoURL }
-        if !isAuthenticated {
-            try await authenticate()
-        }
+        try await refreshSessionForStreaming()
         guard let sid else { throw NextPVRError.sessionExpired }
 
         var components = URLComponents(string: "\(baseURL)/live")
@@ -390,9 +439,7 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
 
     func recordingStreamURL(recordingId: Int) async throws -> URL {
         guard !config.isDemoMode else { return DemoDataProvider.demoVideoURL }
-        if !isAuthenticated {
-            try await authenticate()
-        }
+        try await refreshSessionForStreaming()
         guard let sid else { throw NextPVRError.sessionExpired }
         guard let url = URL(string: "\(baseURL)/live?recording=\(recordingId)&sid=\(sid)") else {
             throw NextPVRError.invalidResponse
