@@ -39,6 +39,7 @@ struct PlayerView: View {
     @State private var seekForward: (() -> Void)?
     @State private var seekBackward: (() -> Void)?
     @State private var seekToPositionFunc: ((Double) -> Void)?
+    @State private var cleanupAction: (() -> Void)?
     @State private var hasResumed = false
     @State private var isPlayerReady = false
     @State private var startTimeOffset: Double = 0
@@ -96,7 +97,8 @@ struct PlayerView: View {
                     videoHeight = height
                     hwDecoder = hwdec
                     audioChannelLayout = audioChannels
-                }
+                },
+                cleanupAction: $cleanupAction
             )
                 .ignoresSafeArea()
             #else
@@ -230,6 +232,9 @@ struct PlayerView: View {
             #endif
         }
         .onDisappear {
+            // Stop mpv immediately — dismantleUIView may be delayed by SwiftUI
+            cleanupAction?()
+            cleanupAction = nil
             // Only save if not already stopped by an explicit exit path
             if appState.isShowingPlayer {
                 savePlaybackPosition()
@@ -845,7 +850,7 @@ class MPVPlayerCore: NSObject {
         }
 
         // Video output
-        #if os(macOS)
+        #if os(macOS) || os(tvOS)
         mpv_set_option_string(mpv, "vo", "gpu")
         mpv_set_option_string(mpv, "gpu-api", "opengl")
         #else
@@ -1000,7 +1005,7 @@ class MPVPlayerCore: NSObject {
         }
     }
 
-    #if os(macOS)
+    #if os(macOS) || os(tvOS)
     func setWindowID(_ layer: CAMetalLayer) {
         guard let mpv = mpv else { return }
 
@@ -1016,7 +1021,9 @@ class MPVPlayerCore: NSObject {
             print("MPV: Successfully set window ID")
         }
     }
-    #else
+    #endif
+
+    #if os(iOS)
     func createRenderContext(view: MPVPlayerGLView) {
         guard let mpv = mpv else { return }
 
@@ -1368,8 +1375,8 @@ class MPVPlayerNSView: NSView {
     }
 }
 
-#else
-// iOS/tvOS implementation
+#elseif os(tvOS)
+// tvOS implementation — Metal via CAMetalLayer + wid (avoids videotoolbox-copy overhead)
 struct MPVContainerView: UIViewRepresentable {
     let url: URL
     @Binding var isPlaying: Bool
@@ -1383,14 +1390,96 @@ struct MPVContainerView: UIViewRepresentable {
     let seekForwardTime: Int
 
     var onPlaybackEnded: (() -> Void)?
-
-    #if os(tvOS)
     var onTogglePlayPause: (() -> Void)?
     var onToggleControls: (() -> Void)?
     var onShowControls: (() -> Void)?
     var onDismiss: (() -> Void)?
-    #endif
+    var onVideoInfoUpdate: ((String?, Int?, String?, String?) -> Void)?
+    @Binding var cleanupAction: (() -> Void)?
 
+    func makeUIView(context: Context) -> MPVPlayerMetalView {
+        let view = MPVPlayerMetalView(frame: .zero)
+        view.setup(errorBinding: $errorMessage)
+        view.onPositionUpdate = { position, dur in
+            DispatchQueue.main.async {
+                self.currentPosition = position
+                self.duration = dur
+            }
+        }
+        view.onPlaybackEnded = onPlaybackEnded
+        view.onVideoInfoUpdate = onVideoInfoUpdate
+        view.loadURL(url)
+        view.startPositionPolling()
+        context.coordinator.playerView = view
+        DispatchQueue.main.async {
+            self.cleanupAction = { view.cleanup() }
+        }
+
+        DispatchQueue.main.async {
+            self.seekForward = {
+                view.seek(seconds: self.seekForwardTime)
+                self.onShowControls?()
+            }
+            self.seekBackward = {
+                view.seek(seconds: -self.seekBackwardTime)
+                self.onShowControls?()
+            }
+            self.seekToPosition = { position in
+                view.seekTo(position: position)
+            }
+        }
+
+        view.onPlayPause = onTogglePlayPause
+        view.onSeekForward = {
+            view.seek(seconds: self.seekForwardTime)
+            self.onShowControls?()
+        }
+        view.onSeekBackward = {
+            view.seek(seconds: -self.seekBackwardTime)
+            self.onShowControls?()
+        }
+        view.onSelect = onToggleControls
+        view.onMenu = onDismiss
+
+        return view
+    }
+
+    func updateUIView(_ uiView: MPVPlayerMetalView, context: Context) {
+        if isPlaying {
+            uiView.play()
+        } else {
+            uiView.pause()
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    static func dismantleUIView(_ uiView: MPVPlayerMetalView, coordinator: Coordinator) {
+        uiView.cleanup()
+    }
+
+    class Coordinator {
+        var playerView: MPVPlayerMetalView?
+    }
+}
+
+#else
+// iOS implementation — OpenGL ES via GLKView + libmpv render API
+struct MPVContainerView: UIViewRepresentable {
+    let url: URL
+    @Binding var isPlaying: Bool
+    @Binding var errorMessage: String?
+    @Binding var currentPosition: Double
+    @Binding var duration: Double
+    @Binding var seekForward: (() -> Void)?
+    @Binding var seekBackward: (() -> Void)?
+    @Binding var seekToPosition: ((Double) -> Void)?
+    let seekBackwardTime: Int
+    let seekForwardTime: Int
+
+    var onPlaybackEnded: (() -> Void)?
     var onVideoInfoUpdate: ((String?, Int?, String?, String?) -> Void)?
 
     func makeUIView(context: Context) -> MPVPlayerGLView {
@@ -1408,7 +1497,6 @@ struct MPVContainerView: UIViewRepresentable {
         view.startPositionPolling()
         context.coordinator.playerView = view
 
-        // Set up seek closures
         DispatchQueue.main.async {
             self.seekForward = {
                 view.seek(seconds: self.seekForwardTime)
@@ -1420,21 +1508,6 @@ struct MPVContainerView: UIViewRepresentable {
                 view.seekTo(position: position)
             }
         }
-
-        #if os(tvOS)
-        // Set up tvOS remote control callbacks
-        view.onPlayPause = onTogglePlayPause
-        view.onSeekForward = {
-            view.seek(seconds: self.seekForwardTime)
-            self.onShowControls?()
-        }
-        view.onSeekBackward = {
-            view.seek(seconds: -self.seekBackwardTime)
-            self.onShowControls?()
-        }
-        view.onSelect = onToggleControls
-        view.onMenu = onDismiss
-        #endif
 
         return view
     }
@@ -1459,7 +1532,136 @@ struct MPVContainerView: UIViewRepresentable {
         var playerView: MPVPlayerGLView?
     }
 }
+#endif
 
+// MARK: - tvOS Metal View
+
+#if os(tvOS)
+class MPVPlayerMetalView: UIView {
+    private var player: MPVPlayerCore?
+    private var metalLayer: CAMetalLayer?
+    var onPositionUpdate: ((Double, Double) -> Void)?
+    var onPlaybackEnded: (() -> Void)?
+    var onVideoInfoUpdate: ((String?, Int?, String?, String?) -> Void)?
+
+    // tvOS remote control callbacks
+    var onPlayPause: (() -> Void)?
+    var onSeekForward: (() -> Void)?
+    var onSeekBackward: (() -> Void)?
+    var onSelect: (() -> Void)?
+    var onMenu: (() -> Void)?
+
+    override class var layerClass: AnyClass { CAMetalLayer.self }
+
+    override var canBecomeFocused: Bool { true }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        commonInit()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        commonInit()
+    }
+
+    private func commonInit() {
+        metalLayer = layer as? CAMetalLayer
+        metalLayer?.backgroundColor = UIColor.black.cgColor
+        metalLayer?.pixelFormat = .bgra8Unorm
+        isOpaque = true
+        backgroundColor = .black
+        isUserInteractionEnabled = true
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        metalLayer?.frame = bounds
+    }
+
+    func setup(errorBinding: Binding<String?>?) {
+        player = MPVPlayerCore()
+        guard let success = player?.setup(errorBinding: errorBinding), success else {
+            return
+        }
+        if let metalLayer = metalLayer {
+            player?.setWindowID(metalLayer)
+        }
+        player?.onPositionUpdate = { [weak self] position, duration in
+            self?.onPositionUpdate?(position, duration)
+        }
+        player?.onPlaybackEnded = { [weak self] in
+            self?.onPlaybackEnded?()
+        }
+        player?.onVideoInfoUpdate = { [weak self] codec, height, hwdec, audioChannels in
+            self?.onVideoInfoUpdate?(codec, height, hwdec, audioChannels)
+        }
+    }
+
+    func loadURL(_ url: URL) {
+        player?.loadURL(url)
+    }
+
+    func play() {
+        player?.play()
+    }
+
+    func pause() {
+        player?.pause()
+    }
+
+    func seek(seconds: Int) {
+        player?.seek(seconds: seconds)
+    }
+
+    func seekTo(position: Double) {
+        player?.seekTo(position: position)
+    }
+
+    func startPositionPolling() {
+        player?.startPositionPolling()
+    }
+
+    func cleanup() {
+        player?.destroy()
+        player = nil
+        onPositionUpdate = nil
+        onPlaybackEnded = nil
+        onVideoInfoUpdate = nil
+    }
+
+    // MARK: - tvOS Remote Control
+
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        for press in presses {
+            switch press.type {
+            case .playPause:
+                onPlayPause?()
+                return
+            case .leftArrow:
+                onSeekBackward?()
+                return
+            case .rightArrow:
+                onSeekForward?()
+                return
+            case .select:
+                onSelect?()
+                return
+            case .menu:
+                onMenu?()
+                return
+            default:
+                break
+            }
+        }
+        super.pressesBegan(presses, with: event)
+    }
+}
+#endif
+
+// MARK: - iOS OpenGL ES View
+
+#if os(iOS)
 class MPVPlayerGLView: GLKView {
     private var player: MPVPlayerCore?
     private var defaultFBO: GLint = -1
@@ -1472,17 +1674,6 @@ class MPVPlayerGLView: GLKView {
     var onPositionUpdate: ((Double, Double) -> Void)?
     var onPlaybackEnded: (() -> Void)?
     var onVideoInfoUpdate: ((String?, Int?, String?, String?) -> Void)?
-
-    #if os(tvOS)
-    // Callbacks for tvOS remote control
-    var onPlayPause: (() -> Void)?
-    var onSeekForward: (() -> Void)?
-    var onSeekBackward: (() -> Void)?
-    var onSelect: (() -> Void)?
-    var onMenu: (() -> Void)?
-
-    override var canBecomeFocused: Bool { true }
-    #endif
 
     override init(frame: CGRect) {
         guard let glContext = EAGLContext(api: .openGLES2) else {
@@ -1516,10 +1707,6 @@ class MPVPlayerGLView: GLKView {
         // Display link for frame sync
         displayLink = CADisplayLink(target: self, selector: #selector(updateFrame))
         displayLink?.add(to: .main, forMode: .common)
-
-        #if os(tvOS)
-        isUserInteractionEnabled = true
-        #endif
     }
 
     deinit {
@@ -1564,43 +1751,6 @@ class MPVPlayerGLView: GLKView {
         }
     }
 
-    #if os(tvOS)
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        if window != nil {
-            // Request focus when added to window
-            DispatchQueue.main.async {
-                self.setNeedsFocusUpdate()
-                self.updateFocusIfNeeded()
-            }
-        }
-    }
-
-    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        for press in presses {
-            switch press.type {
-            case .playPause:
-                onPlayPause?()
-                return
-            case .leftArrow:
-                onSeekBackward?()
-                return
-            case .rightArrow:
-                onSeekForward?()
-                return
-            case .select:
-                onSelect?()
-                return
-            case .menu:
-                onMenu?()
-                return
-            default:
-                break
-            }
-        }
-        super.pressesBegan(presses, with: event)
-    }
-    #endif
 
     override func layoutSubviews() {
         super.layoutSubviews()
