@@ -17,6 +17,7 @@ struct SettingsView: View {
     @State private var seekBackwardSeconds: Int = UserPreferences.load().seekBackwardSeconds
     @State private var seekForwardSeconds: Int = UserPreferences.load().seekForwardSeconds
     @State private var audioChannels: String = UserPreferences.load().audioChannels
+    @State private var tvosGPUAPI: TVOSGPUAPI = UserPreferences.load().tvosGPUAPI
     @ObservedObject private var eventLog = NetworkEventLog.shared
 
 
@@ -202,6 +203,67 @@ struct SettingsView: View {
                     }
                 }
                 .focusSection()
+
+                #if DEBUG
+                // Debug: Test Stream
+                TVSettingsSection(
+                    title: "Debug",
+                    icon: "ladybug"
+                ) {
+                    VStack(spacing: Theme.spacingMD) {
+                        VStack(spacing: Theme.spacingSM) {
+                            Text("GPU API")
+                                .foregroundStyle(Theme.textPrimary)
+
+                            HStack(spacing: Theme.spacingMD) {
+                                ForEach(TVOSGPUAPI.allCases, id: \.self) { api in
+                                    Button {
+                                        tvosGPUAPI = api
+                                        var prefs = UserPreferences.load()
+                                        prefs.tvosGPUAPI = api
+                                        prefs.save()
+                                    } label: {
+                                        Text(api == .metal ? "Metal" : "OpenGL")
+                                            .font(.callout)
+                                            .fontWeight(.medium)
+                                            .padding(.horizontal, Theme.spacingLG)
+                                            .padding(.vertical, Theme.spacingMD)
+                                            .background(tvosGPUAPI == api ? Theme.accent : Theme.surfaceElevated)
+                                            .foregroundStyle(tvosGPUAPI == api ? .white : Theme.textPrimary)
+                                            .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
+                                    }
+                                    .buttonStyle(.card)
+                                }
+                            }
+
+                            Text("Applied on next playback start.")
+                                .font(.footnote)
+                                .foregroundStyle(Theme.textTertiary)
+                        }
+
+                        Divider()
+                            .background(Theme.textTertiary)
+
+                        Button {
+                            let url = URL(filePath: "")
+                            appState.playStream(url: url, title: "Test MKV Stream")
+                        } label: {
+                            HStack {
+                                Image(systemName: "play.circle")
+                                    .foregroundStyle(Theme.accent)
+                                Text("Test MKV Stream")
+                                    .foregroundStyle(Theme.textPrimary)
+                                Spacer()
+                            }
+                            .padding()
+                            .background(Theme.surfaceElevated)
+                            .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
+                        }
+                        .buttonStyle(.card)
+                    }
+                }
+                .focusSection()
+                #endif
 
                 // Event Log
                 NavigationLink(destination: EventLogView()) {

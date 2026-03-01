@@ -7,6 +7,11 @@
 
 import Foundation
 
+enum TVOSGPUAPI: String, Codable, CaseIterable {
+    case metal
+    case opengl
+}
+
 nonisolated struct PlayerStats: Codable {
     var avgFps: Double = 0
     var avgBitrateKbps: Double = 0
@@ -37,6 +42,7 @@ nonisolated struct UserPreferences: Codable {
     var seekBackwardSeconds: Int = 10
     var seekForwardSeconds: Int = 30
     var audioChannels: String = "auto"
+    var tvosGPUAPI: TVOSGPUAPI = .metal
 
     // Migration: keep old property for decoding existing data
     private enum CodingKeys: String, CodingKey {
@@ -45,6 +51,7 @@ nonisolated struct UserPreferences: Codable {
         case seekForwardSeconds
         case seekTimeSeconds // legacy
         case audioChannels
+        case tvosGPUAPI
     }
 
     init() {}
@@ -62,6 +69,7 @@ nonisolated struct UserPreferences: Codable {
             seekForwardSeconds = 30
         }
         audioChannels = try container.decodeIfPresent(String.self, forKey: .audioChannels) ?? "auto"
+        tvosGPUAPI = try container.decodeIfPresent(TVOSGPUAPI.self, forKey: .tvosGPUAPI) ?? .metal
     }
 
     func encode(to encoder: Encoder) throws {
@@ -70,6 +78,7 @@ nonisolated struct UserPreferences: Codable {
         try container.encode(seekBackwardSeconds, forKey: .seekBackwardSeconds)
         try container.encode(seekForwardSeconds, forKey: .seekForwardSeconds)
         try container.encode(audioChannels, forKey: .audioChannels)
+        try container.encode(tvosGPUAPI, forKey: .tvosGPUAPI)
     }
 
     private static let storageKey = "UserPreferences"

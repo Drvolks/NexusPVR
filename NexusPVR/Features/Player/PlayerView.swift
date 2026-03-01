@@ -850,9 +850,22 @@ class MPVPlayerCore: NSObject {
         }
 
         // Video output
-        #if os(macOS) || os(tvOS)
+        #if os(macOS)
         mpv_set_option_string(mpv, "vo", "gpu")
         mpv_set_option_string(mpv, "gpu-api", "opengl")
+        #elseif os(tvOS)
+        let gpuAPI = UserPreferences.load().tvosGPUAPI
+        if gpuAPI == .metal {
+            mpv_set_option_string(mpv, "vo", "gpu")
+            mpv_set_option_string(mpv, "gpu-api", "metal")
+            mpv_set_option_string(mpv, "gpu-context", "metal")
+            print("MPV: tvOS GPU API = Metal")
+        } else {
+            mpv_set_option_string(mpv, "vo", "libmpv")
+            mpv_set_option_string(mpv, "gpu-api", "opengl")
+            mpv_set_option_string(mpv, "opengl-es", "yes")
+            print("MPV: tvOS GPU API = OpenGL")
+        }
         #else
         mpv_set_option_string(mpv, "vo", "libmpv")
         mpv_set_option_string(mpv, "gpu-api", "opengl")
@@ -1023,7 +1036,7 @@ class MPVPlayerCore: NSObject {
     }
     #endif
 
-    #if os(iOS)
+    #if os(iOS) || os(tvOS)
     func createRenderContext(view: MPVPlayerGLView) {
         guard let mpv = mpv else { return }
 
@@ -1376,8 +1389,10 @@ class MPVPlayerNSView: NSView {
 }
 
 #elseif os(tvOS)
-// tvOS implementation — Metal via CAMetalLayer + wid (avoids videotoolbox-copy overhead)
+// tvOS implementation — runtime-selected renderer (Metal/OpenGL)
 struct MPVContainerView: UIViewRepresentable {
+    typealias UIViewType = UIView
+
     let url: URL
     @Binding var isPlaying: Bool
     @Binding var errorMessage: String?
@@ -1397,9 +1412,7 @@ struct MPVContainerView: UIViewRepresentable {
     var onVideoInfoUpdate: ((String?, Int?, String?, String?) -> Void)?
     @Binding var cleanupAction: (() -> Void)?
 
-    func makeUIView(context: Context) -> MPVPlayerMetalView {
-        let view = MPVPlayerMetalView(frame: .zero)
-        view.setup(errorBinding: $errorMessage)
+    private func configureCommonCallbacks(for view: MPVPlayerMetalView) {
         view.onPositionUpdate = { position, dur in
             DispatchQueue.main.async {
                 self.currentPosition = position
@@ -1408,13 +1421,42 @@ struct MPVContainerView: UIViewRepresentable {
         }
         view.onPlaybackEnded = onPlaybackEnded
         view.onVideoInfoUpdate = onVideoInfoUpdate
-        view.loadURL(url)
-        view.startPositionPolling()
-        context.coordinator.playerView = view
-        DispatchQueue.main.async {
-            self.cleanupAction = { view.cleanup() }
+        view.onPlayPause = onTogglePlayPause
+        view.onSeekForward = {
+            view.seek(seconds: self.seekForwardTime)
+            self.onShowControls?()
         }
+        view.onSeekBackward = {
+            view.seek(seconds: -self.seekBackwardTime)
+            self.onShowControls?()
+        }
+        view.onSelect = onToggleControls
+        view.onMenu = onDismiss
+    }
 
+    private func configureCommonCallbacks(for view: MPVPlayerGLView) {
+        view.onPositionUpdate = { position, dur in
+            DispatchQueue.main.async {
+                self.currentPosition = position
+                self.duration = dur
+            }
+        }
+        view.onPlaybackEnded = onPlaybackEnded
+        view.onVideoInfoUpdate = onVideoInfoUpdate
+        view.onPlayPause = onTogglePlayPause
+        view.onSeekForward = {
+            view.seek(seconds: self.seekForwardTime)
+            self.onShowControls?()
+        }
+        view.onSeekBackward = {
+            view.seek(seconds: -self.seekBackwardTime)
+            self.onShowControls?()
+        }
+        view.onSelect = onToggleControls
+        view.onMenu = onDismiss
+    }
+
+    private func setupSeekBindings(for view: MPVPlayerMetalView) {
         DispatchQueue.main.async {
             self.seekForward = {
                 view.seek(seconds: self.seekForwardTime)
@@ -1428,27 +1470,76 @@ struct MPVContainerView: UIViewRepresentable {
                 view.seekTo(position: position)
             }
         }
+    }
 
-        view.onPlayPause = onTogglePlayPause
-        view.onSeekForward = {
-            view.seek(seconds: self.seekForwardTime)
-            self.onShowControls?()
+    private func setupSeekBindings(for view: MPVPlayerGLView) {
+        DispatchQueue.main.async {
+            self.seekForward = {
+                view.seek(seconds: self.seekForwardTime)
+                self.onShowControls?()
+            }
+            self.seekBackward = {
+                view.seek(seconds: -self.seekBackwardTime)
+                self.onShowControls?()
+            }
+            self.seekToPosition = { position in
+                view.seekTo(position: position)
+            }
         }
-        view.onSeekBackward = {
-            view.seek(seconds: -self.seekBackwardTime)
-            self.onShowControls?()
-        }
-        view.onSelect = onToggleControls
-        view.onMenu = onDismiss
+    }
 
+    func makeUIView(context: Context) -> UIView {
+        if UserPreferences.load().tvosGPUAPI == .opengl {
+            let view = MPVPlayerGLView(frame: .zero)
+            view.setup(errorBinding: $errorMessage)
+            configureCommonCallbacks(for: view)
+            view.loadURL(url)
+            view.startPositionPolling()
+            context.coordinator.playerView = view
+            DispatchQueue.main.async {
+                self.cleanupAction = { view.cleanup() }
+            }
+            setupSeekBindings(for: view)
+            return view
+        }
+
+        let view = MPVPlayerMetalView(frame: .zero)
+        view.setup(errorBinding: $errorMessage)
+        configureCommonCallbacks(for: view)
+        view.loadURL(url)
+        view.startPositionPolling()
+        context.coordinator.playerView = view
+        DispatchQueue.main.async {
+            self.cleanupAction = { view.cleanup() }
+        }
+        setupSeekBindings(for: view)
         return view
     }
 
-    func updateUIView(_ uiView: MPVPlayerMetalView, context: Context) {
-        if isPlaying {
-            uiView.play()
+    func updateUIView(_ uiView: UIView, context: Context) {
+        if let metalView = uiView as? MPVPlayerMetalView {
+            if isPlaying {
+                metalView.play()
+            } else {
+                metalView.pause()
+            }
+            return
+        }
+        if let glView = uiView as? MPVPlayerGLView {
+            if isPlaying {
+                glView.play()
+            } else {
+                glView.pause()
+            }
+            return
+        }
+    }
+
+    static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) {
+        if let metalView = uiView as? MPVPlayerMetalView {
+            metalView.cleanup()
         } else {
-            uiView.pause()
+            (uiView as? MPVPlayerGLView)?.cleanup()
         }
     }
 
@@ -1456,12 +1547,8 @@ struct MPVContainerView: UIViewRepresentable {
         Coordinator()
     }
 
-    static func dismantleUIView(_ uiView: MPVPlayerMetalView, coordinator: Coordinator) {
-        uiView.cleanup()
-    }
-
     class Coordinator {
-        var playerView: MPVPlayerMetalView?
+        var playerView: UIView?
     }
 }
 
@@ -1659,9 +1746,9 @@ class MPVPlayerMetalView: UIView {
 }
 #endif
 
-// MARK: - iOS OpenGL ES View
+// MARK: - iOS/tvOS OpenGL ES View
 
-#if os(iOS)
+#if os(iOS) || os(tvOS)
 class MPVPlayerGLView: GLKView {
     private var player: MPVPlayerCore?
     private var defaultFBO: GLint = -1
@@ -1674,6 +1761,15 @@ class MPVPlayerGLView: GLKView {
     var onPositionUpdate: ((Double, Double) -> Void)?
     var onPlaybackEnded: (() -> Void)?
     var onVideoInfoUpdate: ((String?, Int?, String?, String?) -> Void)?
+    #if os(tvOS)
+    var onPlayPause: (() -> Void)?
+    var onSeekForward: (() -> Void)?
+    var onSeekBackward: (() -> Void)?
+    var onSelect: (() -> Void)?
+    var onMenu: (() -> Void)?
+
+    override var canBecomeFocused: Bool { true }
+    #endif
 
     override init(frame: CGRect) {
         guard let glContext = EAGLContext(api: .openGLES2) else {
@@ -1823,6 +1919,33 @@ class MPVPlayerGLView: GLKView {
         onPlaybackEnded = nil
         onVideoInfoUpdate = nil
     }
+
+    #if os(tvOS)
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        for press in presses {
+            switch press.type {
+            case .playPause:
+                onPlayPause?()
+                return
+            case .leftArrow:
+                onSeekBackward?()
+                return
+            case .rightArrow:
+                onSeekForward?()
+                return
+            case .select:
+                onSelect?()
+                return
+            case .menu:
+                onMenu?()
+                return
+            default:
+                break
+            }
+        }
+        super.pressesBegan(presses, with: event)
+    }
+    #endif
 }
 #endif
 
