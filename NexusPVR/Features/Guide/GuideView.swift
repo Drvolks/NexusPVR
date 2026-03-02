@@ -6,6 +6,9 @@
 //
 
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 
 // Helper struct to hold both program and channel for sheet presentation
@@ -137,6 +140,11 @@ struct GuideView: View {
     }
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #if os(iOS)
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    #endif
+    @State private var rootLeadingSafeArea: CGFloat = 0
+    @State private var rootTopSafeArea: CGFloat = 0
 
     private var contentView: some View {
         VStack(spacing: 0) {
@@ -156,8 +164,50 @@ struct GuideView: View {
         .overlay(alignment: .top) {
             iOSNavigationBar
                 #if os(iOS)
-                .padding(.top, UIDevice.current.userInterfaceIdiom == .phone ? 30 : 0)
+                .padding(.top, phoneTopOverlayPadding)
                 #endif
+        }
+        #endif
+        .background(GeometryReader { geo in
+            Color.clear
+                .onAppear {
+                    rootLeadingSafeArea = geo.safeAreaInsets.leading
+                    #if os(iOS)
+                    if UIDevice.current.userInterfaceIdiom != .phone {
+                        rootTopSafeArea = geo.safeAreaInsets.top
+                    }
+                    #else
+                    rootTopSafeArea = geo.safeAreaInsets.top
+                    #endif
+                }
+                .onChange(of: geo.safeAreaInsets.leading) { _, new in
+                    rootLeadingSafeArea = new
+                }
+                .onChange(of: geo.safeAreaInsets.top) { _, new in
+                    #if os(iOS)
+                    if UIDevice.current.userInterfaceIdiom != .phone {
+                        rootTopSafeArea = new
+                    }
+                    #else
+                    rootTopSafeArea = new
+                    #endif
+                }
+        })
+        #if os(iOS)
+        .onAppear {
+            schedulePhoneSafeAreaRefresh()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+            schedulePhoneSafeAreaRefresh()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            schedulePhoneSafeAreaRefresh()
+        }
+        .onChange(of: horizontalSizeClass) {
+            schedulePhoneSafeAreaRefresh()
+        }
+        .onChange(of: verticalSizeClass) {
+            schedulePhoneSafeAreaRefresh()
         }
         #endif
         #if os(iOS)
@@ -205,6 +255,34 @@ struct GuideView: View {
             }
         }
     }
+
+    #if os(iOS)
+    private func schedulePhoneSafeAreaRefresh() {
+        // Rotation can report stale insets for a short window. Refresh a few times.
+        refreshPhoneSafeAreasFromWindow()
+        DispatchQueue.main.async {
+            refreshPhoneSafeAreasFromWindow()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            refreshPhoneSafeAreasFromWindow()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+            refreshPhoneSafeAreasFromWindow()
+        }
+    }
+
+    private func refreshPhoneSafeAreasFromWindow() {
+        guard UIDevice.current.userInterfaceIdiom == .phone else { return }
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let windows = scenes.flatMap(\.windows)
+        guard let window = windows.first(where: \.isKeyWindow) ?? windows.first else { return }
+        let insets = window.safeAreaInsets
+        // Use live per-orientation values (do not keep stale larger inset)
+        rootLeadingSafeArea = insets.left
+        // Visual compensation: raw top inset sits slightly too low for the guide header.
+        rootTopSafeArea = (verticalSizeClass == .some(.compact)) ? 0 : max(0, insets.top - 40)
+    }
+    #endif
 
     #if !os(tvOS)
     private var iOSNavigationBar: some View {
@@ -351,9 +429,25 @@ struct GuideView: View {
     #endif
 
     #if !os(tvOS)
+    #if os(iOS)
+    private var phoneTopOverlayPadding: CGFloat {
+        guard UIDevice.current.userInterfaceIdiom == .phone else { return 0 }
+        // Landscape on iPhone: keep controls near the top with a small inset.
+        if verticalSizeClass == .compact { return 8 }
+        // Portrait: respect the top safe area (Dynamic Island/notch).
+        return rootTopSafeArea
+    }
+    #endif
+
     private var guideTopPadding: CGFloat {
         #if os(iOS)
-        let base: CGFloat = UIDevice.current.userInterfaceIdiom == .phone ? 80 : 55
+        let base: CGFloat = {
+            if UIDevice.current.userInterfaceIdiom != .phone { return 55 }
+            // Landscape on iPhone uses a tighter header offset.
+            if verticalSizeClass == .compact { return 72 }
+            // Portrait keeps extra room for top controls below the Dynamic Island/notch.
+            return rootTopSafeArea + 50
+        }()
         #else
         let base: CGFloat = 50
         #endif
@@ -549,7 +643,6 @@ struct GuideView: View {
     }
 
     #if !os(tvOS)
-    @State private var leadingSafeArea: CGFloat = 0
     @State private var scrollViewHeight: CGFloat = 0
 
     private var iOSMacOSGuideContent: some View {
@@ -592,7 +685,7 @@ struct GuideView: View {
                             // Channel cell pinned to visible left edge (after safe area)
                             channelCell(channel)
                                 .frame(width: channelWidth, height: rowHeight)
-                                .offset(x: gridHorizontalOffset + leadingSafeArea)
+                                .offset(x: gridHorizontalOffset + rootLeadingSafeArea)
                                 .zIndex(1)
                         }
                     }
@@ -631,14 +724,6 @@ struct GuideView: View {
                 }
             }
         }
-        .background(GeometryReader { geo in
-            Color.clear.onAppear {
-                leadingSafeArea = geo.safeAreaInsets.leading
-            }
-            .onChange(of: geo.safeAreaInsets.leading) { _, new in
-                leadingSafeArea = new
-            }
-        })
         .onChange(of: scenePhase) {
             if scenePhase == .active {
                 viewModel.scrollToNow()
