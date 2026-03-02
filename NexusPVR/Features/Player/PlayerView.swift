@@ -13,6 +13,7 @@ import OpenGLES
 #endif
 #if os(macOS)
 import AppKit
+import IOKit.pwr_mgt
 #else
 import UIKit
 #endif
@@ -47,6 +48,9 @@ struct PlayerView: View {
     @State private var videoHeight: Int?
     @State private var hwDecoder: String?
     @State private var audioChannelLayout: String?
+    #if os(macOS)
+    @State private var sleepAssertionID: IOPMAssertionID = 0
+    #endif
 
     init(url: URL, title: String, recordingId: Int? = nil, resumePosition: Int? = nil) {
         self.url = url
@@ -254,7 +258,10 @@ struct PlayerView: View {
         .accessibilityIdentifier("player-view")
         .onAppear {
             scheduleHideControls()
-            #if !os(macOS)
+            #if os(macOS)
+            // Prevent display sleep during video playback
+            disableScreenSaver()
+            #else
             // Prevent screen from sleeping during video playback
             UIApplication.shared.isIdleTimerDisabled = true
             #endif
@@ -272,7 +279,10 @@ struct PlayerView: View {
             if recordingId != nil {
                 NotificationCenter.default.post(name: .recordingsDidChange, object: nil)
             }
-            #if !os(macOS)
+            #if os(macOS)
+            // Re-enable display sleep
+            enableScreenSaver()
+            #else
             // Re-enable screen sleeping
             UIApplication.shared.isIdleTimerDisabled = false
             #endif
@@ -585,6 +595,27 @@ struct PlayerView: View {
         if lower.contains("av1") || lower.contains("av01") { return "AV1" }
         return codec.uppercased()
     }
+
+    #if os(macOS)
+    private func disableScreenSaver() {
+        let result = IOPMAssertionCreateWithName(
+            kIOPMAssertionTypeNoDisplaySleep as CFString,
+            IOPMAssertionLevel(kIOPMAssertionLevelOn),
+            "NexusPVR video playback" as CFString,
+            &sleepAssertionID
+        )
+        if result != kIOReturnSuccess {
+            print("Failed to disable screen saver: \(result)")
+        }
+    }
+
+    private func enableScreenSaver() {
+        if sleepAssertionID != 0 {
+            IOPMAssertionRelease(sleepAssertionID)
+            sleepAssertionID = 0
+        }
+    }
+    #endif
 
     private func toggleControls() {
         withAnimation(.easeInOut(duration: 0.2)) {
