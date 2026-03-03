@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dispatcharr Icon Proto</title>
+<style>
+  :root {
+    --bg: #0b1220;
+    --card: #0f1726;
+    --text: #e6edf7;
+    --muted: #8ba0bf;
+    --accent: #63f5aa;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    background: radial-gradient(circle at 20% 0%, #13213b 0%, var(--bg) 45%, #070b14 100%);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 28px;
+  }
+  h1 { margin: 0 0 8px; font-size: 24px; }
+  p { margin: 0 0 18px; color: var(--muted); }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 18px;
+  }
+  .card {
+    background: linear-gradient(180deg, #131d31 0%, #0d1524 100%);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 16px;
+    padding: 14px;
+  }
+  .label { font-size: 14px; font-weight: 700; margin-bottom: 8px; }
+  .desc { font-size: 12px; color: var(--muted); margin-top: 10px; min-height: 32px; }
+  .icon {
+    width: 220px;
+    max-width: 100%;
+    aspect-ratio: 1;
+    border-radius: 22%;
+    overflow: hidden;
+    display: block;
+    margin: 0 auto;
+    box-shadow: 0 12px 28px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.06);
+    background: #0d160f;
+  }
+  .sizes { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
+  .mini { border-radius: 22%; box-shadow: 0 4px 10px rgba(0,0,0,.35); }
+</style>
+</head>
+<body>
+  <h1>Dispatcharr - Icon Prototype (SVG)</h1>
+  <p>Objectif: TV très reconnaissable en petite taille, accents verts, éclairage haut type icône Apple.</p>
+
+  <div class="grid">
+    <section class="card">
+      <div class="label">A - Classic CRT Green</div>
+      <svg class="icon" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="bgA" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#172437"/>
+            <stop offset="48%" stop-color="#102133"/>
+            <stop offset="100%" stop-color="#0d160f"/>
+          </linearGradient>
+          <linearGradient id="shellA" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#2f3b3b"/>
+            <stop offset="100%" stop-color="#223131"/>
+          </linearGradient>
+          <linearGradient id="screenA" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#173934"/>
+            <stop offset="100%" stop-color="#0e211f"/>
+          </linearGradient>
+        </defs>
+        <rect width="512" height="512" fill="url(#bgA)"/>
+        <rect width="512" height="512" fill="url(#bgA)" opacity=".32"/>
+
+        <line x1="190" y1="130" x2="145" y2="70" stroke="#4c6760" stroke-width="7" stroke-linecap="round"/>
+        <line x1="322" y1="130" x2="367" y2="70" stroke="#4c6760" stroke-width="7" stroke-linecap="round"/>
+        <circle cx="145" cy="70" r="6" fill="#66c495"/>
+        <circle cx="367" cy="70" r="6" fill="#66c495"/>
+
+        <rect x="95" y="140" width="322" height="250" rx="34" fill="url(#shellA)"/>
+        <rect x="118" y="163" width="276" height="204" rx="18" fill="#0b1312"/>
+        <rect x="130" y="175" width="252" height="180" rx="12" fill="url(#screenA)"/>
+
+        <g stroke="#2f5a4a" stroke-opacity=".75" stroke-width="2">
+          <line x1="136" y1="192" x2="376" y2="192"/>
+          <line x1="136" y1="206" x2="376" y2="206"/>
+          <line x1="136" y1="220" x2="376" y2="220"/>
+          <line x1="136" y1="234" x2="376" y2="234"/>
+          <line x1="136" y1="248" x2="376" y2="248"/>
+          <line x1="136" y1="262" x2="376" y2="262"/>
+          <line x1="136" y1="276" x2="376" y2="276"/>
+          <line x1="136" y1="290" x2="376" y2="290"/>
+          <line x1="136" y1="304" x2="376" y2="304"/>
+          <line x1="136" y1="318" x2="376" y2="318"/>
+          <line x1="136" y1="332" x2="376" y2="332"/>
+        </g>
+
+        <polygon points="234,225 234,305 304,265" fill="#66f7ad"/>
+        <circle cx="360" cy="190" r="8" fill="#ff4d4d"/>
+        <circle cx="396" cy="248" r="10" fill="#355148"/>
+        <circle cx="396" cy="293" r="10" fill="#355148"/>
+
+        <line x1="170" y1="392" x2="145" y2="444" stroke="#3f5f56" stroke-width="7" stroke-linecap="round"/>
+        <line x1="342" y1="392" x2="367" y2="444" stroke="#3f5f56" stroke-width="7" stroke-linecap="round"/>
+      </svg>
+      <div class="sizes">
+        <svg class="mini" width="60" height="60" viewBox="0 0 512 512"><use href="#"/></svg>
+      </div>
+      <div class="desc">Version équilibrée. TV bien lisible, vert net, fond assombri.</div>
+    </section>
+
+    <section class="card">
+      <div class="label">B - Bold Small Size</div>
+      <svg class="icon" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="bgB" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#1a2a40"/>
+            <stop offset="100%" stop-color="#0d160f"/>
+          </linearGradient>
+        </defs>
+        <rect width="512" height="512" fill="url(#bgB)"/>
+        <rect x="84" y="136" width="344" height="258" rx="38" fill="#2a3936"/>
+        <rect x="112" y="162" width="288" height="206" rx="20" fill="#0a1211"/>
+        <rect x="126" y="176" width="260" height="178" rx="14" fill="#13352f"/>
+
+        <polygon points="228,218 228,312 315,265" fill="#74ffba"/>
+        <circle cx="360" cy="190" r="9" fill="#ff4a4a"/>
+
+        <line x1="194" y1="136" x2="148" y2="74" stroke="#5a746c" stroke-width="9" stroke-linecap="round"/>
+        <line x1="318" y1="136" x2="364" y2="74" stroke="#5a746c" stroke-width="9" stroke-linecap="round"/>
+        <line x1="178" y1="394" x2="152" y2="446" stroke="#4e6c63" stroke-width="9" stroke-linecap="round"/>
+        <line x1="334" y1="394" x2="360" y2="446" stroke="#4e6c63" stroke-width="9" stroke-linecap="round"/>
+      </svg>
+      <div class="desc">Traits plus épais pour 29px/40px. Priorité lisibilité.</div>
+    </section>
+
+    <section class="card">
+      <div class="label">C - Premium Gradient</div>
+      <svg class="icon" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="bgC" cx="50%" cy="-10%" r="95%">
+            <stop offset="0%" stop-color="#24456c"/>
+            <stop offset="55%" stop-color="#16334c"/>
+            <stop offset="100%" stop-color="#0d160f"/>
+          </radialGradient>
+          <linearGradient id="shellC" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#394346"/>
+            <stop offset="100%" stop-color="#273033"/>
+          </linearGradient>
+          <linearGradient id="playC" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#86ffd0"/>
+            <stop offset="100%" stop-color="#4ded9d"/>
+          </linearGradient>
+        </defs>
+        <rect width="512" height="512" fill="url(#bgC)"/>
+        <rect x="92" y="138" width="328" height="252" rx="34" fill="url(#shellC)"/>
+        <rect x="116" y="162" width="280" height="204" rx="18" fill="#101618"/>
+        <rect x="128" y="174" width="256" height="180" rx="12" fill="#163a34"/>
+
+        <g stroke="#3f7361" stroke-opacity=".6" stroke-width="2">
+          <line x1="132" y1="194" x2="380" y2="194"/>
+          <line x1="132" y1="212" x2="380" y2="212"/>
+          <line x1="132" y1="230" x2="380" y2="230"/>
+          <line x1="132" y1="248" x2="380" y2="248"/>
+          <line x1="132" y1="266" x2="380" y2="266"/>
+          <line x1="132" y1="284" x2="380" y2="284"/>
+          <line x1="132" y1="302" x2="380" y2="302"/>
+          <line x1="132" y1="320" x2="380" y2="320"/>
+        </g>
+
+        <polygon points="234,226 234,304 304,265" fill="url(#playC)"/>
+        <circle cx="360" cy="190" r="8" fill="#ff5050"/>
+
+        <line x1="194" y1="138" x2="152" y2="80" stroke="#697c77" stroke-width="7" stroke-linecap="round"/>
+        <line x1="318" y1="138" x2="360" y2="80" stroke="#697c77" stroke-width="7" stroke-linecap="round"/>
+        <circle cx="152" cy="80" r="6" fill="#7ce5b2"/>
+        <circle cx="360" cy="80" r="6" fill="#7ce5b2"/>
+      </svg>
+      <div class="desc">Rendu plus premium avec lumière haute et accents verts vibrants.</div>
+    </section>
+
+    <section class="card">
+      <div class="label">C1 - Premium Flat (No 3D)</div>
+      <svg class="icon" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="bgC1" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#1d3b59"/>
+            <stop offset="60%" stop-color="#153047"/>
+            <stop offset="100%" stop-color="#0d160f"/>
+          </linearGradient>
+          <linearGradient id="shellC1" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#333c3f"/>
+            <stop offset="100%" stop-color="#293134"/>
+          </linearGradient>
+          <linearGradient id="screenC1" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#1a4039"/>
+            <stop offset="100%" stop-color="#112a26"/>
+          </linearGradient>
+        </defs>
+        <rect width="512" height="512" fill="url(#bgC1)"/>
+        <line x1="194" y1="138" x2="152" y2="80" stroke="#6e827c" stroke-width="7" stroke-linecap="round"/>
+        <line x1="318" y1="138" x2="360" y2="80" stroke="#6e827c" stroke-width="7" stroke-linecap="round"/>
+        <circle cx="152" cy="80" r="6" fill="#83efb9"/>
+        <circle cx="360" cy="80" r="6" fill="#83efb9"/>
+
+        <rect x="92" y="138" width="328" height="252" rx="34" fill="url(#shellC1)"/>
+        <rect x="116" y="162" width="280" height="204" rx="18" fill="#0f1517"/>
+        <rect x="128" y="174" width="256" height="180" rx="12" fill="url(#screenC1)"/>
+
+        <g stroke="#3f7564" stroke-opacity=".72" stroke-width="2">
+          <line x1="132" y1="194" x2="380" y2="194"/>
+          <line x1="132" y1="212" x2="380" y2="212"/>
+          <line x1="132" y1="230" x2="380" y2="230"/>
+          <line x1="132" y1="248" x2="380" y2="248"/>
+          <line x1="132" y1="266" x2="380" y2="266"/>
+          <line x1="132" y1="284" x2="380" y2="284"/>
+          <line x1="132" y1="302" x2="380" y2="302"/>
+          <line x1="132" y1="320" x2="380" y2="320"/>
+        </g>
+
+        <polygon points="234,226 234,304 304,265" fill="#72ffc0"/>
+        <circle cx="360" cy="190" r="8" fill="#ff5454"/>
+      </svg>
+      <div class="desc">Même ADN que C, mais rendu plat: sans relief ni ombres internes.</div>
+    </section>
+
+    <section class="card">
+      <div class="label">C2 - Premium 3D (Depth)</div>
+      <svg class="icon" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="bgC2" cx="50%" cy="-15%" r="96%">
+            <stop offset="0%" stop-color="#315c88"/>
+            <stop offset="52%" stop-color="#1b3f5f"/>
+            <stop offset="100%" stop-color="#0d160f"/>
+          </radialGradient>
+          <linearGradient id="shellC2" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#4a5559"/>
+            <stop offset="60%" stop-color="#2f393d"/>
+            <stop offset="100%" stop-color="#252d31"/>
+          </linearGradient>
+          <linearGradient id="screenC2" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#1f5047"/>
+            <stop offset="100%" stop-color="#12332e"/>
+          </linearGradient>
+          <linearGradient id="playC2" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#97ffd7"/>
+            <stop offset="100%" stop-color="#53f2a4"/>
+          </linearGradient>
+          <filter id="softShadowC2" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#000000" flood-opacity=".32"/>
+          </filter>
+          <radialGradient id="glassC2" cx="20%" cy="12%" r="85%">
+            <stop offset="0%" stop-color="rgba(255,255,255,.14)"/>
+            <stop offset="45%" stop-color="rgba(255,255,255,.05)"/>
+            <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+          </radialGradient>
+        </defs>
+
+        <rect width="512" height="512" fill="url(#bgC2)"/>
+        <rect width="512" height="512" fill="url(#glassC2)"/>
+
+        <line x1="194" y1="138" x2="152" y2="80" stroke="#7a8f89" stroke-width="7" stroke-linecap="round"/>
+        <line x1="318" y1="138" x2="360" y2="80" stroke="#7a8f89" stroke-width="7" stroke-linecap="round"/>
+        <circle cx="152" cy="80" r="6" fill="#8effc9"/>
+        <circle cx="360" cy="80" r="6" fill="#8effc9"/>
+
+        <g filter="url(#softShadowC2)">
+          <rect x="92" y="138" width="328" height="252" rx="34" fill="url(#shellC2)"/>
+          <rect x="116" y="162" width="280" height="204" rx="18" fill="#0f1517"/>
+          <rect x="128" y="174" width="256" height="180" rx="12" fill="url(#screenC2)"/>
+          <rect x="128" y="174" width="256" height="180" rx="12" fill="url(#glassC2)" opacity=".45"/>
+        </g>
+
+        <g stroke="#4f8d79" stroke-opacity=".78" stroke-width="2.3">
+          <line x1="132" y1="194" x2="380" y2="194"/>
+          <line x1="132" y1="212" x2="380" y2="212"/>
+          <line x1="132" y1="230" x2="380" y2="230"/>
+          <line x1="132" y1="248" x2="380" y2="248"/>
+          <line x1="132" y1="266" x2="380" y2="266"/>
+          <line x1="132" y1="284" x2="380" y2="284"/>
+          <line x1="132" y1="302" x2="380" y2="302"/>
+          <line x1="132" y1="320" x2="380" y2="320"/>
+        </g>
+
+        <polygon points="234,226 234,304 304,265" fill="url(#playC2)"/>
+        <circle cx="360" cy="190" r="8.5" fill="#ff5a5a"/>
+      </svg>
+      <div class="desc">Version avec profondeur: ombre douce, verre et lumière hautes.</div>
+    </section>
+  </div>
+</body>
+</html>
