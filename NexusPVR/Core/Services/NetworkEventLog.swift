@@ -34,7 +34,7 @@ final class NetworkEventLog: ObservableObject {
                 self.events.removeFirst(self.events.count - self.maxEvents)
             }
             #if DEBUG
-            print(Self.consoleLine(for: event))
+           // print(Self.consoleLine(for: event))
             #endif
         }
     }

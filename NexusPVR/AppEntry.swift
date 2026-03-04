@@ -97,7 +97,14 @@ struct PVRApp: App {
                     } else {
                         streamURL = try await client.liveStreamURL(channelId: id)
                     }
-                    appState.playStream(url: streamURL, title: channelName, channelId: id, channelName: channelName)
+                    let liveSourceURL = channel?.streamURL.flatMap(URL.init(string:))
+                    appState.playStream(
+                        url: streamURL,
+                        title: channelName,
+                        channelId: id,
+                        channelName: channelName,
+                        liveSourceURL: liveSourceURL
+                    )
                 } catch {
                     appState.showAlert("Failed to play channel: \(error.localizedDescription)")
                 }

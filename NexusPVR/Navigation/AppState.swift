@@ -115,6 +115,8 @@ final class AppState: ObservableObject {
     @Published var currentlyPlayingResumePosition: Int?
     @Published var currentlyPlayingChannelId: Int?
     @Published var currentlyPlayingChannelName: String?
+    @Published var currentlyPlayingLiveSourceURL: URL?
+    @Published var currentlyPlayingPiPURL: URL?
 
     // Navigation state
     @Published var selectedChannel: Channel?
@@ -184,18 +186,22 @@ final class AppState: ObservableObject {
         recordingId: Int? = nil,
         resumePosition: Int? = nil,
         channelId: Int? = nil,
-        channelName: String? = nil
+        channelName: String? = nil,
+        liveSourceURL: URL? = nil
     ) {
+        let pipSource = liveSourceURL ?? url
         currentlyPlayingURL = url
         currentlyPlayingTitle = title
         currentlyPlayingRecordingId = recordingId
         currentlyPlayingResumePosition = resumePosition
         currentlyPlayingChannelId = channelId
         currentlyPlayingChannelName = channelName
+        currentlyPlayingLiveSourceURL = liveSourceURL
+        currentlyPlayingPiPURL = pipSource
         isShowingPlayer = true
     }
 
-    func playStream(url: URL, title: String, channelId: Int, channelName: String) {
+    func playStream(url: URL, title: String, channelId: Int, channelName: String, liveSourceURL: URL? = nil) {
         var history = WatchHistory.load()
         history.recordChannelPlay(channelId: channelId, channelName: channelName)
         history.save()
@@ -205,7 +211,8 @@ final class AppState: ObservableObject {
             recordingId: nil,
             resumePosition: nil,
             channelId: channelId,
-            channelName: channelName
+            channelName: channelName,
+            liveSourceURL: liveSourceURL
         )
     }
 
@@ -217,5 +224,7 @@ final class AppState: ObservableObject {
         currentlyPlayingResumePosition = nil
         currentlyPlayingChannelId = nil
         currentlyPlayingChannelName = nil
+        currentlyPlayingLiveSourceURL = nil
+        currentlyPlayingPiPURL = nil
     }
 }

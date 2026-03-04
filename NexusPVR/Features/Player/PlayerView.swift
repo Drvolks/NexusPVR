@@ -16,7 +16,18 @@ import AppKit
 import IOKit.pwr_mgt
 #else
 import UIKit
+#if os(iOS)
+import AVKit
+import AVFoundation
 #endif
+#endif
+
+private enum PiPFeatureFlags {
+    // A/B toggle:
+    // false => fullscreen restore uses base stream URL (TS/live source)
+    // true  => fullscreen restore uses PiP prepared URL (local HLS proxy)
+    static let usePreparedPiPURLForFullscreenRestore = true
+}
 
 struct PlayerView: View {
     @EnvironmentObject private var appState: AppState
@@ -48,6 +59,14 @@ struct PlayerView: View {
     @State private var videoHeight: Int?
     @State private var hwDecoder: String?
     @State private var audioChannelLayout: String?
+    #if os(iOS)
+    @State private var pipManager = IOSPiPManager.shared
+    @State private var pipIsSupported = AVPictureInPictureController.isPictureInPictureSupported()
+    @State private var pipIsActive = false
+    @State private var dismissingForPiP = false
+    @State private var restoringFromPiP = false
+    @State private var preparedPlaybackURL: URL?
+    #endif
     #if DISPATCHERPVR
     @State private var dispatchProfileBadge: String?
     @State private var dispatchProfileRefreshTask: Task<Void, Never>?
@@ -110,33 +129,37 @@ struct PlayerView: View {
             )
                 .ignoresSafeArea()
             #elseif os(iOS)
-            MPVContainerView(
-                url: url,
-                isPlaying: $isPlaying,
-                errorMessage: $errorMessage,
-                currentPosition: $currentPosition,
-                duration: $duration,
-                seekForward: $seekForward,
-                seekBackward: $seekBackward,
-                seekToPosition: $seekToPositionFunc,
-                seekBackwardTime: seekBackwardTime,
-                seekForwardTime: seekForwardTime,
-                onPlaybackEnded: {
-                    savePlaybackPosition()
-                    markAsWatched()
-                },
-                onVideoInfoUpdate: { codec, height, hwdec, audioChannels in
-                    videoCodec = codec
-                    videoHeight = height
-                    hwDecoder = hwdec
-                    audioChannelLayout = audioChannels
-                },
-                cleanupAction: $cleanupAction
-            )
-                .ignoresSafeArea()
-                .onTapGesture {
-                    toggleControls()
-                }
+            if let preparedPlaybackURL {
+                MPVContainerView(
+                    url: preparedPlaybackURL,
+                    isPlaying: $isPlaying,
+                    errorMessage: $errorMessage,
+                    currentPosition: $currentPosition,
+                    duration: $duration,
+                    seekForward: $seekForward,
+                    seekBackward: $seekBackward,
+                    seekToPosition: $seekToPositionFunc,
+                    seekBackwardTime: seekBackwardTime,
+                    seekForwardTime: seekForwardTime,
+                    onPlaybackEnded: {
+                        savePlaybackPosition()
+                        markAsWatched()
+                    },
+                    onVideoInfoUpdate: { codec, height, hwdec, audioChannels in
+                        videoCodec = codec
+                        videoHeight = height
+                        hwDecoder = hwdec
+                        audioChannelLayout = audioChannels
+                    },
+                    cleanupAction: $cleanupAction
+                )
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        toggleControls()
+                    }
+            } else {
+                Color.black.ignoresSafeArea()
+            }
             #else
             MPVContainerView(
                 url: url,
@@ -261,6 +284,30 @@ struct PlayerView: View {
         .background(Color.black)
         .accessibilityIdentifier("player-view")
         .onAppear {
+            #if os(iOS)
+            Task {
+                var headers = client.streamAuthHeaders()
+                if url.path.contains("/proxy/ts/stream/") || url.path.contains("/proxy/hls/") {
+                    headers = [:]
+                }
+                if let host = url.host?.lowercased(), host == "127.0.0.1" || host == "localhost" {
+                    headers = [:]
+                }
+                let prepared = await PiPSourceAdapter.shared.prepare(url: url, headers: headers)
+                await MainActor.run {
+                    preparedPlaybackURL = prepared.url
+                    appState.currentlyPlayingPiPURL = prepared.url
+                    print("PiP: prepared fullscreen playback url=\(prepared.url.absoluteString)")
+                }
+            }
+            pipManager.onStatusChanged = { isSupported, isActive in
+                pipIsSupported = isSupported
+                pipIsActive = isActive
+                print("PiP: status changed supported=\(isSupported) active=\(isActive)")
+            }
+            pipManager.refreshSupportState()
+            print("PiP: onAppear support=\(pipIsSupported)")
+            #endif
             scheduleHideControls()
             #if os(macOS)
             // Prevent display sleep during video playback
@@ -274,6 +321,17 @@ struct PlayerView: View {
             #endif
         }
         .onDisappear {
+            #if os(iOS)
+            if !dismissingForPiP {
+                pipManager.stopAndCleanup()
+                PiPSourceAdapter.shared.release(url: url)
+                if let preparedPlaybackURL {
+                    PiPSourceAdapter.shared.release(url: preparedPlaybackURL)
+                }
+            }
+            pipManager.onStatusChanged = nil
+            preparedPlaybackURL = nil
+            #endif
             // Stop mpv immediately — dismantleUIView may be delayed by SwiftUI
             cleanupAction?()
             cleanupAction = nil
@@ -296,6 +354,9 @@ struct PlayerView: View {
             #if DISPATCHERPVR
             dispatchProfileRefreshTask?.cancel()
             dispatchProfileRefreshTask = nil
+            #endif
+            #if os(iOS)
+            dismissingForPiP = false
             #endif
         }
         #if DISPATCHERPVR
@@ -521,6 +582,9 @@ struct PlayerView: View {
         HStack {
             #if !os(tvOS)
             Button {
+                #if os(iOS)
+                pipManager.stopAndCleanup()
+                #endif
                 savePlaybackPosition()
                 appState.stopPlayback()
             } label: {
@@ -541,6 +605,24 @@ struct PlayerView: View {
                 .layoutPriority(0)
 
             Spacer()
+
+            #if os(iOS)
+            if pipIsSupported {
+                Button {
+                    print("PiP: button tapped")
+                    togglePictureInPicture()
+                } label: {
+                    Image(systemName: pipIsActive ? "pip.exit" : "pip.enter")
+                        .font(.title3)
+                        .foregroundStyle(.white)
+                        .padding(8)
+                }
+                .buttonStyle(.plain)
+                .contentShape(Rectangle())
+                .zIndex(20)
+                .accessibilityIdentifier("player-pip-button")
+            }
+            #endif
 
             videoBadges
                 .padding(.trailing, 4)
@@ -585,6 +667,115 @@ struct PlayerView: View {
         let base = formatCodecName(codec)
         guard isUsingMetalRenderer else { return base }
         return "\(base) (M)"
+    }
+
+    #if os(iOS)
+    private func togglePictureInPicture() {
+        print("PiP: toggle requested active=\(pipIsActive) supported=\(pipIsSupported)")
+        if pipIsActive {
+            print("PiP: stopping active PiP session")
+            pipManager.stop()
+            return
+        }
+        guard pipIsSupported else {
+            print("PiP: unsupported on this device")
+            errorMessage = "Picture in Picture is not supported on this device."
+            return
+        }
+
+        // Live streams should start "now" (no initial seek), AVPlayer is fragile with seek on raw TS/live.
+        let startAt = recordingId == nil ? 0 : max(0, currentPosition)
+        let baseURL: URL
+        if let pipSource = appState.currentlyPlayingPiPURL {
+            baseURL = pipSource
+        } else if recordingId == nil, let liveSource = appState.currentlyPlayingLiveSourceURL {
+            baseURL = liveSource
+        } else {
+            baseURL = url
+        }
+        let playbackTitle = title
+        let playbackRecordingId = recordingId
+        let playbackChannelId = appState.currentlyPlayingChannelId
+        let playbackChannelName = appState.currentlyPlayingChannelName
+        var authHeaders = (baseURL == url) ? client.streamAuthHeaders() : [:]
+        // Dispatcharr proxy stream endpoints are public in your setup; force no auth headers for AVPlayer.
+        if baseURL.path.contains("/proxy/ts/stream/") || baseURL.path.contains("/proxy/hls/") {
+            authHeaders = [:]
+        }
+        if let host = baseURL.host?.lowercased(), host == "127.0.0.1" || host == "localhost" {
+            authHeaders = [:]
+        }
+
+        Task {
+            let prepared = await PiPSourceAdapter.shared.prepare(url: baseURL, headers: authHeaders)
+            let playbackURL = pipManifestURL(from: prepared.url)
+            let playbackHeaders = prepared.headers
+            print("PiP: start requested url=\(playbackURL.absoluteString) start=\(String(format: "%.2f", startAt)) recordingId=\(playbackRecordingId.map(String.init) ?? "nil") usingLiveSource=\(recordingId == nil && appState.currentlyPlayingLiveSourceURL != nil)")
+            pipManager.start(
+                url: playbackURL,
+                startPosition: startAt,
+                headers: playbackHeaders,
+                onStarted: {
+                    print("PiP: started successfully")
+                    isPlaying = false
+                    showControls = false
+                    dismissingForPiP = true
+                    appState.stopPlayback()
+                },
+                onStopped: { pipPosition in
+                    print("PiP: stopped position=\(String(format: "%.2f", pipPosition)) dismissingForPiP=\(dismissingForPiP)")
+                    if restoringFromPiP {
+                        print("PiP: preserving local source for fullscreen restore")
+                        restoringFromPiP = false
+                    } else {
+                        PiPSourceAdapter.shared.release(url: playbackURL)
+                    }
+                    if !dismissingForPiP {
+                        seekToPosition(pipPosition)
+                        isPlaying = true
+                        scheduleHideControls()
+                    }
+                    dismissingForPiP = false
+                },
+                onRestoreRequested: { pipPosition in
+                    print("PiP: restore requested position=\(String(format: "%.2f", pipPosition))")
+                    restoringFromPiP = true
+                    dismissingForPiP = false
+                    let resume = pipPosition > 0 ? Int(pipPosition) : nil
+                    let restorePreparedURL = mpvManifestURL(from: playbackURL)
+                    let restoreURL = PiPFeatureFlags.usePreparedPiPURLForFullscreenRestore ? restorePreparedURL : baseURL
+                    let restoreMode = PiPFeatureFlags.usePreparedPiPURLForFullscreenRestore ? "prepared-pip-url" : "base-stream-url"
+                    print("PiP: restore mode=\(restoreMode) url=\(restoreURL.absoluteString)")
+                    appState.playStream(
+                        url: restoreURL,
+                        title: playbackTitle,
+                        recordingId: playbackRecordingId,
+                        resumePosition: resume,
+                        channelId: playbackChannelId,
+                        channelName: playbackChannelName
+                    )
+                    return true
+                },
+                onFailed: { reason in
+                    print("PiP: failed reason=\(reason)")
+                    PiPSourceAdapter.shared.release(url: playbackURL)
+                    restoringFromPiP = false
+                    errorMessage = reason
+                    dismissingForPiP = false
+                }
+            )
+        }
+    }
+    #endif
+
+    private func pipManifestURL(from url: URL) -> URL {
+        guard url.path.hasSuffix("/index.m3u8") else { return url }
+        return url.deletingLastPathComponent().appendingPathComponent("pip.m3u8")
+    }
+
+    private func mpvManifestURL(from url: URL) -> URL {
+        guard url.path.hasSuffix("/pip.m3u8") else { return url }
+        return url.deletingLastPathComponent().appendingPathComponent("index.m3u8")
     }
 
     #if DISPATCHERPVR
@@ -770,6 +961,367 @@ struct PlayerView: View {
         }
     }
 }
+
+#if os(iOS)
+private final class IOSPiPHostView: UIView {
+    override class var layerClass: AnyClass { AVPlayerLayer.self }
+
+    var playerLayer: AVPlayerLayer {
+        guard let layer = self.layer as? AVPlayerLayer else {
+            fatalError("Expected AVPlayerLayer")
+        }
+        return layer
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        commonInit()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        commonInit()
+    }
+
+    private func commonInit() {
+        backgroundColor = .clear
+        isUserInteractionEnabled = false
+        playerLayer.videoGravity = .resizeAspect
+    }
+}
+
+@MainActor
+private final class IOSPiPManager: NSObject, AVPictureInPictureControllerDelegate {
+    static let shared = IOSPiPManager()
+
+    private(set) var isSupported = AVPictureInPictureController.isPictureInPictureSupported()
+    private(set) var isActive = false
+    var onStatusChanged: ((Bool, Bool) -> Void)?
+
+    private weak var hostView: IOSPiPHostView?
+    private var player: AVPlayer?
+    private var playerItem: AVPlayerItem?
+    private var pipController: AVPictureInPictureController?
+    private var itemStatusObserver: NSKeyValueObservation?
+    private var itemLikelyToKeepUpObserver: NSKeyValueObservation?
+    private var timeControlStatusObserver: NSKeyValueObservation?
+    private var playbackStalledObserver: NSObjectProtocol?
+    private var onStarted: (() -> Void)?
+    private var onStopped: ((Double) -> Void)?
+    private var onRestoreRequested: ((Double) -> Bool)?
+    private var onFailed: ((String) -> Void)?
+    private var pendingStartPosition: Double = 0
+    private var lastPiPResumeAttemptAt: Date?
+    private var waitingForStallRecovery = false
+
+    func refreshSupportState() {
+        isSupported = AVPictureInPictureController.isPictureInPictureSupported()
+        notifyState()
+    }
+
+    private func notifyState() {
+        let supported = isSupported
+        let active = isActive
+        DispatchQueue.main.async { [weak self] in
+            self?.onStatusChanged?(supported, active)
+        }
+    }
+
+    private func ensureHostView() -> IOSPiPHostView? {
+        if let hostView { return hostView }
+        guard let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState == .foregroundActive }),
+              let window = scene.windows.first(where: \.isKeyWindow) ?? scene.windows.first else {
+            return nil
+        }
+        let host = IOSPiPHostView(frame: CGRect(x: 0, y: 0, width: 2, height: 2))
+        host.alpha = 0.01
+        host.isHidden = false
+        window.addSubview(host)
+        self.hostView = host
+        return host
+    }
+
+    func start(
+        url: URL,
+        startPosition: Double,
+        headers: [String: String],
+        onStarted: @escaping () -> Void,
+        onStopped: @escaping (Double) -> Void,
+        onRestoreRequested: @escaping (Double) -> Bool,
+        onFailed: @escaping (String) -> Void
+    ) {
+        guard isSupported else {
+            print("PiP: manager start rejected (unsupported)")
+            onFailed("Picture in Picture is not supported on this device.")
+            return
+        }
+        guard let hostView = ensureHostView() else {
+            print("PiP: manager start rejected (host view unavailable)")
+            onFailed("Picture in Picture is not ready yet.")
+            return
+        }
+        guard !isActive else { return }
+        print("PiP: manager start accepted url=\(url.absoluteString) start=\(String(format: "%.2f", startPosition))")
+
+        self.onStarted = onStarted
+        self.onStopped = onStopped
+        self.onRestoreRequested = onRestoreRequested
+        self.onFailed = onFailed
+        let sourceIsLocalHLS = url.path.contains("/hls/")
+
+        print("PiP: AVURLAsset headers=\(Array(headers.keys).sorted())")
+        let item = makePlayerItem(url: url, headers: headers, isLocalHLS: sourceIsLocalHLS)
+        playerItem = item
+        let player = AVPlayer(playerItem: item)
+        let isLocalHLS = sourceIsLocalHLS
+        // Let AVPlayer handle rebuffering for live HLS instead of manual play() loops.
+        player.automaticallyWaitsToMinimizeStalling = true
+        if isLocalHLS {
+            item.preferredForwardBufferDuration = 90
+            item.canUseNetworkResourcesForLiveStreamingWhilePaused = true
+            print("PiP: AVPlayer configured for local HLS buffering (stability)")
+        }
+        hostView.playerLayer.player = player
+        self.player = player
+        pendingStartPosition = max(0, startPosition)
+
+        if pipController == nil {
+            pipController = AVPictureInPictureController(playerLayer: hostView.playerLayer)
+            pipController?.delegate = self
+            pipController?.canStartPictureInPictureAutomaticallyFromInline = false
+            pipController?.requiresLinearPlayback = true
+        }
+
+        Task { [weak self] in
+            guard self != nil else { return }
+            try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+            try? AVAudioSession.sharedInstance().setActive(true)
+        }
+
+        observeItemAndStartPiPWhenReady()
+    }
+
+    func stop() {
+        print("PiP: manager stop requested")
+        pipController?.stopPictureInPicture()
+    }
+
+    func stopAndCleanup() {
+        print("PiP: manager stopAndCleanup requested active=\(pipController?.isPictureInPictureActive == true)")
+        if pipController?.isPictureInPictureActive == true {
+            pipController?.stopPictureInPicture()
+        }
+        cleanup()
+        isActive = false
+        notifyState()
+    }
+
+    func pictureInPictureControllerDidStartPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
+        isActive = true
+        notifyState()
+        print("PiP: delegate didStartPictureInPicture")
+        onStarted?()
+    }
+
+    func pictureInPictureController(
+        _ pictureInPictureController: AVPictureInPictureController,
+        failedToStartPictureInPictureWithError error: Error
+    ) {
+        isActive = false
+        notifyState()
+        let nsError = error as NSError
+        print("PiP: delegate failedToStart domain=\(nsError.domain) code=\(nsError.code) desc=\(nsError.localizedDescription)")
+        onFailed?("PiP failed: \(nsError.localizedDescription) [\(nsError.domain):\(nsError.code)]")
+        cleanup()
+    }
+
+    func pictureInPictureControllerDidStopPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
+        isActive = false
+        notifyState()
+        let pos = player?.currentTime().seconds ?? 0
+        let safePos = pos.isFinite && pos > 0 ? pos : 0
+        print("PiP: delegate didStopPictureInPicture pos=\(String(format: "%.2f", safePos))")
+        onStopped?(safePos)
+        cleanup()
+    }
+
+    func pictureInPictureController(
+        _ pictureInPictureController: AVPictureInPictureController,
+        restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void
+    ) {
+        let pos = player?.currentTime().seconds ?? 0
+        let safePos = pos.isFinite && pos > 0 ? pos : 0
+        print("PiP: delegate restoreUI requested pos=\(String(format: "%.2f", safePos))")
+        let restored = onRestoreRequested?(safePos) ?? false
+        print("PiP: delegate restoreUI completion restored=\(restored)")
+        completionHandler(restored)
+    }
+
+    private func cleanup() {
+        print("PiP: cleanup")
+        itemStatusObserver?.invalidate()
+        itemStatusObserver = nil
+        itemLikelyToKeepUpObserver?.invalidate()
+        itemLikelyToKeepUpObserver = nil
+        timeControlStatusObserver?.invalidate()
+        timeControlStatusObserver = nil
+        if let playbackStalledObserver {
+            NotificationCenter.default.removeObserver(playbackStalledObserver)
+            self.playbackStalledObserver = nil
+        }
+        pipController?.delegate = nil
+        pipController = nil
+        player?.pause()
+        player = nil
+        playerItem = nil
+        hostView?.playerLayer.player = nil
+        hostView?.removeFromSuperview()
+        hostView = nil
+        onStarted = nil
+        onStopped = nil
+        onRestoreRequested = nil
+        onFailed = nil
+        lastPiPResumeAttemptAt = nil
+        waitingForStallRecovery = false
+    }
+
+    private func makePlayerItem(url: URL, headers: [String: String], isLocalHLS: Bool) -> AVPlayerItem {
+        let item: AVPlayerItem
+        if headers.isEmpty {
+            item = AVPlayerItem(url: url)
+        } else {
+            let assetOptions: [String: Any] = [
+                "AVURLAssetHTTPHeaderFieldsKey": headers
+            ]
+            let asset = AVURLAsset(url: url, options: assetOptions)
+            item = AVPlayerItem(asset: asset)
+        }
+        if isLocalHLS {
+            item.preferredForwardBufferDuration = 30
+            item.canUseNetworkResourcesForLiveStreamingWhilePaused = true
+            if #available(iOS 15.0, *) {
+                item.automaticallyPreservesTimeOffsetFromLive = true
+            }
+        }
+        return item
+    }
+
+    private func observeItemAndStartPiPWhenReady() {
+        guard let item = playerItem, let player else {
+            print("PiP: observe start failed (missing AVPlayer item)")
+            onFailed?("PiP failed: missing AVPlayer item.")
+            return
+        }
+        itemStatusObserver?.invalidate()
+        itemLikelyToKeepUpObserver?.invalidate()
+        timeControlStatusObserver?.invalidate()
+        if let playbackStalledObserver {
+            NotificationCenter.default.removeObserver(playbackStalledObserver)
+            self.playbackStalledObserver = nil
+        }
+        itemStatusObserver = item.observe(\AVPlayerItem.status, options: NSKeyValueObservingOptions([.initial, .new])) { [weak self] observed, _ in
+            guard let self else { return }
+            DispatchQueue.main.async {
+                switch observed.status {
+                case .readyToPlay:
+                    print("PiP: AVPlayerItem readyToPlay")
+                    self.itemStatusObserver?.invalidate()
+                    self.itemStatusObserver = nil
+                    let start = self.pendingStartPosition
+                    self.pendingStartPosition = 0
+                    if start > 0 {
+                        let time = CMTime(seconds: start, preferredTimescale: 600)
+                        player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { _ in
+                            player.play()
+                            self.pipController?.startPictureInPicture()
+                        }
+                    } else {
+                        player.play()
+                        self.pipController?.startPictureInPicture()
+                    }
+                case .failed:
+                    let err = observed.error?.localizedDescription ?? "unknown AVPlayer error"
+                    let nserr = observed.error as NSError?
+                    if let nserr {
+                        print("PiP: AVPlayerItem failed domain=\(nserr.domain) code=\(nserr.code) desc=\(nserr.localizedDescription)")
+                        if let underlying = nserr.userInfo[NSUnderlyingErrorKey] as? NSError {
+                            print("PiP: AVPlayerItem underlying domain=\(underlying.domain) code=\(underlying.code) desc=\(underlying.localizedDescription)")
+                        }
+                        if !nserr.userInfo.isEmpty {
+                            print("PiP: AVPlayerItem userInfo=\(nserr.userInfo)")
+                        }
+                    } else {
+                        print("PiP: AVPlayerItem failed desc=\(err)")
+                    }
+                    if let events = observed.errorLog()?.events, !events.isEmpty {
+                        for event in events.suffix(3) {
+                            print("PiP: AVPlayerItem errorLog status=\(event.errorStatusCode) domain=\(event.errorDomain) comment=\(event.errorComment ?? "<nil>") uri=\(event.uri ?? "<nil>")")
+                        }
+                    }
+                    self.onFailed?("PiP failed: \(err)")
+                    self.cleanup()
+                case .unknown:
+                    print("PiP: AVPlayerItem status unknown")
+                    break
+                @unknown default:
+                    print("PiP: AVPlayerItem status @unknown")
+                    break
+                }
+            }
+        }
+
+        itemLikelyToKeepUpObserver = item.observe(\AVPlayerItem.isPlaybackLikelyToKeepUp, options: [.new]) { _, change in
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                let keepUp = change.newValue ?? false
+                print("PiP: AVPlayerItem likelyToKeepUp=\(keepUp)")
+                guard keepUp else { return }
+                guard let player = self.player else { return }
+                guard player.timeControlStatus != .playing else { return }
+                let now = Date()
+                if let last = self.lastPiPResumeAttemptAt, now.timeIntervalSince(last) < 3 {
+                    return
+                }
+                self.lastPiPResumeAttemptAt = now
+                if self.waitingForStallRecovery {
+                    self.waitingForStallRecovery = false
+                    // For live HLS, jumping to "end" avoids resuming several seconds behind after a stall.
+                    print("PiP: stall recovery seeking to live edge")
+                    player.seek(to: .positiveInfinity, toleranceBefore: .zero, toleranceAfter: .zero) { _ in
+                        player.play()
+                    }
+                } else {
+                    print("PiP: resume attempt after likelyToKeepUp=true")
+                    player.play()
+                }
+            }
+        }
+
+        timeControlStatusObserver = player.observe(\AVPlayer.timeControlStatus, options: [.initial, .new]) { player, _ in
+            DispatchQueue.main.async {
+                let reason = player.reasonForWaitingToPlay?.rawValue ?? "<none>"
+                print("PiP: AVPlayer timeControlStatus=\(player.timeControlStatus.rawValue) reason=\(reason)")
+            }
+        }
+
+        playbackStalledObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemPlaybackStalled,
+            object: item,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            print("PiP: AVPlayerItemPlaybackStalled received")
+            Task { @MainActor in
+                self.waitingForStallRecovery = true
+            }
+            // Let AVPlayer recover according to automaticallyWaitsToMinimizeStalling.
+            // Forced play() here tends to create churn during transient live stalls.
+        }
+    }
+}
+#endif
 
 // MARK: - MPV Player Core
 
@@ -1210,12 +1762,34 @@ class MPVPlayerCore: NSObject {
         let urlString = url.absoluteString
         currentURLPath = url.path
         print("MPV: Loading URL: \(urlString)")
+        let isLocalProxyHLS = (url.host == "127.0.0.1" || url.host == "localhost") && url.path.contains("/hls/")
 
         // Fix TS timing issues (genpts regenerates PTS, igndts ignores broken DTS)
         if url.pathExtension.lowercased() == "ts" {
             mpv_set_property_string(mpv, "demuxer-lavf-o", "fflags=+genpts+igndts")
         } else {
             mpv_set_property_string(mpv, "demuxer-lavf-o", "")
+        }
+
+        if isLocalProxyHLS {
+            // Local HLS in fullscreen prioritizes smoothness over absolute lowest latency.
+            mpv_set_property_string(mpv, "cache-secs", "45")
+            mpv_set_property_string(mpv, "cache-pause", "yes")
+            mpv_set_property_string(mpv, "cache-pause-wait", "2.5")
+            mpv_set_property_string(mpv, "demuxer-readahead-secs", "25")
+            mpv_set_property_string(mpv, "demuxer-seekable-cache", "yes")
+            mpv_set_property_string(mpv, "demuxer-max-bytes", "128MiB")
+            mpv_set_property_string(mpv, "demuxer-max-back-bytes", "64MiB")
+            print("MPV: using local HLS smooth playback profile")
+        } else {
+            // Restore default profile for non-local-HLS sources.
+            mpv_set_property_string(mpv, "cache-secs", "120")
+            mpv_set_property_string(mpv, "cache-pause", "yes")
+            mpv_set_property_string(mpv, "cache-pause-wait", "5")
+            mpv_set_property_string(mpv, "demuxer-readahead-secs", "60")
+            mpv_set_property_string(mpv, "demuxer-seekable-cache", "yes")
+            mpv_set_property_string(mpv, "demuxer-max-bytes", "150MiB")
+            mpv_set_property_string(mpv, "demuxer-max-back-bytes", "150MiB")
         }
 
         // Use mpv_command_string for simpler string-based command
