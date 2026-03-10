@@ -37,6 +37,12 @@ struct TopicProgramRow: View {
     @State private var existingRecording: Recording?
     @State private var earlierScheduled: Recording?
 
+    private var programScheduleText: String {
+        let start = program.startDate.formatted(date: .abbreviated, time: .shortened)
+        let end = program.endDate.formatted(date: .omitted, time: .shortened)
+        return "\(start) - \(end)"
+    }
+
     var body: some View {
         HStack(alignment: .center, spacing: Theme.spacingMD) {
             // Left column: Sport icon or default TV icon
@@ -122,7 +128,7 @@ struct TopicProgramRow: View {
 
                 // Row 3: Date | Already recorded / Earlier scheduled info
                 HStack {
-                    Text("\(program.startDate, style: .date) at \(program.startDate, style: .time)")
+                    Text(programScheduleText)
                         .font(.caption)
                         .foregroundStyle(Theme.textTertiary)
 
@@ -258,6 +264,12 @@ struct TopicProgramRowTV: View {
     @State private var existingRecording: Recording?
     @State private var earlierScheduled: Recording?
 
+    private var programScheduleText: String {
+        let start = program.startDate.formatted(date: .abbreviated, time: .shortened)
+        let end = program.endDate.formatted(date: .omitted, time: .shortened)
+        return "\(start) - \(end)"
+    }
+
     private var canRecord: Bool { appState.userLevel >= 1 }
 
     private var actionLabel: String {
@@ -359,7 +371,7 @@ struct TopicProgramRowTV: View {
                             .foregroundStyle(Theme.textTertiary)
 
                         Label {
-                            Text("\(program.startDate, style: .date) at \(program.startDate, style: .time)")
+                            Text(programScheduleText)
                         } icon: {
                             Image(systemName: "clock")
                         }
