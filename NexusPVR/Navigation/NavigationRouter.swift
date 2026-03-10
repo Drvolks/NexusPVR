@@ -36,11 +36,49 @@ struct NavigationRouter: View {
             IOSNavigation()
             #endif
         }
-        #if DISPATCHERPVR
         .task {
             if appState.userLevel >= 1 {
+                #if !TOPSHELF_EXTENSION
+                await appState.refreshRecordingsActivity(client: client)
+                appState.startRecordingsActivityPolling(client: client)
+                #endif
+                #if DISPATCHERPVR
                 appState.startStreamCountPolling(client: client)
+                #endif
             }
+        }
+        .onChange(of: appState.userLevel) { _, level in
+            guard level >= 1 else {
+                #if !TOPSHELF_EXTENSION
+                appState.stopRecordingsActivityPolling()
+                appState.recordingsHasActive = false
+                #endif
+                #if DISPATCHERPVR
+                appState.stopStreamCountPolling()
+                appState.activeStreamCount = 0
+                appState.hasM3UErrors = false
+                #endif
+                return
+            }
+            #if !TOPSHELF_EXTENSION
+            Task { await appState.refreshRecordingsActivity(client: client) }
+            appState.startRecordingsActivityPolling(client: client)
+            #endif
+            #if DISPATCHERPVR
+            appState.startStreamCountPolling(client: client)
+            #endif
+        }
+        .onDisappear {
+            #if !TOPSHELF_EXTENSION
+            appState.stopRecordingsActivityPolling()
+            #endif
+            #if DISPATCHERPVR
+            appState.stopStreamCountPolling()
+            #endif
+        }
+        #if !TOPSHELF_EXTENSION
+        .onReceive(NotificationCenter.default.publisher(for: .recordingsDidChange)) { _ in
+            Task { await appState.refreshRecordingsActivity(client: client) }
         }
         #endif
     }
@@ -537,6 +575,12 @@ struct IOSNavigation: View {
 
     @ViewBuilder
     private func tabBadge(for tab: Tab) -> some View {
+        if tab == .recordings && appState.recordingsHasActive {
+            Circle()
+                .fill(Theme.recording)
+                .frame(width: 8, height: 8)
+                .offset(x: 8, y: -8)
+        }
         #if DISPATCHERPVR
         if tab == .stats {
             ZStack {
@@ -650,6 +694,11 @@ struct TVOSNavigation: View {
                             .font(.title3)
                         Text(tab.label)
                             .font(.headline)
+                        if tab == .recordings && appState.recordingsHasActive {
+                            Circle()
+                                .fill(Theme.recording)
+                                .frame(width: 10, height: 10)
+                        }
                         #if DISPATCHERPVR
                         if tab == .stats && appState.activeStreamCount > 0 {
                             Text("\(appState.activeStreamCount)")
@@ -737,6 +786,12 @@ struct MacOSNavigation: View {
                     List(Tab.macOSTabs(userLevel: appState.userLevel), selection: $selectedTab) { tab in
                         HStack {
                             Label(tab.label, systemImage: tab.icon)
+                            if tab == .recordings && appState.recordingsHasActive {
+                                Spacer()
+                                Circle()
+                                    .fill(Theme.recording)
+                                    .frame(width: 8, height: 8)
+                            }
                             #if DISPATCHERPVR
                             if tab == .stats {
                                 Spacer()

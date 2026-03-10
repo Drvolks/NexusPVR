@@ -140,12 +140,12 @@ private struct RecordingsListContentView: View {
         .background(Theme.background)
         .task {
             await viewModel.loadRecordings()
+            appState.recordingsHasActive = viewModel.hasActiveRecordings
             #if os(iOS)
             // Keep the floating iOS picker aligned with the actual list filter on first load.
             if appState.recordingsFilter != viewModel.filter {
                 appState.recordingsFilter = viewModel.filter
             }
-            appState.recordingsHasActive = viewModel.hasActiveRecordings
             #endif
         }
         #if os(iOS)
@@ -157,10 +157,10 @@ private struct RecordingsListContentView: View {
                 appState.recordingsFilter = viewModel.filter
             }
         }
+        #endif
         .onChange(of: viewModel.hasActiveRecordings) {
             Task { appState.recordingsHasActive = viewModel.hasActiveRecordings }
         }
-        #endif
         .onReceive(NotificationCenter.default.publisher(for: .recordingsDidChange)) { _ in
             Task {
                 await viewModel.loadRecordings()
