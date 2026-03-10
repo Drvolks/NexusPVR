@@ -280,7 +280,8 @@ private struct RecordingsListContentView: View {
                             deleteRecording(recording)
                         },
                         durationMismatch: viewModel.durationMismatches[recording.id],
-                        durationVerified: viewModel.durationVerified.contains(recording.id)
+                        durationVerified: viewModel.durationVerified.contains(recording.id),
+                        durationUnverifiable: viewModel.durationUnverifiable.contains(recording.id)
                     )
                     .contextMenu {
                         if recording.recordingStatus == .recording {
@@ -325,7 +326,12 @@ private struct RecordingsListContentView: View {
         #else
         List {
             ForEach(vm.filteredRecordings) { recording in
-                RecordingRow(recording: recording, durationMismatch: viewModel.durationMismatches[recording.id], durationVerified: viewModel.durationVerified.contains(recording.id))
+                RecordingRow(
+                    recording: recording,
+                    durationMismatch: viewModel.durationMismatches[recording.id],
+                    durationVerified: viewModel.durationVerified.contains(recording.id),
+                    durationUnverifiable: viewModel.durationUnverifiable.contains(recording.id)
+                )
                     .contentShape(Rectangle())
                     .onTapGesture {
                         if recording.recordingStatus == .recording {
