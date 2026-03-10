@@ -173,6 +173,41 @@ final class AppState: ObservableObject {
     }
     #endif
 
+    #if !TOPSHELF_EXTENSION
+    private var recordingsActivityTask: Task<Void, Never>?
+
+    func startRecordingsActivityPolling(client: PVRClient) {
+        stopRecordingsActivityPolling()
+        recordingsActivityTask = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.refreshRecordingsActivity(client: client)
+                try? await Task.sleep(for: .seconds(10))
+            }
+        }
+    }
+
+    func stopRecordingsActivityPolling() {
+        recordingsActivityTask?.cancel()
+        recordingsActivityTask = nil
+    }
+
+    func refreshRecordingsActivity(client: PVRClient) async {
+        if !client.isConfigured {
+            recordingsHasActive = false
+            return
+        }
+        do {
+            if !client.isAuthenticated {
+                try await client.authenticate()
+            }
+            let (_, recording, _) = try await client.getAllRecordings()
+            recordingsHasActive = !recording.isEmpty
+        } catch {
+            // Silently ignore transient errors; keep last known badge state.
+        }
+    }
+    #endif
+
     func showAlert(_ message: String) {
         alertMessage = message
         isShowingAlert = true
