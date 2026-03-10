@@ -37,7 +37,7 @@ final class GuideViewModel: ObservableObject {
     private var sportCache: [Int: Sport?] = [:]
 
     // Keyword-matched program IDs (O(1) lookup per cell)
-    private(set) var keywordMatchedProgramIds: Set<Int> = []
+    @Published private(set) var keywordMatchedProgramIds: Set<Int> = []
 
     // Reference to EPGCache (set during loadData)
     weak var epgCache: EPGCache?
