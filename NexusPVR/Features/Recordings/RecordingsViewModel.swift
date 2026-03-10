@@ -98,6 +98,17 @@ final class RecordingsViewModel: ObservableObject {
         Self.probeCache.set(cache, forKey: Self.probeCacheKey)
     }
 
+    /// Remove stale or suspect cached probe results.
+    private func removeProbeCache(recordingId: Int) {
+        var cache = Self.loadProbeCache()
+        cache.removeValue(forKey: String(recordingId))
+        Self.probeCache.set(cache, forKey: Self.probeCacheKey)
+    }
+
+    private func isDurationLikelyValid(expected: Int, detected: Int) -> Bool {
+        detected >= (expected * 90 / 100)
+    }
+
     private func probeDurations() {
         durationMismatches.removeAll()
         durationVerified.removeAll()
@@ -109,8 +120,12 @@ final class RecordingsViewModel: ObservableObject {
                   let expectedDuration = recording.duration,
                   expectedDuration > 0 else { continue }
             if let cached = cache[String(recording.id)] {
-                applyProbeResult(recording: recording, expectedDuration: expectedDuration, detectedSeconds: cached)
-                continue
+                if isDurationLikelyValid(expected: expectedDuration, detected: cached) {
+                    applyProbeResult(recording: recording, expectedDuration: expectedDuration, detectedSeconds: cached)
+                    continue
+                }
+                // Don't trust cached mismatches; source files may be fixed later.
+                removeProbeCache(recordingId: recording.id)
             }
             Task {
                 await probeMKVDuration(recording, expectedDuration: expectedDuration)
@@ -127,8 +142,12 @@ final class RecordingsViewModel: ObservableObject {
                 continue
             }
             if let cached = cache[String(recording.id)] {
-                applyProbeResult(recording: recording, expectedDuration: expectedDuration, detectedSeconds: cached)
-                continue
+                if isDurationLikelyValid(expected: expectedDuration, detected: cached) {
+                    applyProbeResult(recording: recording, expectedDuration: expectedDuration, detectedSeconds: cached)
+                    continue
+                }
+                // Don't trust cached mismatches; source files may be fixed later.
+                removeProbeCache(recordingId: recording.id)
             }
             let fileExt = recording.file?.lowercased().components(separatedBy: ".").last
             Task {
@@ -142,7 +161,7 @@ final class RecordingsViewModel: ObservableObject {
     }
 
     private func applyProbeResult(recording: Recording, expectedDuration: Int, detectedSeconds: Int) {
-        if detectedSeconds < (expectedDuration * 90 / 100) {
+        if !isDurationLikelyValid(expected: expectedDuration, detected: detectedSeconds) {
             print("Duration probe: MISMATCH (cached) '\(recording.name)' — expected \(expectedDuration)s, detected \(detectedSeconds)s")
             durationMismatches[recording.id] = (expected: expectedDuration, detected: detectedSeconds)
         } else {
@@ -226,7 +245,11 @@ final class RecordingsViewModel: ObservableObject {
                 return
             }
 
-            cacheProbeResult(recordingId: recording.id, detectedDuration: detectedSeconds)
+            if isDurationLikelyValid(expected: expectedDuration, detected: detectedSeconds) {
+                cacheProbeResult(recordingId: recording.id, detectedDuration: detectedSeconds)
+            } else {
+                removeProbeCache(recordingId: recording.id)
+            }
             applyProbeResult(recording: recording, expectedDuration: expectedDuration, detectedSeconds: detectedSeconds)
         } catch {
             print("Duration probe: FAILED '\(recording.name)' — \(error.localizedDescription)")
@@ -254,7 +277,11 @@ final class RecordingsViewModel: ObservableObject {
                 return
             }
 
-            cacheProbeResult(recordingId: recording.id, detectedDuration: detectedSeconds)
+            if isDurationLikelyValid(expected: expectedDuration, detected: detectedSeconds) {
+                cacheProbeResult(recordingId: recording.id, detectedDuration: detectedSeconds)
+            } else {
+                removeProbeCache(recordingId: recording.id)
+            }
             applyProbeResult(recording: recording, expectedDuration: expectedDuration, detectedSeconds: detectedSeconds)
         } catch {
             print("Duration probe: FAILED '\(recording.name)' — \(error.localizedDescription)")
@@ -282,7 +309,11 @@ final class RecordingsViewModel: ObservableObject {
                 return
             }
 
-            cacheProbeResult(recordingId: recording.id, detectedDuration: detectedSeconds)
+            if isDurationLikelyValid(expected: expectedDuration, detected: detectedSeconds) {
+                cacheProbeResult(recordingId: recording.id, detectedDuration: detectedSeconds)
+            } else {
+                removeProbeCache(recordingId: recording.id)
+            }
             applyProbeResult(recording: recording, expectedDuration: expectedDuration, detectedSeconds: detectedSeconds)
         } catch {
             print("Duration probe: FAILED '\(recording.name)' — \(error.localizedDescription)")
