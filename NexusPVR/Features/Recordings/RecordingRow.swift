@@ -118,10 +118,22 @@ private func durationWarningLabel(recording: Recording, mismatch: (expected: Int
     }
 }
 
+@ViewBuilder
+private func durationUnverifiableLabel() -> some View {
+    Label {
+        Text("Duration could not be verified for this stream, playback may be impacted")
+    } icon: {
+        Image(systemName: "exclamationmark.triangle.fill")
+    }
+    .font(.caption)
+    .foregroundStyle(Theme.warning)
+}
+
 struct RecordingRow: View {
     let recording: Recording
     var durationMismatch: (expected: Int, detected: Int)?
     var durationVerified: Bool = false
+    var durationUnverifiable: Bool = false
 
     private var watchProgress: Double? {
         guard let position = recording.playbackPosition,
@@ -199,6 +211,8 @@ struct RecordingRow: View {
                 // Row 4: Duration mismatch warning
                 if let mismatch = durationMismatch {
                     durationWarningLabel(recording: recording, mismatch: mismatch)
+                } else if durationUnverifiable {
+                    durationUnverifiableLabel()
                 }
 
                 // Row 5: Recording progress bar
@@ -288,6 +302,7 @@ struct RecordingRowTV: View {
     let onDelete: () -> Void
     var durationMismatch: (expected: Int, detected: Int)?
     var durationVerified: Bool = false
+    var durationUnverifiable: Bool = false
 
     private var watchProgress: Double? {
         guard let position = recording.playbackPosition,
@@ -441,6 +456,8 @@ struct RecordingRowTV: View {
                     // Duration mismatch warning
                     if let mismatch = durationMismatch {
                         durationWarningLabel(recording: recording, mismatch: mismatch)
+                    } else if durationUnverifiable {
+                        durationUnverifiableLabel()
                     }
                 }
 
