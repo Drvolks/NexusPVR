@@ -27,6 +27,8 @@ private enum PiPFeatureFlags {
     // false => fullscreen restore uses base stream URL (TS/live source)
     // true  => fullscreen restore uses PiP prepared URL (local HLS proxy)
     static let usePreparedPiPURLForFullscreenRestore = true
+    // Enable sample-buffer PiP path for raw TS streams. Falls back to AVPlayer PiP on failure.
+    static let useSampleBufferPiPForTS = true
 }
 
 struct PlayerView: View {
@@ -61,6 +63,7 @@ struct PlayerView: View {
     @State private var audioChannelLayout: String?
     #if os(iOS)
     @State private var pipManager = IOSPiPManager.shared
+    @State private var sampleBufferPiPManager = IOSSampleBufferPiPManager.shared
     @State private var pipIsSupported = AVPictureInPictureController.isPictureInPictureSupported()
     @State private var pipIsActive = false
     @State private var dismissingForPiP = false
@@ -305,7 +308,13 @@ struct PlayerView: View {
                 pipIsActive = isActive
                 print("PiP: status changed supported=\(isSupported) active=\(isActive)")
             }
+            sampleBufferPiPManager.onStatusChanged = { isSupported, isActive in
+                pipIsSupported = isSupported
+                pipIsActive = isActive
+                print("PiP(SB): status changed supported=\(isSupported) active=\(isActive)")
+            }
             pipManager.refreshSupportState()
+            sampleBufferPiPManager.refreshSupportState()
             print("PiP: onAppear support=\(pipIsSupported)")
             #endif
             scheduleHideControls()
@@ -324,12 +333,14 @@ struct PlayerView: View {
             #if os(iOS)
             if !dismissingForPiP {
                 pipManager.stopAndCleanup()
+                sampleBufferPiPManager.stopAndCleanup()
                 PiPSourceAdapter.shared.release(url: url)
                 if let preparedPlaybackURL {
                     PiPSourceAdapter.shared.release(url: preparedPlaybackURL)
                 }
             }
             pipManager.onStatusChanged = nil
+            sampleBufferPiPManager.onStatusChanged = nil
             preparedPlaybackURL = nil
             #endif
             // Stop mpv immediately — dismantleUIView may be delayed by SwiftUI
@@ -675,6 +686,7 @@ struct PlayerView: View {
         if pipIsActive {
             print("PiP: stopping active PiP session")
             pipManager.stop()
+            sampleBufferPiPManager.stop()
             return
         }
         guard pipIsSupported else {
@@ -711,59 +723,83 @@ struct PlayerView: View {
             let playbackURL = pipManifestURL(from: prepared.url)
             let playbackHeaders = prepared.headers
             print("PiP: start requested url=\(playbackURL.absoluteString) start=\(String(format: "%.2f", startAt)) recordingId=\(playbackRecordingId.map(String.init) ?? "nil") usingLiveSource=\(recordingId == nil && appState.currentlyPlayingLiveSourceURL != nil)")
-            pipManager.start(
-                url: playbackURL,
-                startPosition: startAt,
-                headers: playbackHeaders,
-                onStarted: {
-                    print("PiP: started successfully")
-                    isPlaying = false
-                    showControls = false
-                    dismissingForPiP = true
-                    appState.stopPlayback()
-                },
-                onStopped: { pipPosition in
-                    print("PiP: stopped position=\(String(format: "%.2f", pipPosition)) dismissingForPiP=\(dismissingForPiP)")
-                    if restoringFromPiP {
-                        print("PiP: preserving local source for fullscreen restore")
-                        restoringFromPiP = false
-                    } else {
-                        PiPSourceAdapter.shared.release(url: playbackURL)
-                    }
-                    if !dismissingForPiP {
-                        seekToPosition(pipPosition)
-                        isPlaying = true
-                        scheduleHideControls()
-                    }
-                    dismissingForPiP = false
-                },
-                onRestoreRequested: { pipPosition in
-                    print("PiP: restore requested position=\(String(format: "%.2f", pipPosition))")
-                    restoringFromPiP = true
-                    dismissingForPiP = false
-                    let resume = pipPosition > 0 ? Int(pipPosition) : nil
-                    let restorePreparedURL = mpvManifestURL(from: playbackURL)
-                    let restoreURL = PiPFeatureFlags.usePreparedPiPURLForFullscreenRestore ? restorePreparedURL : baseURL
-                    let restoreMode = PiPFeatureFlags.usePreparedPiPURLForFullscreenRestore ? "prepared-pip-url" : "base-stream-url"
-                    print("PiP: restore mode=\(restoreMode) url=\(restoreURL.absoluteString)")
-                    appState.playStream(
-                        url: restoreURL,
-                        title: playbackTitle,
-                        recordingId: playbackRecordingId,
-                        resumePosition: resume,
-                        channelId: playbackChannelId,
-                        channelName: playbackChannelName
-                    )
-                    return true
-                },
-                onFailed: { reason in
-                    print("PiP: failed reason=\(reason)")
-                    PiPSourceAdapter.shared.release(url: playbackURL)
+            let onStarted = {
+                print("PiP: started successfully")
+                isPlaying = false
+                showControls = false
+                dismissingForPiP = true
+                appState.stopPlayback()
+            }
+            let onStopped: (Double) -> Void = { pipPosition in
+                print("PiP: stopped position=\(String(format: "%.2f", pipPosition)) dismissingForPiP=\(dismissingForPiP)")
+                if restoringFromPiP {
+                    print("PiP: preserving local source for fullscreen restore")
                     restoringFromPiP = false
-                    errorMessage = reason
-                    dismissingForPiP = false
+                } else {
+                    PiPSourceAdapter.shared.release(url: playbackURL)
                 }
-            )
+                if !dismissingForPiP {
+                    seekToPosition(pipPosition)
+                    isPlaying = true
+                    scheduleHideControls()
+                }
+                dismissingForPiP = false
+            }
+            let onRestoreRequested: (Double) -> Bool = { pipPosition in
+                print("PiP: restore requested position=\(String(format: "%.2f", pipPosition))")
+                restoringFromPiP = true
+                dismissingForPiP = false
+                let resume = pipPosition > 0 ? Int(pipPosition) : nil
+                let restorePreparedURL = mpvManifestURL(from: playbackURL)
+                let restoreURL = PiPFeatureFlags.usePreparedPiPURLForFullscreenRestore ? restorePreparedURL : baseURL
+                let restoreMode = PiPFeatureFlags.usePreparedPiPURLForFullscreenRestore ? "prepared-pip-url" : "base-stream-url"
+                print("PiP: restore mode=\(restoreMode) url=\(restoreURL.absoluteString)")
+                appState.playStream(
+                    url: restoreURL,
+                    title: playbackTitle,
+                    recordingId: playbackRecordingId,
+                    resumePosition: resume,
+                    channelId: playbackChannelId,
+                    channelName: playbackChannelName
+                )
+                return true
+            }
+            let startWithAVPlayerPiP = {
+                pipManager.start(
+                    url: playbackURL,
+                    startPosition: startAt,
+                    headers: playbackHeaders,
+                    onStarted: onStarted,
+                    onStopped: onStopped,
+                    onRestoreRequested: onRestoreRequested,
+                    onFailed: { reason in
+                        print("PiP: failed reason=\(reason)")
+                        PiPSourceAdapter.shared.release(url: playbackURL)
+                        restoringFromPiP = false
+                        errorMessage = reason
+                        dismissingForPiP = false
+                    }
+                )
+            }
+
+            let shouldUseSampleBuffer = PiPFeatureFlags.useSampleBufferPiPForTS &&
+                (baseURL.path.contains("/proxy/ts/stream/") || playbackURL.path.contains("/proxy/ts/stream/"))
+            if shouldUseSampleBuffer {
+                sampleBufferPiPManager.start(
+                    url: playbackURL,
+                    startPosition: startAt,
+                    headers: playbackHeaders,
+                    onStarted: onStarted,
+                    onStopped: onStopped,
+                    onRestoreRequested: onRestoreRequested,
+                    onFailed: { reason in
+                        print("PiP(SB): failed reason=\(reason), fallback=AVPlayer")
+                        startWithAVPlayerPiP()
+                    }
+                )
+            } else {
+                startWithAVPlayerPiP()
+            }
         }
     }
     #endif
@@ -987,6 +1023,280 @@ private final class IOSPiPHostView: UIView {
         backgroundColor = .clear
         isUserInteractionEnabled = false
         playerLayer.videoGravity = .resizeAspect
+    }
+}
+
+@MainActor
+private final class IOSSampleBufferPiPHostView: UIView {
+    override class var layerClass: AnyClass { AVSampleBufferDisplayLayer.self }
+
+    var displayLayer: AVSampleBufferDisplayLayer {
+        guard let layer = self.layer as? AVSampleBufferDisplayLayer else {
+            fatalError("Expected AVSampleBufferDisplayLayer")
+        }
+        return layer
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        commonInit()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        commonInit()
+    }
+
+    private func commonInit() {
+        backgroundColor = .clear
+        isUserInteractionEnabled = false
+        displayLayer.videoGravity = .resizeAspect
+        var timebase: CMTimebase?
+        CMTimebaseCreateWithSourceClock(allocator: kCFAllocatorDefault, sourceClock: CMClockGetHostTimeClock(), timebaseOut: &timebase)
+        if let timebase {
+            displayLayer.controlTimebase = timebase
+            CMTimebaseSetTime(timebase, time: .zero)
+            CMTimebaseSetRate(timebase, rate: 1.0)
+        }
+    }
+}
+
+@MainActor
+private final class TSFFmpegPiPItem {
+    enum PlaybackError: LocalizedError {
+        case bootstrapNotImplemented
+
+        var errorDescription: String? {
+            switch self {
+            case .bootstrapNotImplemented:
+                return "Sample-buffer TS pipeline bootstrap complete, FFmpeg decode path not wired yet."
+            }
+        }
+    }
+
+    var currentPosition: Double { 0 }
+    var isPaused: Bool { false }
+
+    func start(
+        url: URL,
+        headers: [String: String],
+        startPosition: Double,
+        onSampleBuffer: @escaping @MainActor (CMSampleBuffer) -> Void,
+        onFailed: @escaping @MainActor (Error) -> Void
+    ) {
+        _ = url
+        _ = headers
+        _ = startPosition
+        _ = onSampleBuffer
+        Task { @MainActor in
+            onFailed(PlaybackError.bootstrapNotImplemented)
+        }
+    }
+
+    func stop() {}
+    func setPlaying(_ isPlaying: Bool) { _ = isPlaying }
+    func skip(by seconds: Double) { _ = seconds }
+}
+
+@available(iOS 15.0, *)
+@MainActor
+private final class IOSSampleBufferPiPManager: NSObject, AVPictureInPictureControllerDelegate, AVPictureInPictureSampleBufferPlaybackDelegate {
+    static let shared = IOSSampleBufferPiPManager()
+
+    private(set) var isSupported = AVPictureInPictureController.isPictureInPictureSupported()
+    private(set) var isActive = false
+    var onStatusChanged: ((Bool, Bool) -> Void)?
+
+    private weak var hostView: IOSSampleBufferPiPHostView?
+    private var pipController: AVPictureInPictureController?
+    private var pipItem: TSFFmpegPiPItem?
+    private var onStarted: (() -> Void)?
+    private var onStopped: ((Double) -> Void)?
+    private var onRestoreRequested: ((Double) -> Bool)?
+    private var onFailed: ((String) -> Void)?
+
+    func refreshSupportState() {
+        isSupported = AVPictureInPictureController.isPictureInPictureSupported()
+        notifyState()
+    }
+
+    private func notifyState() {
+        let supported = isSupported
+        let active = isActive
+        DispatchQueue.main.async { [weak self] in
+            self?.onStatusChanged?(supported, active)
+        }
+    }
+
+    private func ensureHostView() -> IOSSampleBufferPiPHostView? {
+        if let hostView { return hostView }
+        guard let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState == .foregroundActive }),
+              let window = scene.windows.first(where: \.isKeyWindow) ?? scene.windows.first else {
+            return nil
+        }
+        let host = IOSSampleBufferPiPHostView(frame: CGRect(x: 0, y: 0, width: 2, height: 2))
+        host.alpha = 0.01
+        host.isHidden = false
+        window.addSubview(host)
+        self.hostView = host
+        return host
+    }
+
+    func start(
+        url: URL,
+        startPosition: Double,
+        headers: [String: String],
+        onStarted: @escaping () -> Void,
+        onStopped: @escaping (Double) -> Void,
+        onRestoreRequested: @escaping (Double) -> Bool,
+        onFailed: @escaping (String) -> Void
+    ) {
+        guard isSupported else {
+            onFailed("Picture in Picture is not supported on this device.")
+            return
+        }
+        guard let hostView = ensureHostView() else {
+            onFailed("Picture in Picture sample-buffer host is not ready.")
+            return
+        }
+        guard !isActive else { return }
+        print("PiP(SB): manager start accepted url=\(url.absoluteString) start=\(String(format: "%.2f", startPosition))")
+
+        self.onStarted = onStarted
+        self.onStopped = onStopped
+        self.onRestoreRequested = onRestoreRequested
+        self.onFailed = onFailed
+
+        let item = TSFFmpegPiPItem()
+        pipItem = item
+
+        let contentSource = AVPictureInPictureController.ContentSource(
+            sampleBufferDisplayLayer: hostView.displayLayer,
+            playbackDelegate: self
+        )
+        let controller = AVPictureInPictureController(contentSource: contentSource)
+        controller.delegate = self
+        controller.canStartPictureInPictureAutomaticallyFromInline = false
+        controller.requiresLinearPlayback = true
+        pipController = controller
+
+        item.start(
+            url: url,
+            headers: headers,
+            startPosition: startPosition,
+            onSampleBuffer: { [weak self] sampleBuffer in
+                guard let self else { return }
+                let layer = hostView.displayLayer
+                if layer.isReadyForMoreMediaData {
+                    layer.enqueue(sampleBuffer)
+                } else {
+                    layer.enqueue(sampleBuffer)
+                }
+            },
+            onFailed: { [weak self] error in
+                guard let self else { return }
+                self.onFailed?(error.localizedDescription)
+                self.cleanup()
+            }
+        )
+    }
+
+    func stop() {
+        pipController?.stopPictureInPicture()
+    }
+
+    func stopAndCleanup() {
+        if pipController?.isPictureInPictureActive == true {
+            pipController?.stopPictureInPicture()
+        }
+        cleanup()
+        isActive = false
+        notifyState()
+    }
+
+    func pictureInPictureControllerDidStartPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
+        isActive = true
+        notifyState()
+        print("PiP(SB): delegate didStartPictureInPicture")
+        onStarted?()
+    }
+
+    func pictureInPictureController(
+        _ pictureInPictureController: AVPictureInPictureController,
+        failedToStartPictureInPictureWithError error: Error
+    ) {
+        isActive = false
+        notifyState()
+        let nsError = error as NSError
+        print("PiP(SB): delegate failedToStart domain=\(nsError.domain) code=\(nsError.code) desc=\(nsError.localizedDescription)")
+        onFailed?("PiP failed: \(nsError.localizedDescription) [\(nsError.domain):\(nsError.code)]")
+        cleanup()
+    }
+
+    func pictureInPictureControllerDidStopPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
+        isActive = false
+        notifyState()
+        let pos = pipItem?.currentPosition ?? 0
+        let safePos = pos.isFinite && pos > 0 ? pos : 0
+        print("PiP(SB): delegate didStopPictureInPicture pos=\(String(format: "%.2f", safePos))")
+        onStopped?(safePos)
+        cleanup()
+    }
+
+    func pictureInPictureController(
+        _ pictureInPictureController: AVPictureInPictureController,
+        restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void
+    ) {
+        let pos = pipItem?.currentPosition ?? 0
+        let safePos = pos.isFinite && pos > 0 ? pos : 0
+        print("PiP(SB): delegate restoreUI requested pos=\(String(format: "%.2f", safePos))")
+        let restored = onRestoreRequested?(safePos) ?? false
+        completionHandler(restored)
+    }
+
+    func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController, setPlaying playing: Bool) {
+        pipItem?.setPlaying(playing)
+    }
+
+    func pictureInPictureControllerTimeRangeForPlayback(_ pictureInPictureController: AVPictureInPictureController) -> CMTimeRange {
+        CMTimeRange(start: .negativeInfinity, duration: .positiveInfinity)
+    }
+
+    func pictureInPictureControllerIsPlaybackPaused(_ pictureInPictureController: AVPictureInPictureController) -> Bool {
+        pipItem?.isPaused ?? true
+    }
+
+    func pictureInPictureController(
+        _ pictureInPictureController: AVPictureInPictureController,
+        didTransitionToRenderSize newRenderSize: CMVideoDimensions
+    ) {}
+
+    func pictureInPictureController(
+        _ pictureInPictureController: AVPictureInPictureController,
+        skipByInterval skipInterval: CMTime
+    ) async {
+        pipItem?.skip(by: skipInterval.seconds)
+    }
+
+    func pictureInPictureControllerShouldProhibitBackgroundAudioPlayback(_ pictureInPictureController: AVPictureInPictureController) -> Bool {
+        false
+    }
+
+    private func cleanup() {
+        print("PiP(SB): cleanup")
+        pipController?.delegate = nil
+        pipController = nil
+        pipItem?.stop()
+        pipItem = nil
+        hostView?.displayLayer.flush()
+        hostView?.removeFromSuperview()
+        hostView = nil
+        onStarted = nil
+        onStopped = nil
+        onRestoreRequested = nil
+        onFailed = nil
     }
 }
 
