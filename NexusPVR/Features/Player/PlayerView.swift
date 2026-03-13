@@ -14,6 +14,8 @@ import OpenGLES
 #if os(macOS)
 import AppKit
 import IOKit.pwr_mgt
+import OpenGL.GL
+import OpenGL.GL3
 #else
 import UIKit
 #endif
@@ -1057,12 +1059,13 @@ class MPVPlayerCore: NSObject {
         // Video output
         #if os(macOS)
         let gpuAPI = UserPreferences.load().macosGPUAPI
-        mpv_set_option_string(mpv, "vo", "gpu")
         if gpuAPI == .metal {
+            mpv_set_option_string(mpv, "vo", "gpu")
             mpv_set_option_string(mpv, "gpu-api", "metal")
             mpv_set_option_string(mpv, "gpu-context", "metal")
             print("MPV: macOS GPU API = Metal")
         } else {
+            mpv_set_option_string(mpv, "vo", "libmpv")
             mpv_set_option_string(mpv, "gpu-api", "opengl")
             print("MPV: macOS GPU API = OpenGL")
         }
@@ -1313,6 +1316,55 @@ class MPVPlayerCore: NSObject {
     }
     #endif
 
+    #if os(macOS)
+    func createRenderContext(view: MPVPlayerMacOGLView) {
+        guard let mpv = mpv else { return }
+
+        let api = UnsafeMutableRawPointer(mutating: (MPV_RENDER_API_TYPE_OPENGL as NSString).utf8String)
+        var initParams = mpv_opengl_init_params(
+            get_proc_address: { (_, name) -> UnsafeMutableRawPointer? in
+                let symbolName = CFStringCreateWithCString(kCFAllocatorDefault, name, CFStringBuiltInEncodings.ASCII.rawValue)
+                let identifier = CFBundleGetBundleWithIdentifier("com.apple.opengl" as CFString)
+                return CFBundleGetFunctionPointerForName(identifier, symbolName)
+            },
+            get_proc_address_ctx: nil
+        )
+
+        withUnsafeMutablePointer(to: &initParams) { initParamsPtr in
+            var params = [
+                mpv_render_param(type: MPV_RENDER_PARAM_API_TYPE, data: api),
+                mpv_render_param(type: MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, data: initParamsPtr),
+                mpv_render_param()
+            ]
+
+            let result = mpv_render_context_create(&mpvGL, mpv, &params)
+            if result < 0 {
+                let errorStr = String(cString: mpv_error_string(result))
+                print("MPV: Failed to create macOS OpenGL render context: \(errorStr)")
+                return
+            }
+            print("MPV: macOS OpenGL render context created successfully")
+
+            view.mpvGL = UnsafeMutableRawPointer(mpvGL)
+
+            mpv_render_context_set_update_callback(
+                mpvGL,
+                { ctx in
+                    guard let ctx else { return }
+                    let view = Unmanaged<MPVPlayerMacOGLView>.fromOpaque(ctx).takeUnretainedValue()
+                    guard view.needsDrawing else { return }
+                    view.renderQueue.async {
+                        DispatchQueue.main.async {
+                            view.display()
+                        }
+                    }
+                },
+                UnsafeMutableRawPointer(Unmanaged.passUnretained(view).toOpaque())
+            )
+        }
+    }
+    #endif
+
     private func startEventLoop() {
         eventLoopGroup.enter()
         DispatchQueue.global(qos: .userInteractive).async { [weak self] in
@@ -1469,7 +1521,9 @@ class MPVPlayerCore: NSObject {
 // MARK: - MPV Container View
 
 #if os(macOS)
-struct MPVContainerView: NSViewRepresentable {
+struct MPVContainerView: NSViewControllerRepresentable {
+    typealias NSViewControllerType = NSViewController
+
     let url: URL
     @Binding var isPlaying: Bool
     @Binding var errorMessage: String?
@@ -1484,42 +1538,49 @@ struct MPVContainerView: NSViewRepresentable {
     var onPlaybackEnded: (() -> Void)?
     var onVideoInfoUpdate: ((String?, Int?, String?, String?) -> Void)?
 
-    func makeNSView(context: Context) -> MPVPlayerNSView {
-        let view = MPVPlayerNSView()
-        view.setup(errorBinding: $errorMessage)
-        view.onPositionUpdate = { position, dur in
+    func makeNSViewController(context: Context) -> NSViewController {
+        let controller: NSViewController & MPVPlayerMacOSController
+        if UserPreferences.load().macosGPUAPI == .metal {
+            controller = MPVPlayerNSViewController()
+        } else {
+            controller = MPVPlayerNSOpenGLViewController()
+        }
+        controller.loadViewIfNeeded()
+        controller.setup(errorBinding: $errorMessage)
+        controller.onPositionUpdate = { position, dur in
             DispatchQueue.main.async {
                 self.currentPosition = position
                 self.duration = dur
             }
         }
-        view.onPlaybackEnded = onPlaybackEnded
-        view.onVideoInfoUpdate = onVideoInfoUpdate
-        view.loadURL(url)
-        view.startPositionPolling()
-        context.coordinator.playerView = view
+        controller.onPlaybackEnded = onPlaybackEnded
+        controller.onVideoInfoUpdate = onVideoInfoUpdate
+        controller.loadURL(url)
+        controller.startPositionPolling()
+        context.coordinator.playerController = controller
 
         // Set up seek closures
         DispatchQueue.main.async {
             self.seekForward = {
-                view.seek(seconds: self.seekForwardTime)
+                controller.seek(seconds: self.seekForwardTime)
             }
             self.seekBackward = {
-                view.seek(seconds: -self.seekBackwardTime)
+                controller.seek(seconds: -self.seekBackwardTime)
             }
             self.seekToPosition = { position in
-                view.seekTo(position: position)
+                controller.seekTo(position: position)
             }
         }
 
-        return view
+        return controller
     }
 
-    func updateNSView(_ nsView: MPVPlayerNSView, context: Context) {
+    func updateNSViewController(_ nsViewController: NSViewController, context: Context) {
+        guard let controller = nsViewController as? MPVPlayerMacOSController else { return }
         if isPlaying {
-            nsView.play()
+            controller.play()
         } else {
-            nsView.pause()
+            controller.pause()
         }
     }
 
@@ -1527,43 +1588,53 @@ struct MPVContainerView: NSViewRepresentable {
         Coordinator()
     }
 
-    static func dismantleNSView(_ nsView: MPVPlayerNSView, coordinator: Coordinator) {
-        nsView.cleanup()
+    static func dismantleNSViewController(_ nsViewController: NSViewController, coordinator: Coordinator) {
+        (nsViewController as? MPVPlayerMacOSController)?.cleanup()
     }
 
     class Coordinator {
-        var playerView: MPVPlayerNSView?
+        weak var playerController: MPVPlayerMacOSController?
     }
 }
 
-class MPVPlayerNSView: NSView {
+protocol MPVPlayerMacOSController: AnyObject {
+    var onPositionUpdate: ((Double, Double) -> Void)? { get set }
+    var onPlaybackEnded: (() -> Void)? { get set }
+    var onVideoInfoUpdate: ((String?, Int?, String?, String?) -> Void)? { get set }
+    func setup(errorBinding: Binding<String?>?)
+    func loadURL(_ url: URL)
+    func play()
+    func pause()
+    func seek(seconds: Int)
+    func seekTo(position: Double)
+    func startPositionPolling()
+    func cleanup()
+}
+
+final class MPVPlayerNSViewController: NSViewController, MPVPlayerMacOSController {
     private var player: MPVPlayerCore?
-    private var metalLayer: CAMetalLayer?
+    private let metalLayer = StableMetalLayer()
     var onPositionUpdate: ((Double, Double) -> Void)?
     var onPlaybackEnded: (() -> Void)?
     var onVideoInfoUpdate: ((String?, Int?, String?, String?) -> Void)?
 
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        commonInit()
+    override func loadView() {
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 1280, height: 720))
+        view.wantsLayer = true
     }
 
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        commonInit()
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        metalLayer.backgroundColor = NSColor.black.cgColor
+        metalLayer.pixelFormat = .bgra8Unorm
+        metalLayer.framebufferOnly = true
+        view.layer = metalLayer
+        view.wantsLayer = true
     }
 
-    private func commonInit() {
-        metalLayer = CAMetalLayer()
-        metalLayer?.backgroundColor = NSColor.black.cgColor
-        metalLayer?.pixelFormat = .bgra8Unorm
-        wantsLayer = true
-        layer = metalLayer
-    }
-
-    override func layout() {
-        super.layout()
-        metalLayer?.frame = bounds
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        updateRenderSurface()
     }
 
     func setup(errorBinding: Binding<String?>?) {
@@ -1571,9 +1642,7 @@ class MPVPlayerNSView: NSView {
         guard let success = player?.setup(errorBinding: errorBinding), success else {
             return
         }
-        if let metalLayer = metalLayer {
-            player?.setWindowID(metalLayer)
-        }
+        player?.setWindowID(metalLayer)
         player?.onPositionUpdate = { [weak self] position, duration in
             self?.onPositionUpdate?(position, duration)
         }
@@ -1615,6 +1684,258 @@ class MPVPlayerNSView: NSView {
         onPositionUpdate = nil
         onPlaybackEnded = nil
         onVideoInfoUpdate = nil
+    }
+
+    private func updateRenderSurface() {
+        let layerSize = view.bounds.size
+        guard layerSize.width > 1, layerSize.height > 1 else { return }
+        let scale = view.window?.screen?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0
+        metalLayer.contentsScale = scale
+        metalLayer.frame = CGRect(origin: .zero, size: layerSize)
+        let drawableSize = CGSize(
+            width: max(layerSize.width * scale, 1),
+            height: max(layerSize.height * scale, 1)
+        )
+        if metalLayer.drawableSize != drawableSize {
+            metalLayer.drawableSize = drawableSize
+        }
+    }
+}
+
+final class MPVPlayerNSOpenGLViewController: NSViewController, MPVPlayerMacOSController {
+    private var glView: MPVPlayerMacOGLView!
+    var onPositionUpdate: ((Double, Double) -> Void)?
+    var onPlaybackEnded: (() -> Void)?
+    var onVideoInfoUpdate: ((String?, Int?, String?, String?) -> Void)?
+
+    override func loadView() {
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 1280, height: 720))
+        glView = MPVPlayerMacOGLView(frame: view.bounds)
+        glView.autoresizingMask = [.width, .height]
+        view.addSubview(glView)
+    }
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        glView.frame = view.bounds
+        glView.handleContainerLayout()
+    }
+
+    func setup(errorBinding: Binding<String?>?) {
+        glView.setup(errorBinding: errorBinding)
+        glView.onPositionUpdate = { [weak self] position, duration in
+            self?.onPositionUpdate?(position, duration)
+        }
+        glView.onPlaybackEnded = { [weak self] in
+            self?.onPlaybackEnded?()
+        }
+        glView.onVideoInfoUpdate = { [weak self] codec, height, hwdec, audioChannels in
+            self?.onVideoInfoUpdate?(codec, height, hwdec, audioChannels)
+        }
+    }
+
+    func loadURL(_ url: URL) {
+        glView.loadURL(url)
+    }
+
+    func play() {
+        glView.play()
+    }
+
+    func pause() {
+        glView.pause()
+    }
+
+    func seek(seconds: Int) {
+        glView.seek(seconds: seconds)
+    }
+
+    func seekTo(position: Double) {
+        glView.seekTo(position: position)
+    }
+
+    func startPositionPolling() {
+        glView.startPositionPolling()
+    }
+
+    func cleanup() {
+        glView.cleanup()
+        onPositionUpdate = nil
+        onPlaybackEnded = nil
+        onVideoInfoUpdate = nil
+    }
+}
+
+final class MPVPlayerMacOGLView: NSOpenGLView {
+    private var player: MPVPlayerCore?
+    private var defaultFBO: GLint = -1
+    let renderQueue = DispatchQueue(label: "nexuspvr.macos.opengl", qos: .userInteractive)
+    var mpvGL: UnsafeMutableRawPointer?
+    var needsDrawing = true
+    var onPositionUpdate: ((Double, Double) -> Void)?
+    var onPlaybackEnded: (() -> Void)?
+    var onVideoInfoUpdate: ((String?, Int?, String?, String?) -> Void)?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect, pixelFormat: Self.defaultPixelFormat())!
+        autoresizingMask = [.width, .height]
+        wantsBestResolutionOpenGLSurface = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override class func defaultPixelFormat() -> NSOpenGLPixelFormat {
+        let attributes: [NSOpenGLPixelFormatAttribute] = [
+            NSOpenGLPixelFormatAttribute(NSOpenGLPFADoubleBuffer),
+            NSOpenGLPixelFormatAttribute(NSOpenGLPFAColorSize), NSOpenGLPixelFormatAttribute(32),
+            NSOpenGLPixelFormatAttribute(NSOpenGLPFADepthSize), NSOpenGLPixelFormatAttribute(24),
+            NSOpenGLPixelFormatAttribute(NSOpenGLPFAStencilSize), NSOpenGLPixelFormatAttribute(8),
+            NSOpenGLPixelFormatAttribute(0)
+        ]
+        guard let format = NSOpenGLPixelFormat(attributes: attributes) else {
+            fatalError("Failed to create NSOpenGLPixelFormat")
+        }
+        return format
+    }
+
+    override func prepareOpenGL() {
+        super.prepareOpenGL()
+        openGLContext?.makeCurrentContext()
+        var swapInterval: GLint = 1
+        openGLContext?.setValues(&swapInterval, for: .swapInterval)
+        refreshViewport()
+    }
+
+    override func reshape() {
+        super.reshape()
+        handleContainerLayout()
+    }
+
+    override func update() {
+        super.update()
+        handleContainerLayout()
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        handleContainerLayout()
+    }
+
+    func setup(errorBinding: Binding<String?>?) {
+        openGLContext?.makeCurrentContext()
+        refreshViewport()
+        player = MPVPlayerCore()
+        guard let success = player?.setup(errorBinding: errorBinding), success else {
+            return
+        }
+        player?.createRenderContext(view: self)
+        player?.onPositionUpdate = { [weak self] position, duration in
+            self?.onPositionUpdate?(position, duration)
+        }
+        player?.onPlaybackEnded = { [weak self] in
+            self?.onPlaybackEnded?()
+        }
+        player?.onVideoInfoUpdate = { [weak self] codec, height, hwdec, audioChannels in
+            self?.onVideoInfoUpdate?(codec, height, hwdec, audioChannels)
+        }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard needsDrawing, let mpvGL else { return }
+        openGLContext?.makeCurrentContext()
+
+        glClearColor(0, 0, 0, 1)
+        glClear(UInt32(GL_COLOR_BUFFER_BIT))
+        glGetIntegerv(UInt32(GL_FRAMEBUFFER_BINDING), &defaultFBO)
+
+        var dims: [GLint] = [0, 0, 0, 0]
+        glGetIntegerv(GLenum(GL_VIEWPORT), &dims)
+
+        var data = mpv_opengl_fbo(
+            fbo: Int32(defaultFBO),
+            w: Int32(dims[2]),
+            h: Int32(dims[3]),
+            internal_format: 0
+        )
+        var flip: CInt = 1
+        withUnsafeMutablePointer(to: &flip) { flipPtr in
+            withUnsafeMutablePointer(to: &data) { dataPtr in
+                var params = [
+                    mpv_render_param(type: MPV_RENDER_PARAM_OPENGL_FBO, data: dataPtr),
+                    mpv_render_param(type: MPV_RENDER_PARAM_FLIP_Y, data: flipPtr),
+                    mpv_render_param()
+                ]
+                mpv_render_context_render(OpaquePointer(mpvGL), &params)
+            }
+        }
+        openGLContext?.flushBuffer()
+    }
+
+    func loadURL(_ url: URL) {
+        player?.loadURL(url)
+    }
+
+    func play() {
+        player?.play()
+    }
+
+    func pause() {
+        player?.pause()
+    }
+
+    func seek(seconds: Int) {
+        player?.seek(seconds: seconds)
+    }
+
+    func seekTo(position: Double) {
+        player?.seekTo(position: position)
+    }
+
+    func startPositionPolling() {
+        player?.startPositionPolling()
+    }
+
+    func cleanup() {
+        needsDrawing = false
+        mpvGL = nil
+        renderQueue.sync {}
+        player?.destroy()
+        player = nil
+        onPositionUpdate = nil
+        onPlaybackEnded = nil
+        onVideoInfoUpdate = nil
+    }
+
+    func handleContainerLayout() {
+        openGLContext?.makeCurrentContext()
+        openGLContext?.update()
+        refreshViewport()
+        if mpvGL != nil {
+            needsDisplay = true
+            displayIfNeeded()
+        }
+    }
+
+    private func refreshViewport() {
+        let backingBounds = convertToBacking(bounds)
+        let width = GLsizei(max(backingBounds.width.rounded(.down), 1))
+        let height = GLsizei(max(backingBounds.height.rounded(.down), 1))
+        guard width > 1, height > 1 else { return }
+        glViewport(0, 0, width, height)
+    }
+}
+
+private final class StableMetalLayer: CAMetalLayer {
+    override var drawableSize: CGSize {
+        get { super.drawableSize }
+        set {
+            if Int(newValue.width) > 1, Int(newValue.height) > 1 {
+                super.drawableSize = newValue
+            }
+        }
     }
 }
 
