@@ -43,9 +43,9 @@ nonisolated struct UserPreferences: Codable {
     var seekBackwardSeconds: Int = 10
     var seekForwardSeconds: Int = 30
     var audioChannels: String = "auto"
-    var tvosGPUAPI: GPUAPI = .metal
-    var iosGPUAPI: GPUAPI = .opengl
-    var macosGPUAPI: GPUAPI = .opengl
+    var tvosGPUAPI: GPUAPI = .pixelbuffer
+    var iosGPUAPI: GPUAPI = .pixelbuffer
+    var macosGPUAPI: GPUAPI = .pixelbuffer
 
     // Migration: keep old property for decoding existing data
     private enum CodingKeys: String, CodingKey {
@@ -74,9 +74,9 @@ nonisolated struct UserPreferences: Codable {
             seekForwardSeconds = 30
         }
         audioChannels = try container.decodeIfPresent(String.self, forKey: .audioChannels) ?? "auto"
-        tvosGPUAPI = try container.decodeIfPresent(GPUAPI.self, forKey: .tvosGPUAPI) ?? .metal
-        iosGPUAPI = try container.decodeIfPresent(GPUAPI.self, forKey: .iosGPUAPI) ?? .opengl
-        macosGPUAPI = try container.decodeIfPresent(GPUAPI.self, forKey: .macosGPUAPI) ?? .opengl
+        tvosGPUAPI = try container.decodeIfPresent(GPUAPI.self, forKey: .tvosGPUAPI) ?? .pixelbuffer
+        iosGPUAPI = try container.decodeIfPresent(GPUAPI.self, forKey: .iosGPUAPI) ?? .pixelbuffer
+        macosGPUAPI = try container.decodeIfPresent(GPUAPI.self, forKey: .macosGPUAPI) ?? .pixelbuffer
     }
 
     func encode(to encoder: Encoder) throws {
