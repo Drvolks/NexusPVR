@@ -228,6 +228,19 @@ struct PlayerView: View {
                 controlsOverlay
             }
 
+            // Keep video info visible even when controls are hidden
+            if !showControls && showVideoInfo && isPlayerReady {
+                VStack {
+                    HStack {
+                        Spacer()
+                        videoBadges
+                            .padding(.trailing)
+                    }
+                    .padding(.top, Theme.spacingMD)
+                    Spacer()
+                }
+            }
+
             // Error message — auto-dismisses player after 3 seconds
             if let error = errorMessage {
                 VStack {
