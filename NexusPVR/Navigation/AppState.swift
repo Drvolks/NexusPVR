@@ -261,4 +261,9 @@ final class AppState: ObservableObject {
         currentlyPlayingChannelId = nil
         currentlyPlayingChannelName = nil
     }
+
+    /// Dismiss the player UI without clearing playback state (used for PiP).
+    func dismissPlayer() {
+        isShowingPlayer = false
+    }
 }

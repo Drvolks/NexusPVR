@@ -205,6 +205,9 @@ struct IOSNavigation: View {
                 .statusBarHidden()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .restoreFromPiP)) { _ in
+            appState.isShowingPlayer = true
+        }
         .onChange(of: searchText) { oldValue, newValue in
             searchDebounceTask?.cancel()
             // When on search tab, drive SearchView directly — no dropdown
@@ -671,6 +674,9 @@ struct TVOSNavigation: View {
                     resumePosition: appState.currentlyPlayingResumePosition
                 )
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .restoreFromPiP)) { _ in
+            appState.isShowingPlayer = true
         }
     }
 

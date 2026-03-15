@@ -1,13 +1,13 @@
 {
-  "originHash" : "7091de90601cdaa7f307d829b017f4cc367808288b312fc173ae63bf503e0773",
+  "originHash" : "85050b4c86bb4bbfaaad5ea176bf85964e72a0d85e9879a7b95a1d7cdae04905",
   "pins" : [
     {
       "identity" : "mpvkit",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/mpvkit/MPVKit",
+      "location" : "https://github.com/Drvolks/MPVKit",
       "state" : {
-        "revision" : "613c0ccc3acf70e136aaff880a9b5fe8fdfaf5b8",
-        "version" : "0.41.0"
+        "revision" : "6d7b5132dabd3a29b327bdaaecb94618488f2207",
+        "version" : "0.41.0-drvolks.1"
       }
     }
   ],

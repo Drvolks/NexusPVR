@@ -8,11 +8,13 @@
 
 /* Begin PBXBuildFile section */
 		6E9E3CF02F31559900D2B8DF /* MPVKit in Frameworks */ = {isa = PBXBuildFile; productRef = 6E9E3CEF2F31559900D2B8DF /* MPVKit */; };
+		6E9E3CF22F31559900D2B8E0 /* MPVPixelBufferBridge in Frameworks */ = {isa = PBXBuildFile; productRef = 6E9E3CF12F31559900D2B8E0 /* MPVPixelBufferBridge */; };
 		6EA347F62F48EF9C00E0A324 /* TVServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6EA347F52F48EF9C00E0A324 /* TVServices.framework */; };
 		6EA347FD2F48EF9D00E0A324 /* NexusPVR TopShelf.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6EA347F32F48EF9C00E0A324 /* NexusPVR TopShelf.appex */; platformFilters = (tvos, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		6EA348082F48EFB600E0A324 /* TVServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6EA347F52F48EF9C00E0A324 /* TVServices.framework */; };
 		6EA3480F2F48EFB600E0A324 /* DispatcherPVR TopShelf.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6EA348072F48EFB600E0A324 /* DispatcherPVR TopShelf.appex */; platformFilters = (tvos, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		D1AAAA0A2F31559900D2B8DF /* MPVKit in Frameworks */ = {isa = PBXBuildFile; productRef = D1AAAA0B2F31559900D2B8DF /* MPVKit */; };
+		D1AAAA0D2F31559900D2B8E1 /* MPVPixelBufferBridge in Frameworks */ = {isa = PBXBuildFile; productRef = D1AAAA0C2F31559900D2B8E1 /* MPVPixelBufferBridge */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -72,13 +74,13 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		6E74158C2F315368001FE083 /* NexusPVR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NexusPVR.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6E74158C2F315368001FE083 /* NexusPVR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = NexusPVR.app; path = NextPVR.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6E74159B2F315369001FE083 /* NexusPVRTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NexusPVRTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6E7415A52F315369001FE083 /* NexusPVRUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NexusPVRUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6EA347F32F48EF9C00E0A324 /* NexusPVR TopShelf.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "NexusPVR TopShelf.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		6EA347F52F48EF9C00E0A324 /* TVServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = TVServices.framework; path = Library/Frameworks/TVServices.framework; sourceTree = DEVELOPER_DIR; };
 		6EA348072F48EFB600E0A324 /* DispatcherPVR TopShelf.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "DispatcherPVR TopShelf.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
-		D1AAAA012F31559900D2B8DF /* DispatcherPVR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DispatcherPVR.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D1AAAA012F31559900D2B8DF /* Dispatcharr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dispatcharr.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -134,13 +136,13 @@
 			);
 			target = 6EA348062F48EFB600E0A324 /* DispatcherPVR TopShelf */;
 		};
-		D1AAAA0C2F31559900D2B8DF /* Exceptions for "NexusPVR" folder in "DispatcherPVR" target */ = {
+		D1AAAA0C2F31559900D2B8DF /* Exceptions for "NexusPVR" folder in "Dispatcharr" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Assets.xcassets,
 				LaunchScreen.storyboard,
 			);
-			target = D1AAAA062F31559900D2B8DF /* DispatcherPVR */;
+			target = D1AAAA062F31559900D2B8DF /* Dispatcharr */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -148,7 +150,7 @@
 		6E74158E2F315368001FE083 /* NexusPVR */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				D1AAAA0C2F31559900D2B8DF /* Exceptions for "NexusPVR" folder in "DispatcherPVR" target */,
+				D1AAAA0C2F31559900D2B8DF /* Exceptions for "NexusPVR" folder in "Dispatcharr" target */,
 				6EA348182F48F04500E0A324 /* Exceptions for "NexusPVR" folder in "NexusPVR TopShelf" target */,
 				6EA348192F48F04500E0A324 /* Exceptions for "NexusPVR" folder in "DispatcherPVR TopShelf" target */,
 			);
@@ -194,6 +196,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				6E9E3CF02F31559900D2B8DF /* MPVKit in Frameworks */,
+				6E9E3CF22F31559900D2B8E0 /* MPVPixelBufferBridge in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -232,6 +235,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D1AAAA0A2F31559900D2B8DF /* MPVKit in Frameworks */,
+				D1AAAA0D2F31559900D2B8E1 /* MPVPixelBufferBridge in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -256,7 +260,7 @@
 			isa = PBXGroup;
 			children = (
 				6E74158C2F315368001FE083 /* NexusPVR.app */,
-				D1AAAA012F31559900D2B8DF /* DispatcherPVR.app */,
+				D1AAAA012F31559900D2B8DF /* Dispatcharr.app */,
 				6E74159B2F315369001FE083 /* NexusPVRTests.xctest */,
 				6E7415A52F315369001FE083 /* NexusPVRUITests.xctest */,
 				6EA347F32F48EF9C00E0A324 /* NexusPVR TopShelf.appex */,
@@ -276,9 +280,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		6E74158B2F315368001FE083 /* NexusPVR */ = {
+		6E74158B2F315368001FE083 /* NextPVR */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 6E7415AF2F315369001FE083 /* Build configuration list for PBXNativeTarget "NexusPVR" */;
+			buildConfigurationList = 6E7415AF2F315369001FE083 /* Build configuration list for PBXNativeTarget "NextPVR" */;
 			buildPhases = (
 				6E7415882F315368001FE083 /* Sources */,
 				6E7415892F315368001FE083 /* Frameworks */,
@@ -296,6 +300,7 @@
 			name = NextPVR;
 			packageProductDependencies = (
 				6E9E3CEF2F31559900D2B8DF /* MPVKit */,
+				6E9E3CF12F31559900D2B8E0 /* MPVPixelBufferBridge */,
 			);
 			productName = NextPVR;
 			productReference = 6E74158C2F315368001FE083 /* NexusPVR.app */;
@@ -391,9 +396,9 @@
 			productReference = 6EA348072F48EFB600E0A324 /* DispatcherPVR TopShelf.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
-		D1AAAA062F31559900D2B8DF /* DispatcherPVR */ = {
+		D1AAAA062F31559900D2B8DF /* Dispatcharr */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = D1AAAA092F31559900D2B8DF /* Build configuration list for PBXNativeTarget "DispatcherPVR" */;
+			buildConfigurationList = D1AAAA092F31559900D2B8DF /* Build configuration list for PBXNativeTarget "Dispatcharr" */;
 			buildPhases = (
 				D1AAAA032F31559900D2B8DF /* Sources */,
 				D1AAAA042F31559900D2B8DF /* Frameworks */,
@@ -412,9 +417,10 @@
 			name = Dispatcharr;
 			packageProductDependencies = (
 				D1AAAA0B2F31559900D2B8DF /* MPVKit */,
+				D1AAAA0C2F31559900D2B8E1 /* MPVPixelBufferBridge */,
 			);
 			productName = Dispatcharr;
-			productReference = D1AAAA012F31559900D2B8DF /* DispatcherPVR.app */;
+			productReference = D1AAAA012F31559900D2B8DF /* Dispatcharr.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -466,8 +472,8 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				6E74158B2F315368001FE083 /* NexusPVR */,
-				D1AAAA062F31559900D2B8DF /* DispatcherPVR */,
+				6E74158B2F315368001FE083 /* NextPVR */,
+				D1AAAA062F31559900D2B8DF /* Dispatcharr */,
 				6E74159A2F315369001FE083 /* NexusPVRTests */,
 				6E7415A42F315369001FE083 /* NexusPVRUITests */,
 				6EA347F22F48EF9C00E0A324 /* NexusPVR TopShelf */,
@@ -569,12 +575,12 @@
 /* Begin PBXTargetDependency section */
 		6E74159D2F315369001FE083 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 6E74158B2F315368001FE083 /* NexusPVR */;
+			target = 6E74158B2F315368001FE083 /* NextPVR */;
 			targetProxy = 6E74159C2F315369001FE083 /* PBXContainerItemProxy */;
 		};
 		6E7415A72F315369001FE083 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 6E74158B2F315368001FE083 /* NexusPVR */;
+			target = 6E74158B2F315368001FE083 /* NextPVR */;
 			targetProxy = 6E7415A62F315369001FE083 /* PBXContainerItemProxy */;
 		};
 		6EA347FC2F48EF9C00E0A324 /* PBXTargetDependency */ = {
@@ -1282,7 +1288,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		6E7415AF2F315369001FE083 /* Build configuration list for PBXNativeTarget "NexusPVR" */ = {
+		6E7415AF2F315369001FE083 /* Build configuration list for PBXNativeTarget "NextPVR" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				6E7415B02F315369001FE083 /* Debug */,
@@ -1327,7 +1333,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		D1AAAA092F31559900D2B8DF /* Build configuration list for PBXNativeTarget "DispatcherPVR" */ = {
+		D1AAAA092F31559900D2B8DF /* Build configuration list for PBXNativeTarget "Dispatcharr" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				D1AAAA072F31559900D2B8DF /* Debug */,
@@ -1341,10 +1347,10 @@
 /* Begin XCRemoteSwiftPackageReference section */
 		6E9E3CEE2F31559900D2B8DF /* XCRemoteSwiftPackageReference "MPVKit" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/mpvkit/MPVKit";
+			repositoryURL = "https://github.com/Drvolks/MPVKit";
 			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.41.0;
+				kind = exactVersion;
+				version = 0.41.0-drvolks.1;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -1355,10 +1361,20 @@
 			package = 6E9E3CEE2F31559900D2B8DF /* XCRemoteSwiftPackageReference "MPVKit" */;
 			productName = MPVKit;
 		};
+		6E9E3CF12F31559900D2B8E0 /* MPVPixelBufferBridge */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6E9E3CEE2F31559900D2B8DF /* XCRemoteSwiftPackageReference "MPVKit" */;
+			productName = MPVPixelBufferBridge;
+		};
 		D1AAAA0B2F31559900D2B8DF /* MPVKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 6E9E3CEE2F31559900D2B8DF /* XCRemoteSwiftPackageReference "MPVKit" */;
 			productName = MPVKit;
+		};
+		D1AAAA0C2F31559900D2B8E1 /* MPVPixelBufferBridge */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6E9E3CEE2F31559900D2B8DF /* XCRemoteSwiftPackageReference "MPVKit" */;
+			productName = MPVPixelBufferBridge;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

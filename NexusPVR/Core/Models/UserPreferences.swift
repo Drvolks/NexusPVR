@@ -10,6 +10,7 @@ import Foundation
 enum GPUAPI: String, Codable, CaseIterable {
     case metal
     case opengl
+    case pixelbuffer
 }
 
 nonisolated struct PlayerStats: Codable {

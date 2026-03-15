@@ -219,7 +219,7 @@ struct SettingsView: View {
                                         prefs.tvosGPUAPI = api
                                         prefs.save()
                                     } label: {
-                                        Text(api == .metal ? "Metal" : "OpenGL")
+                                        Text(api == .metal ? "Metal" : api == .pixelbuffer ? "PixelBuffer" : "OpenGL")
                                             .font(.callout)
                                             .fontWeight(.medium)
                                             .padding(.horizontal, Theme.spacingLG)
@@ -379,14 +379,16 @@ struct SettingsView: View {
             }
 
             #if os(iOS)
-            Picker("GPU API", selection: $iosGPUAPI) {
+            Picker("Renderer", selection: $iosGPUAPI) {
                 Text("OpenGL").tag(GPUAPI.opengl)
                 Text("Metal (Experimental)").tag(GPUAPI.metal)
+                Text("PixelBuffer (Experimental)").tag(GPUAPI.pixelbuffer)
             }
             #elseif os(macOS)
-            Picker("GPU API", selection: $macosGPUAPI) {
+            Picker("Renderer", selection: $macosGPUAPI) {
                 Text("OpenGL").tag(GPUAPI.opengl)
                 Text("Metal (Experimental)").tag(GPUAPI.metal)
+                Text("PixelBuffer (Experimental)").tag(GPUAPI.pixelbuffer)
             }
             #endif
         } header: {

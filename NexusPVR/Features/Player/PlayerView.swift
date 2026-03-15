@@ -7,6 +7,9 @@
 
 import SwiftUI
 import Libmpv
+import MPVPixelBufferBridge
+import AVFoundation
+import AVKit
 #if !os(macOS)
 import GLKit
 import OpenGLES
@@ -53,6 +56,13 @@ struct PlayerView: View {
     #if DISPATCHERPVR
     @State private var dispatchProfileBadge: String?
     @State private var dispatchProfileRefreshTask: Task<Void, Never>?
+    #endif
+    #if os(iOS)
+    @State private var pipIsSupported = AVPictureInPictureController.isPictureInPictureSupported()
+    @State private var pipIsActive = false
+    #endif
+    #if !os(macOS)
+    @State private var pixelBufferView: MPVPlayerPixelBufferView? = nil
     #endif
     #if os(macOS)
     @State private var sleepAssertionID: IOPMAssertionID = 0
@@ -133,11 +143,18 @@ struct PlayerView: View {
                     hwDecoder = hwdec
                     audioChannelLayout = audioChannels
                 },
-                cleanupAction: $cleanupAction
+                cleanupAction: $cleanupAction,
+                pixelBufferViewRef: $pixelBufferView
             )
                 .ignoresSafeArea()
                 .onTapGesture {
                     toggleControls()
+                }
+                .onChange(of: pixelBufferView != nil) { _, hasView in
+                    if hasView { setupNativePiPIfNeeded() }
+                }
+                .onChange(of: isPlayerReady) { _, ready in
+                    if ready { setupNativePiPIfNeeded() }
                 }
             #else
             MPVContainerView(
@@ -276,14 +293,28 @@ struct PlayerView: View {
             #endif
         }
         .onDisappear {
-            // Stop mpv immediately — dismantleUIView may be delayed by SwiftUI
+            #if os(iOS)
+            let session = ActivePlayerSession.shared
+            let nativePiPActive = isUsingPixelBufferRenderer && (session.isPiPActive || session.dismissingForPiP)
+            if nativePiPActive {
+                savePlaybackPosition()
+                // Don't stop player — mpv continues feeding PiP
+            } else {
+                cleanupAction?()
+                cleanupAction = nil
+                if appState.isShowingPlayer {
+                    savePlaybackPosition()
+                    appState.stopPlayback()
+                }
+            }
+            #else
             cleanupAction?()
             cleanupAction = nil
-            // Only save if not already stopped by an explicit exit path
             if appState.isShowingPlayer {
                 savePlaybackPosition()
                 appState.stopPlayback()
             }
+            #endif
             // Notify recordings list to refresh with updated progress
             if recordingId != nil {
                 NotificationCenter.default.post(name: .recordingsDidChange, object: nil)
@@ -500,6 +531,53 @@ struct PlayerView: View {
         return max(0, min(totalWidth, CGFloat(progress) * totalWidth))
     }
 
+    private var isUsingPixelBufferRenderer: Bool {
+        #if os(tvOS)
+        return UserPreferences.load().tvosGPUAPI == .pixelbuffer
+        #elseif os(iOS)
+        return UserPreferences.load().iosGPUAPI == .pixelbuffer
+        #elseif os(macOS)
+        return UserPreferences.load().macosGPUAPI == .pixelbuffer
+        #else
+        return false
+        #endif
+    }
+
+    #if os(iOS)
+    private func setupNativePiPIfNeeded() {
+        let session = ActivePlayerSession.shared
+        guard isUsingPixelBufferRenderer,
+              session.pipController == nil,
+              session.hasActiveSession else { return }
+
+        session.setupPiP(
+            playPauseHandler: { playing in
+                if playing { session.player?.play() } else { session.player?.pause() }
+            },
+            isPausedQuery: {
+                session.player?.isPaused ?? true
+            }
+        )
+    }
+
+    private func toggleNativePiP() {
+        let session = ActivePlayerSession.shared
+        guard let controller = session.pipController else { return }
+
+        if controller.isPictureInPictureActive {
+            controller.stop()
+            pipIsActive = false
+            session.isPiPActive = false
+        } else {
+            session.isPiPActive = true
+            session.dismissingForPiP = true
+            controller.start()
+            pipIsActive = true
+            appState.dismissPlayer()
+        }
+    }
+    #endif
+
     private func seekToPosition(_ position: Double) {
         seekToPositionFunc?(position)
         currentPosition = position
@@ -543,6 +621,20 @@ struct PlayerView: View {
                 .layoutPriority(0)
 
             Spacer()
+
+            #if os(iOS)
+            if isUsingPixelBufferRenderer && pipIsSupported {
+                Button {
+                    toggleNativePiP()
+                } label: {
+                    Image(systemName: pipIsActive ? "pip.exit" : "pip.enter")
+                        .font(.title3)
+                        .foregroundStyle(.white)
+                        .padding(8)
+                }
+                .buttonStyle(.plain)
+            }
+            #endif
 
             videoBadges
                 .padding(.trailing, 4)
@@ -1059,7 +1151,10 @@ class MPVPlayerCore: NSObject {
         // Video output
         #if os(macOS)
         let gpuAPI = UserPreferences.load().macosGPUAPI
-        if gpuAPI == .metal {
+        if gpuAPI == .pixelbuffer {
+            mpv_set_option_string(mpv, "vo", "pixelbuffer")
+            print("MPV: macOS VO = pixelbuffer (AVSampleBufferDisplayLayer)")
+        } else if gpuAPI == .metal {
             mpv_set_option_string(mpv, "vo", "gpu")
             mpv_set_option_string(mpv, "gpu-api", "metal")
             mpv_set_option_string(mpv, "gpu-context", "metal")
@@ -1071,7 +1166,10 @@ class MPVPlayerCore: NSObject {
         }
         #elseif os(tvOS)
         let gpuAPI = UserPreferences.load().tvosGPUAPI
-        if gpuAPI == .metal {
+        if gpuAPI == .pixelbuffer {
+            mpv_set_option_string(mpv, "vo", "pixelbuffer")
+            print("MPV: tvOS VO = pixelbuffer (AVSampleBufferDisplayLayer)")
+        } else if gpuAPI == .metal {
             mpv_set_option_string(mpv, "vo", "gpu")
             mpv_set_option_string(mpv, "gpu-api", "metal")
             mpv_set_option_string(mpv, "gpu-context", "metal")
@@ -1084,7 +1182,10 @@ class MPVPlayerCore: NSObject {
         }
         #elseif os(iOS)
         let gpuAPI = UserPreferences.load().iosGPUAPI
-        if gpuAPI == .metal {
+        if gpuAPI == .pixelbuffer {
+            mpv_set_option_string(mpv, "vo", "pixelbuffer")
+            print("MPV: iOS VO = pixelbuffer (AVSampleBufferDisplayLayer)")
+        } else if gpuAPI == .metal {
             mpv_set_option_string(mpv, "vo", "gpu")
             mpv_set_option_string(mpv, "gpu-api", "metal")
             mpv_set_option_string(mpv, "gpu-context", "metal")
@@ -1248,6 +1349,13 @@ class MPVPlayerCore: NSObject {
         if result < 0 {
             print("MPV: Failed to pause: \(result)")
         }
+    }
+
+    var isPaused: Bool {
+        guard let mpv = mpv else { return true }
+        var flag: Int32 = 0
+        mpv_get_property(mpv, "pause", MPV_FORMAT_FLAG, &flag)
+        return flag != 0
     }
 
     #if os(macOS) || os(tvOS) || os(iOS)
@@ -1540,7 +1648,10 @@ struct MPVContainerView: NSViewControllerRepresentable {
 
     func makeNSViewController(context: Context) -> NSViewController {
         let controller: NSViewController & MPVPlayerMacOSController
-        if UserPreferences.load().macosGPUAPI == .metal {
+        let gpuAPI = UserPreferences.load().macosGPUAPI
+        if gpuAPI == .pixelbuffer {
+            controller = MPVPlayerPixelBufferNSViewController()
+        } else if gpuAPI == .metal {
             controller = MPVPlayerNSViewController()
         } else {
             controller = MPVPlayerNSOpenGLViewController()
@@ -1699,6 +1810,75 @@ final class MPVPlayerNSViewController: NSViewController, MPVPlayerMacOSControlle
         if metalLayer.drawableSize != drawableSize {
             metalLayer.drawableSize = drawableSize
         }
+    }
+}
+
+final class MPVPlayerPixelBufferNSViewController: NSViewController, MPVPlayerMacOSController {
+    private var player: MPVPlayerCore?
+    private var bridge: MPVPixelBufferBridge?
+    var onPositionUpdate: ((Double, Double) -> Void)?
+    var onPlaybackEnded: (() -> Void)?
+    var onVideoInfoUpdate: ((String?, Int?, String?, String?) -> Void)?
+
+    override func loadView() {
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 1280, height: 720))
+        view.wantsLayer = true
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        let displayLayer = AVSampleBufferDisplayLayer()
+        bridge = MPVPixelBufferBridge(displayLayer: displayLayer)
+        displayLayer.videoGravity = .resizeAspect
+        displayLayer.backgroundColor = NSColor.black.cgColor
+        view.layer = CALayer()
+        view.layer?.addSublayer(displayLayer)
+    }
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        bridge?.displayLayer.frame = view.bounds
+    }
+
+    func setup(errorBinding: Binding<String?>?) {
+        guard let bridge else { return }
+        bridge.attach()
+
+        player = MPVPlayerCore()
+        guard player?.setup(errorBinding: errorBinding) == true else { return }
+        player?.onPositionUpdate = { [weak self] position, duration in
+            self?.onPositionUpdate?(position, duration)
+        }
+        player?.onPlaybackEnded = { [weak self] in
+            self?.onPlaybackEnded?()
+        }
+        player?.onVideoInfoUpdate = { [weak self] codec, height, hwdec, audioChannels in
+            self?.onVideoInfoUpdate?(codec, height, hwdec, audioChannels)
+        }
+    }
+
+    func loadURL(_ url: URL) { player?.loadURL(url) }
+    func play() { player?.play() }
+    func pause() { player?.pause() }
+
+    func seek(seconds: Int) {
+        player?.seek(seconds: seconds)
+        Task { @MainActor in bridge?.flush() }
+    }
+
+    func seekTo(position: Double) {
+        player?.seekTo(position: position)
+        Task { @MainActor in bridge?.flush() }
+    }
+
+    func startPositionPolling() { player?.startPositionPolling() }
+
+    func cleanup() {
+        player?.destroy()
+        player = nil
+        onPositionUpdate = nil
+        onPlaybackEnded = nil
+        onVideoInfoUpdate = nil
     }
 }
 
@@ -2007,6 +2187,28 @@ struct MPVContainerView: UIViewRepresentable {
         view.onMenu = onDismiss
     }
 
+    private func configureCommonCallbacks(for view: MPVPlayerPixelBufferView) {
+        view.onPositionUpdate = { position, dur in
+            DispatchQueue.main.async {
+                self.currentPosition = position
+                self.duration = dur
+            }
+        }
+        view.onPlaybackEnded = onPlaybackEnded
+        view.onVideoInfoUpdate = onVideoInfoUpdate
+        view.onPlayPause = onTogglePlayPause
+        view.onSeekForward = {
+            view.seek(seconds: self.seekForwardTime)
+            self.onShowControls?()
+        }
+        view.onSeekBackward = {
+            view.seek(seconds: -self.seekBackwardTime)
+            self.onShowControls?()
+        }
+        view.onSelect = onToggleControls
+        view.onMenu = onDismiss
+    }
+
     private func setupSeekBindings(for view: MPVPlayerMetalView) {
         DispatchQueue.main.async {
             self.seekForward = {
@@ -2039,8 +2241,40 @@ struct MPVContainerView: UIViewRepresentable {
         }
     }
 
+    private func setupSeekBindings(for view: MPVPlayerPixelBufferView) {
+        DispatchQueue.main.async {
+            self.seekForward = {
+                view.seek(seconds: self.seekForwardTime)
+                self.onShowControls?()
+            }
+            self.seekBackward = {
+                view.seek(seconds: -self.seekBackwardTime)
+                self.onShowControls?()
+            }
+            self.seekToPosition = { position in
+                view.seekTo(position: position)
+            }
+        }
+    }
+
     func makeUIView(context: Context) -> UIView {
-        if UserPreferences.load().tvosGPUAPI == .opengl {
+        let gpuAPI = UserPreferences.load().tvosGPUAPI
+
+        if gpuAPI == .pixelbuffer {
+            let view = MPVPlayerPixelBufferView(frame: .zero)
+            view.setup(errorBinding: $errorMessage)
+            configureCommonCallbacks(for: view)
+            view.loadURL(url)
+            view.startPositionPolling()
+            context.coordinator.playerView = view
+            DispatchQueue.main.async {
+                self.cleanupAction = { view.cleanup() }
+            }
+            setupSeekBindings(for: view)
+            return view
+        }
+
+        if gpuAPI == .opengl {
             let view = MPVPlayerGLView(frame: .zero)
             view.setup(errorBinding: $errorMessage)
             configureCommonCallbacks(for: view)
@@ -2068,26 +2302,24 @@ struct MPVContainerView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {
+        if let pbView = uiView as? MPVPlayerPixelBufferView {
+            if isPlaying { pbView.play() } else { pbView.pause() }
+            return
+        }
         if let metalView = uiView as? MPVPlayerMetalView {
-            if isPlaying {
-                metalView.play()
-            } else {
-                metalView.pause()
-            }
+            if isPlaying { metalView.play() } else { metalView.pause() }
             return
         }
         if let glView = uiView as? MPVPlayerGLView {
-            if isPlaying {
-                glView.play()
-            } else {
-                glView.pause()
-            }
+            if isPlaying { glView.play() } else { glView.pause() }
             return
         }
     }
 
     static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) {
-        if let metalView = uiView as? MPVPlayerMetalView {
+        if let pbView = uiView as? MPVPlayerPixelBufferView {
+            pbView.cleanup()
+        } else if let metalView = uiView as? MPVPlayerMetalView {
             metalView.cleanup()
         } else {
             (uiView as? MPVPlayerGLView)?.cleanup()
@@ -2122,6 +2354,7 @@ struct MPVContainerView: UIViewRepresentable {
     var onPlaybackEnded: (() -> Void)?
     var onVideoInfoUpdate: ((String?, Int?, String?, String?) -> Void)?
     @Binding var cleanupAction: (() -> Void)?
+    @Binding var pixelBufferViewRef: MPVPlayerPixelBufferView?
 
     private func configureCommonCallbacks(for view: MPVPlayerGLView) {
         view.setup(errorBinding: $errorMessage)
@@ -2136,6 +2369,18 @@ struct MPVContainerView: UIViewRepresentable {
     }
 
     private func configureCommonCallbacks(for view: MPVPlayerMetalView) {
+        view.setup(errorBinding: $errorMessage)
+        view.onPositionUpdate = { position, dur in
+            DispatchQueue.main.async {
+                self.currentPosition = position
+                self.duration = dur
+            }
+        }
+        view.onPlaybackEnded = onPlaybackEnded
+        view.onVideoInfoUpdate = onVideoInfoUpdate
+    }
+
+    private func configureCommonCallbacks(for view: MPVPlayerPixelBufferView) {
         view.setup(errorBinding: $errorMessage)
         view.onPositionUpdate = { position, dur in
             DispatchQueue.main.async {
@@ -2175,8 +2420,38 @@ struct MPVContainerView: UIViewRepresentable {
         }
     }
 
+    private func setupSeekBindings(for view: MPVPlayerPixelBufferView) {
+        DispatchQueue.main.async {
+            self.seekForward = {
+                view.seek(seconds: self.seekForwardTime)
+            }
+            self.seekBackward = {
+                view.seek(seconds: -self.seekBackwardTime)
+            }
+            self.seekToPosition = { position in
+                view.seekTo(position: position)
+            }
+        }
+    }
+
     func makeUIView(context: Context) -> UIView {
-        if UserPreferences.load().iosGPUAPI == .metal {
+        let gpuAPI = UserPreferences.load().iosGPUAPI
+
+        if gpuAPI == .pixelbuffer {
+            let view = MPVPlayerPixelBufferView(frame: .zero)
+            configureCommonCallbacks(for: view)
+            view.loadURL(url)
+            view.startPositionPolling()
+            context.coordinator.playerView = view
+            DispatchQueue.main.async {
+                self.cleanupAction = { view.cleanup() }
+                self.pixelBufferViewRef = view
+            }
+            setupSeekBindings(for: view)
+            return view
+        }
+
+        if gpuAPI == .metal {
             let view = MPVPlayerMetalView(frame: .zero)
             configureCommonCallbacks(for: view)
             view.loadURL(url)
@@ -2197,26 +2472,21 @@ struct MPVContainerView: UIViewRepresentable {
         DispatchQueue.main.async {
             self.cleanupAction = { view.cleanup() }
         }
-
         setupSeekBindings(for: view)
         return view
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {
+        if let pbView = uiView as? MPVPlayerPixelBufferView {
+            if isPlaying { pbView.play() } else { pbView.pause() }
+            return
+        }
         if let metalView = uiView as? MPVPlayerMetalView {
-            if isPlaying {
-                metalView.play()
-            } else {
-                metalView.pause()
-            }
+            if isPlaying { metalView.play() } else { metalView.pause() }
             return
         }
         if let glView = uiView as? MPVPlayerGLView {
-            if isPlaying {
-                glView.play()
-            } else {
-                glView.pause()
-            }
+            if isPlaying { glView.play() } else { glView.pause() }
             return
         }
     }
@@ -2226,7 +2496,9 @@ struct MPVContainerView: UIViewRepresentable {
     }
 
     static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) {
-        if let metalView = uiView as? MPVPlayerMetalView {
+        if let pbView = uiView as? MPVPlayerPixelBufferView {
+            pbView.cleanup()
+        } else if let metalView = uiView as? MPVPlayerMetalView {
             metalView.cleanup()
         } else {
             (uiView as? MPVPlayerGLView)?.cleanup()
@@ -2403,6 +2675,185 @@ class MPVPlayerMetalView: UIView {
 // MARK: - iOS/tvOS OpenGL ES View
 
 #if os(iOS) || os(tvOS)
+class MPVPlayerPixelBufferView: UIView {
+    private let session = ActivePlayerSession.shared
+    var isPaused: Bool { session.player?.isPaused ?? true }
+    var onPositionUpdate: ((Double, Double) -> Void)?
+    var onPlaybackEnded: (() -> Void)?
+    var onVideoInfoUpdate: ((String?, Int?, String?, String?) -> Void)?
+    private(set) var isReconnected = false
+
+    #if os(tvOS)
+    var onPlayPause: (() -> Void)?
+    var onSeekForward: (() -> Void)?
+    var onSeekBackward: (() -> Void)?
+    var onSelect: (() -> Void)?
+    var onMenu: (() -> Void)?
+
+    override var canBecomeFocused: Bool { true }
+    #endif
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        commonInit()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        commonInit()
+    }
+
+    private func commonInit() {
+        isOpaque = true
+        backgroundColor = .black
+        isUserInteractionEnabled = true
+        autoresizingMask = [.flexibleWidth, .flexibleHeight]
+
+        let displayLayer = session.displayLayer
+        displayLayer.backgroundColor = UIColor.black.cgColor
+        displayLayer.frame = bounds
+        layer.addSublayer(displayLayer)
+
+        #if os(tvOS)
+        let swipeLeft = UISwipeGestureRecognizer(target: self, action: #selector(handleSwipeLeft))
+        swipeLeft.direction = .left
+        addGestureRecognizer(swipeLeft)
+
+        let swipeRight = UISwipeGestureRecognizer(target: self, action: #selector(handleSwipeRight))
+        swipeRight.direction = .right
+        addGestureRecognizer(swipeRight)
+        #endif
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if session.displayLayer.superlayer !== layer {
+            layer.addSublayer(session.displayLayer)
+        }
+        session.displayLayer.frame = bounds
+    }
+
+    func setup(errorBinding: Binding<String?>?) {
+        if session.hasActiveSession {
+            isReconnected = true
+            wireCallbacks()
+            DispatchQueue.main.async { [weak self] in
+                self?.onPlaybackEnded = nil // Don't re-trigger ended on reconnect
+            }
+            return
+        }
+
+        #if os(iOS)
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+        try? AVAudioSession.sharedInstance().setActive(true)
+        #endif
+
+        let bridge = MPVPixelBufferBridge(displayLayer: session.displayLayer)
+        bridge.attach()
+
+        let player = MPVPlayerCore()
+        guard player.setup(errorBinding: errorBinding) else {
+            return
+        }
+
+        session.createSession(player: player, bridge: bridge)
+        wireCallbacks()
+    }
+
+    private func wireCallbacks() {
+        session.player?.onPositionUpdate = { [weak self] position, duration in
+            self?.onPositionUpdate?(position, duration)
+        }
+        session.player?.onPlaybackEnded = { [weak self] in
+            self?.onPlaybackEnded?()
+        }
+        session.player?.onVideoInfoUpdate = { [weak self] codec, width, hwdec, audioChannels in
+            self?.onVideoInfoUpdate?(codec, width, hwdec, audioChannels)
+        }
+    }
+
+    func loadURL(_ url: URL) {
+        guard !isReconnected else { return }
+        session.player?.loadURL(url)
+    }
+
+    func play() { session.player?.play() }
+    func pause() { session.player?.pause() }
+
+    func seek(seconds: Int) {
+        session.player?.seek(seconds: seconds)
+        Task { @MainActor in session.bridge?.flush() }
+    }
+
+    func seekTo(position: Double) {
+        session.player?.seekTo(position: position)
+        Task { @MainActor in session.bridge?.flush() }
+    }
+
+    func startPositionPolling() {
+        session.player?.startPositionPolling()
+    }
+
+    func cleanup() {
+        if session.isPiPActive {
+            session.detachFromView()
+            onPositionUpdate = nil
+            onPlaybackEnded = nil
+            onVideoInfoUpdate = nil
+            return
+        }
+        session.teardown()
+        onPositionUpdate = nil
+        onPlaybackEnded = nil
+        onVideoInfoUpdate = nil
+    }
+
+    #if os(tvOS)
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window != nil {
+            DispatchQueue.main.async {
+                self.setNeedsFocusUpdate()
+                self.updateFocusIfNeeded()
+            }
+        }
+    }
+
+    @objc private func handleSwipeLeft() {
+        onSeekBackward?()
+    }
+
+    @objc private func handleSwipeRight() {
+        onSeekForward?()
+    }
+
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        for press in presses {
+            switch press.type {
+            case .playPause:
+                onPlayPause?()
+                return
+            case .leftArrow:
+                onSeekBackward?()
+                return
+            case .rightArrow:
+                onSeekForward?()
+                return
+            case .select:
+                onSelect?()
+                return
+            case .menu:
+                onMenu?()
+                return
+            default:
+                break
+            }
+        }
+        super.pressesBegan(presses, with: event)
+    }
+    #endif
+}
+
 class MPVPlayerGLView: GLKView {
     private var player: MPVPlayerCore?
     private var defaultFBO: GLint = -1
