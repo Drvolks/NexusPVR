@@ -206,9 +206,9 @@ struct SettingsView: View {
                         Divider()
                             .background(Theme.textTertiary)
 
-                        // GPU API
+                        // MPV Variant
                         VStack(spacing: Theme.spacingSM) {
-                            Text("GPU API")
+                            Text("MPV Variant")
                                 .foregroundStyle(Theme.textPrimary)
 
                             HStack(spacing: Theme.spacingMD) {
@@ -231,6 +231,11 @@ struct SettingsView: View {
                                     .buttonStyle(.card)
                                 }
                             }
+
+                            Text(rendererDescription(for: tvosGPUAPI))
+                                .font(.caption)
+                                .foregroundStyle(Theme.textTertiary)
+                                .multilineTextAlignment(.center)
                         }
                     }
                 }
@@ -379,17 +384,23 @@ struct SettingsView: View {
             }
 
             #if os(iOS)
-            Picker("Renderer", selection: $iosGPUAPI) {
+            Picker("MPV Variant", selection: $iosGPUAPI) {
                 Text("OpenGL").tag(GPUAPI.opengl)
                 Text("Metal (Experimental)").tag(GPUAPI.metal)
-                Text("PixelBuffer (Experimental)").tag(GPUAPI.pixelbuffer)
+                Text("PixelBuffer").tag(GPUAPI.pixelbuffer)
             }
+            Text(rendererDescription(for: iosGPUAPI))
+                .font(.caption)
+                .foregroundStyle(Theme.textTertiary)
             #elseif os(macOS)
-            Picker("Renderer", selection: $macosGPUAPI) {
+            Picker("MPV Variant", selection: $macosGPUAPI) {
                 Text("OpenGL").tag(GPUAPI.opengl)
                 Text("Metal (Experimental)").tag(GPUAPI.metal)
-                Text("PixelBuffer (Experimental)").tag(GPUAPI.pixelbuffer)
+                Text("PixelBuffer").tag(GPUAPI.pixelbuffer)
             }
+            Text(rendererDescription(for: macosGPUAPI))
+                .font(.caption)
+                .foregroundStyle(Theme.textTertiary)
             #endif
         } header: {
             Text("Playback")
@@ -422,6 +433,17 @@ struct SettingsView: View {
             prefs.save()
         }
         #endif
+    }
+
+    private func rendererDescription(for api: GPUAPI) -> String {
+        switch api {
+        case .pixelbuffer:
+            return "Renders directly to a Metal surface + Supports native Picture-in-Picture"
+        case .metal:
+            return "Renders directly to a Metal surface. Experimental — may offer lower latency but lacks Picture-in-Picture support."
+        case .opengl:
+            return "Legacy OpenGL-based rendering. Broad compatibility but no Picture-in-Picture support."
+        }
     }
 
     private var eventLogLinkSection: some View {
