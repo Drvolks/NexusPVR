@@ -74,7 +74,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		6E74158C2F315368001FE083 /* NexusPVR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = NexusPVR.app; path = NextPVR.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6E74158C2F315368001FE083 /* NextPVR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NextPVR.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6E74159B2F315369001FE083 /* NexusPVRTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NexusPVRTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6E7415A52F315369001FE083 /* NexusPVRUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NexusPVRUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6EA347F32F48EF9C00E0A324 /* NexusPVR TopShelf.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "NexusPVR TopShelf.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -259,7 +259,7 @@
 		6E74158D2F315368001FE083 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				6E74158C2F315368001FE083 /* NexusPVR.app */,
+				6E74158C2F315368001FE083 /* NextPVR.app */,
 				D1AAAA012F31559900D2B8DF /* Dispatcharr.app */,
 				6E74159B2F315369001FE083 /* NexusPVRTests.xctest */,
 				6E7415A52F315369001FE083 /* NexusPVRUITests.xctest */,
@@ -303,7 +303,7 @@
 				6E9E3CF12F31559900D2B8E0 /* MPVPixelBufferBridge */,
 			);
 			productName = NextPVR;
-			productReference = 6E74158C2F315368001FE083 /* NexusPVR.app */;
+			productReference = 6E74158C2F315368001FE083 /* NextPVR.app */;
 			productType = "com.apple.product-type.application";
 		};
 		6E74159A2F315369001FE083 /* NexusPVRTests */ = {
@@ -756,6 +756,7 @@
 				"EXCLUDED_SOURCE_FILE_NAMES[sdk=macosx*]" = LaunchScreen.storyboard;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = StreamCrate;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "NexusPVR needs to connect to your local NextPVR server for streaming TV and managing recordings.";
@@ -830,6 +831,7 @@
 				"EXCLUDED_SOURCE_FILE_NAMES[sdk=macosx*]" = LaunchScreen.storyboard;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = StreamCrate;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "NexusPVR needs to connect to your local NextPVR server for streaming TV and managing recordings.";
@@ -1158,6 +1160,7 @@
 				"EXCLUDED_SOURCE_FILE_NAMES[sdk=macosx*]" = LaunchScreen.storyboard;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = StreamCrate;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "DispatcherPVR needs to connect to your local Dispatcharr server for streaming TV and managing recordings.";
@@ -1233,6 +1236,7 @@
 				"EXCLUDED_SOURCE_FILE_NAMES[sdk=macosx*]" = LaunchScreen.storyboard;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = StreamCrate;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "DispatcherPVR needs to connect to your local Dispatcharr server for streaming TV and managing recordings.";
@@ -1350,7 +1354,7 @@
 			repositoryURL = "https://github.com/Drvolks/MPVKit";
 			requirement = {
 				kind = exactVersion;
-				version = 0.41.0-drvolks.1;
+				version = "0.41.0-drvolks.1";
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
