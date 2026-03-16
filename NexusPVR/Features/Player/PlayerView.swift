@@ -241,9 +241,28 @@ struct PlayerView: View {
                 }
             }
 
-            // Error message — auto-dismisses player after 3 seconds
+            // Error message
             if let error = errorMessage {
                 VStack {
+                    // Show close button over the error when controls are not accessible
+                    if !isPlayerReady {
+                        HStack {
+                            #if !os(tvOS)
+                            Button {
+                                savePlaybackPosition()
+                                appState.stopPlayback()
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.title2)
+                                    .foregroundStyle(.white)
+                                    .padding()
+                            }
+                            .buttonStyle(.plain)
+                            #endif
+                            Spacer()
+                        }
+                        .padding(.top, Theme.spacingSM)
+                    }
                     Spacer()
                     VStack(spacing: Theme.spacingSM) {
                         Image(systemName: "exclamationmark.triangle.fill")
@@ -255,11 +274,6 @@ struct PlayerView: View {
                     .background(Color.red.opacity(0.8))
                     .cornerRadius(Theme.cornerRadiusSM)
                     .padding()
-                }
-                .onAppear {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                        appState.stopPlayback()
-                    }
                 }
             }
 
