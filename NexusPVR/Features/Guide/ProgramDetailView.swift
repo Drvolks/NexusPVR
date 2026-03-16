@@ -50,17 +50,31 @@ struct ProgramDetailView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.spacingMD) {
-                    headerSection
-                    infoSection
-                    if let desc = program.desc, !desc.isEmpty {
-                        descriptionSection(desc)
+                    // Content area with sport icon behind
+                    ZStack(alignment: .trailing) {
+                        // Sport icon background
+                        if let sport = SportDetector.detect(from: program) {
+                            Image(systemName: sport.sfSymbol)
+                                .font(.system(size: 200))
+                                .foregroundStyle(Theme.textTertiary.opacity(0.15))
+                        }
+
+                        VStack(alignment: .leading, spacing: Theme.spacingMD) {
+                            headerSection
+                            infoSection
+                            if let desc = program.desc, !desc.isEmpty {
+                                descriptionSection(desc)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
+
                     actionSection
                 }
                 .padding()
+                .padding(.bottom, Theme.spacingLG)
             }
             .background(Theme.background)
-            .navigationTitle("Program Details")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -78,7 +92,11 @@ struct ProgramDetailView: View {
             }
         }
         #if os(macOS)
-        .frame(minWidth: 500, minHeight: 600)
+        .frame(minWidth: 500, minHeight: 700)
+        #endif
+        #if os(iOS)
+        .presentationDetents([.large])
+        .presentationSizing(.page)
         #endif
         .task {
             await checkIfScheduled()
@@ -91,9 +109,10 @@ struct ProgramDetailView: View {
         VStack(spacing: 0) {
             // Content
             ScrollView {
+                ZStack(alignment: .trailing) {
                 VStack(alignment: .leading, spacing: Theme.spacingMD) {
-                    // Row 1: Icon | Channel name
-                    HStack(spacing: Theme.spacingMD) {
+                    // Row 1: Icon + Channel name
+                    VStack {
                         CachedAsyncImage(url: try? client.channelIconURL(channelId: channel.id)) { image in
                             image
                                 .resizable()
@@ -102,12 +121,10 @@ struct ProgramDetailView: View {
                             Image(systemName: "tv")
                                 .foregroundStyle(Theme.textTertiary)
                         }
-                        .frame(width: 60, height: 60)
-                        .background(Theme.surfaceElevated)
-                        .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
+                        .frame(width: 120, height: 120)
 
                         Text(channel.name)
-                            .font(.title3)
+                            .font(.caption)
                             .foregroundStyle(Theme.textSecondary)
                     }
 
@@ -138,6 +155,10 @@ struct ProgramDetailView: View {
                             .foregroundStyle(Theme.textSecondary)
                     }
                     .font(.subheadline)
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.surface.opacity(0.5))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusMD))
 
                     // Description section
                     if program.desc != nil || program.genres != nil {
@@ -153,7 +174,8 @@ struct ProgramDetailView: View {
                         }
                         .padding()
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .cardStyle()
+                        .background(Theme.surface.opacity(0.5))
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusMD))
                     }
 
                     // Action buttons
@@ -239,10 +261,18 @@ struct ProgramDetailView: View {
                     }
                 }
                 .padding(Theme.spacingLG)
+
+                // Sport icon background
+                if let sport = SportDetector.detect(from: program) {
+                    Image(systemName: sport.sfSymbol)
+                        .font(.system(size: 250))
+                        .foregroundStyle(Theme.textTertiary.opacity(0.15))
+                        .padding(Theme.spacingLG)
+                }
+                }
             }
         }
         .frame(width: 800)
-        .frame(maxHeight: 800)
         .fixedSize(horizontal: false, vertical: true)
         .background(Theme.background)
         .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusMD))
@@ -262,82 +292,67 @@ struct ProgramDetailView: View {
 
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: Theme.spacingSM) {
-            HStack {
-                CachedAsyncImage(url: try? client.channelIconURL(channelId: channel.id)) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                } placeholder: {
-                    Image(systemName: "tv")
-                        .foregroundStyle(Theme.textTertiary)
-                }
-                #if os(tvOS)
-                .frame(width: 60, height: 60)
-                #else
-                .frame(width: 40, height: 40)
-                #endif
+                HStack(spacing: Theme.spacingSM) {
+                    if channel.hasIcon {
+                        CachedAsyncImage(url: try? client.channelIconURL(channelId: channel.id)) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                        } placeholder: {
+                            ProgressView()
+                        }
+                        .frame(height: 40)
+                    } else {
+                        Text(channel.name)
+                            .font(.headline)
+                            .foregroundStyle(Theme.textPrimary)
+                    }
 
-                VStack(alignment: .leading) {
-                    Text(channel.name)
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.textSecondary)
-                    Text("Channel \(channel.number)")
-                        .font(.caption)
-                        .foregroundStyle(Theme.textTertiary)
-                }
-
-                Spacer()
-
-                if program.isCurrentlyAiring {
-                    Label("Live", systemImage: "circle.fill")
+                    if program.isCurrentlyAiring {
+                        HStack(spacing: Theme.spacingXS) {
+                            Image(systemName: "circle.fill")
+                            Text("Live")
+                        }
                         .font(.caption)
                         .foregroundStyle(Theme.accent)
+                    }
                 }
-            }
 
-            Text(program.name)
-                #if os(tvOS)
-                .font(.title3)
-                #else
-                .font(.title2)
-                #endif
-                .fontWeight(.bold)
-                .foregroundStyle(Theme.textPrimary)
-                .accessibilityIdentifier("program-detail-name")
+                Text(program.name)
+                    #if os(tvOS)
+                    .font(.title3)
+                    #else
+                    .font(.title2)
+                    #endif
+                    .fontWeight(.bold)
+                    .foregroundStyle(Theme.textPrimary)
+                    .accessibilityIdentifier("program-detail-name")
 
-            if let subtitle = program.subtitle, !subtitle.isEmpty {
-                Text(subtitle)
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.textSecondary)
-            }
+                if let subtitle = program.subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.textSecondary)
+                }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var infoSection: some View {
         VStack(spacing: Theme.spacingSM) {
             HStack {
-                Label {
-                    Text(program.startDate, style: .date)
-                } icon: {
-                    Image(systemName: "calendar")
-                }
-                .foregroundStyle(Theme.textSecondary)
+                Text(program.startDate, style: .date)
 
                 Spacer()
 
-                Label {
-                    Text("\(program.durationMinutes) min")
-                } icon: {
-                    Image(systemName: "clock")
+                HStack(spacing: Theme.spacingXS) {
+                    Text(program.startDate, style: .time)
+                    Text("-")
+                    Text(program.endDate, style: .time)
                 }
-                .foregroundStyle(Theme.textSecondary)
-            }
-            .font(.subheadline)
 
-            HStack {
-                Text(program.startDate, style: .time)
-                Text("-")
-                Text(program.endDate, style: .time)
+                Spacer()
+
+                Text("\(program.durationMinutes) min")
             }
             .font(.subheadline)
             .foregroundStyle(Theme.textSecondary)
@@ -349,7 +364,7 @@ struct ProgramDetailView: View {
                             .font(.caption)
                             .padding(.horizontal, Theme.spacingSM)
                             .padding(.vertical, Theme.spacingXS)
-                            .background(Theme.surfaceElevated)
+                            .background(Theme.surfaceElevated.opacity(0.8))
                             .clipShape(Capsule())
                     }
                 }
@@ -357,7 +372,8 @@ struct ProgramDetailView: View {
             }
         }
         .padding()
-        .cardStyle()
+        .background(Theme.surface.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusMD))
     }
 
     private func descriptionSection(_ description: String) -> some View {
@@ -372,7 +388,8 @@ struct ProgramDetailView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .cardStyle()
+        .background(Theme.surface.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusMD))
     }
 
     private var actionSection: some View {

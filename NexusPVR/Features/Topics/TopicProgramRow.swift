@@ -321,7 +321,7 @@ struct TopicProgramRowTV: View {
 
     var body: some View {
         Button {
-            performAction()
+            onShowDetails?()
         } label: {
             HStack(alignment: .center, spacing: Theme.spacingLG) {
                 // Sport icon or default TV icon
@@ -423,7 +423,7 @@ struct TopicProgramRowTV: View {
                 Label("Details", systemImage: "info.circle")
             }
         }
-        .disabled(!isActionable || isProcessing)
+        .disabled(isProcessing)
         .task {
             await checkIfScheduled()
         }
