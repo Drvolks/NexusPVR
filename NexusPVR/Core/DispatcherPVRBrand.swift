@@ -28,9 +28,9 @@ nonisolated enum DispatcherPVRBrand: BrandConfig {
     // Discovery
     static let discoveryProbePath = "/proxy/ts/status"
 
-    // Colors — teal palette derived from app icon (#438f7f)
-    static let accent = Color(light: Color(hex: "#357265"), dark: Color(hex: "#438f7f"))
-    static let accentSecondary = Color(light: Color(hex: "#2a5c52"), dark: Color(hex: "#357265"))
+    // Colors — blue-teal palette derived from app icon (#438fa4)
+    static let accent = Color(light: Color(hex: "#357284"), dark: Color(hex: "#438fa4"))
+    static let accentSecondary = Color(light: Color(hex: "#2a5c6b"), dark: Color(hex: "#357284"))
     static let background = Color(light: Color(hex: "#f2f2f7"), dark: Color(hex: "#121214"))
     static let surface = Color(light: Color(hex: "#ffffff"), dark: Color(hex: "#1a1a1e"))
     static let surfaceElevated = Color(light: Color(hex: "#f2f2f7"), dark: Color(hex: "#242428"))
@@ -42,5 +42,5 @@ nonisolated enum DispatcherPVRBrand: BrandConfig {
     static let warning = Color(light: Color(hex: "#c4872e"), dark: Color(hex: "#e5a03a"))
     static let error = Color(light: Color(hex: "#c43535"), dark: Color(hex: "#d94848"))
     static let recording = Color(light: Color(hex: "#c43535"), dark: Color(hex: "#d94848"))
-    static let guideNowPlaying = Color(light: Color(hex: "#d4ece7"), dark: Color(hex: "#1a3630"))
+    static let guideNowPlaying = Color(light: Color(hex: "#d4e7ec"), dark: Color(hex: "#1a3036"))
 }
