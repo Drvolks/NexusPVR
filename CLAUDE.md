@@ -148,11 +148,86 @@ Server config stored separately in `ServerConfig` (Core/Models/Session.swift).
 
 ## Build Instructions
 
+The project has two schemes:
+- **NexusPVR** - Targets NextPVR server
+- **DispatcharrPVR** - Targets Dispatcharr server (variant using Django REST API)
+
+### Build Commands
+
+```bash
+# iOS Simulator
+xcodebuild -project NexusPVR.xcodeproj -scheme NextPVR -configuration Debug -destination 'platform=iOS Simulator,name=iPhone 16' build
+xcodebuild -project NexusPVR.xcodeproj -scheme DispatcharrPVR -configuration Debug -destination 'platform=iOS Simulator,name=iPhone 16' build
+
+# tvOS Simulator
+xcodebuild -project NexusPVR.xcodeproj -scheme NextPVR -configuration Debug -destination 'platform=tvOS Simulator,name=Apple TV' build
+
+# macOS
+xcodebuild -project NexusPVR.xcodeproj -scheme NextPVR -configuration Debug -destination 'platform=macOS' build
+
+# Archive all (script)
+./archive-all.sh
+```
+
+### Running the App
+
 1. Open `NexusPVR.xcodeproj` in Xcode
-2. Select target (iOS, tvOS, or macOS)
-3. Build and run
+2. Select scheme (NextPVR or DispatcharrPVR)
+3. Select target (iOS, tvOS, or macOS)
+4. Build and run (Cmd+R)
 
 Note: MPV framework must be properly linked for video playback.
+
+## Code Quality
+
+- Build must succeed before committing
+- Use SwiftLint if configured in the project
+- Verify on simulator after major changes
+
+## Dependencies
+
+- **XcodeGen**: Used to generate .xcodeproj from project.yml (if applicable)
+- **libmpv**: Video playback framework (compiled for each platform)
+- **Swift Package Manager**: Any additional packages via SPM
+
+## Architecture Decisions
+
+### MVVM + Environment Objects
+- View models use `@MainActor` and `ObservableObject` for UI state
+- `NextPVRClient` and `AppState` are injected via `.environmentObject()` for global access
+- This pattern allows testing view models independently from SwiftUI views
+
+### @Observable vs @ObservableObject
+- Use `@ObservableObject` for view models that need Combine publishers
+- Consider `@Observable` for simpler state management in SwiftUI views
+- Current view models use `@ObservableObject` (GuideViewModel, LiveTVViewModel, etc.)
+
+## Common Development Workflows
+
+### Adding a New Feature
+1. Create feature folder in `Features/` if needed
+2. Add models in `Core/Models/`
+3. Add API methods in `NextPVRClient.swift` if backend calls needed
+4. Create ViewModel with `@MainActor @ObservableObject`
+5. Create SwiftUI views
+6. Add navigation entry in `NavigationRouter.swift`
+7. Build and test on all platforms
+
+### Adding a New API Endpoint
+1. Add method to `NextPVRClient.swift` using async/await
+2. Create response model in `Core/Models/Session.swift` if needed
+3. Update view models to call the new method
+4. Handle errors consistently with existing patterns
+
+### Running UI Tests
+1. Ensure demo server is accessible
+2. Select test target in Xcode
+3. Run tests via Cmd+U or xcodebuild
+
+### Debugging
+- Use `#if DEBUG` for debug-only code (logging, test data)
+- MPV player logs to console - useful for playback issues
+- Enable network logging in Xcode to inspect API calls
 
 ## Code Style
 
