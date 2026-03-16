@@ -1,6 +1,10 @@
-# NexusPVR
+# StreamCrate
 
-A native Apple client for [NextPVR](https://www.nextpvr.com/) and [Dispatcharr](https://github.com/Dispatcharr/Dispatcharr) DVR/PVR software. Built with SwiftUI, it runs on iOS, iPadOS, tvOS, and macOS from a single codebase. The supported backend is selected based on the target app scheme.
+A native Apple streaming client for PVR/DVR servers. Built with SwiftUI, it runs on iOS, iPadOS, tvOS, and macOS from a single codebase.
+
+Two variants are available:
+- **StreamCrate - For NextPVR** — connects to [NextPVR](https://www.nextpvr.com/) servers
+- **StreamCrate** — connects to [Dispatcharr](https://github.com/Dispatcharr/Dispatcharr) servers
 
 ## Features
 
@@ -46,9 +50,9 @@ A native Apple client for [NextPVR](https://www.nextpvr.com/) and [Dispatcharr](
 ## Build Instructions
 
 1. Open `NexusPVR.xcodeproj` in Xcode 26+
-2. Select a target:
-   - **NexusPVR** — NextPVR client
-   - **DispatcherPVR** — Dispatcharr client
+2. Select a scheme:
+   - **NextPVR** — StreamCrate - For NextPVR
+   - **DispatcharrPVR** — StreamCrate
 3. Select a destination platform (iOS, tvOS, or macOS)
 4. Build and run (`Cmd+R`)
 
