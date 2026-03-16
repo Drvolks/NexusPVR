@@ -218,13 +218,6 @@ struct ChannelCard: View {
                     .lineLimit(1)
             }
 
-            // Play indicator
-            HStack {
-                Spacer()
-                Image(systemName: "play.circle.fill")
-                    .font(.title2)
-                    .foregroundStyle(Theme.accent)
-            }
         }
         .padding()
         .cardStyle()

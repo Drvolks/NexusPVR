@@ -1440,23 +1440,15 @@ struct GuideView: View {
         Button {
             playLiveChannel(channel)
         } label: {
-            ZStack {
-                CachedAsyncImage(url: try? client.channelIconURL(channelId: channel.id)) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                } placeholder: {
-                    ProgressView()
-                        .scaleEffect(0.5)
-                }
-                .frame(width: Theme.iconSize, height: Theme.iconSize)
-
-                // Play indicator on hover/focus
-                Image(systemName: "play.circle.fill")
-                    .foregroundStyle(Theme.accent)
-                    .font(.caption)
-                    .offset(x: Theme.iconSize * 0.35, y: Theme.iconSize * 0.35)
+            CachedAsyncImage(url: try? client.channelIconURL(channelId: channel.id)) { image in
+                image
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            } placeholder: {
+                ProgressView()
+                    .scaleEffect(0.5)
             }
+            .frame(width: Theme.iconSize, height: Theme.iconSize)
             .frame(width: channelWidth, height: rowHeight)
             .background(Theme.surfaceElevated)
             .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
