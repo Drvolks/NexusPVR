@@ -109,7 +109,7 @@ struct IOSNavigation: View {
                 switch appState.selectedTab {
                 case .guide:
                     GuideView()
-                case .topics:
+                case .topics, .calendar:
                     TopicsView()
                 case .search:
                     SearchView()
@@ -466,6 +466,19 @@ struct IOSNavigation: View {
             .accessibilityIdentifier("keyword-tabs")
 
             Button {
+                appState.showingCalendar = true
+            } label: {
+                Image(systemName: "calendar")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Theme.accent)
+                    .frame(width: 44, height: 44)
+            }
+            .background(.ultraThinMaterial)
+            .clipShape(Circle())
+            .shadow(color: .black.opacity(0.25), radius: 12, x: 0, y: 4)
+            .accessibilityIdentifier("calendar-button")
+
+            Button {
                 appState.showingKeywordsEditor = true
             } label: {
                 Image(systemName: "pencil")
@@ -633,7 +646,7 @@ struct TVOSNavigation: View {
                     GuideView(onRequestNavBarFocus: { enableNavBar() })
                 case .recordings:
                     RecordingsListView()
-                case .topics:
+                case .topics, .calendar:
                     TopicsView()
                 case .search:
                     SearchView()
@@ -830,6 +843,8 @@ struct MacOSNavigation: View {
                                 GuideView()
                             case .topics:
                                 TopicsView()
+                            case .calendar:
+                                CalendarTabView()
                             case .search:
                                 SearchView()
                             case .recordings:

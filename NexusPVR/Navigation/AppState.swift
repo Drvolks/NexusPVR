@@ -12,6 +12,7 @@ enum Tab: String, Identifiable {
     case guide = "Guide"
     case recordings = "Recordings"
     case topics = "Topics"
+    case calendar = "Calendar"
     case search = "Search"
     #if DISPATCHERPVR
     case stats = "Status"
@@ -24,6 +25,7 @@ enum Tab: String, Identifiable {
         switch self {
         case .guide: return "calendar"
         case .topics: return "star.fill"
+        case .calendar: return "calendar.badge.clock"
         case .search: return "magnifyingglass"
         case .recordings: return "recordingtape"
         #if DISPATCHERPVR
@@ -69,7 +71,7 @@ enum Tab: String, Identifiable {
     static func macOSTabs(userLevel: Int) -> [Tab] {
         var cases: [Tab] = [.guide]
         if userLevel >= 1 { cases.append(.recordings) }
-        cases.append(.topics)
+        cases.append(contentsOf: [.topics, .calendar])
         #if DISPATCHERPVR
         if userLevel >= 1 { cases.append(.stats) }
         #endif
@@ -105,6 +107,7 @@ final class AppState: ObservableObject {
     @Published var topicKeywords: [String] = []
     @Published var selectedTopicKeyword: String = ""
     @Published var showingKeywordsEditor = false
+    @Published var showingCalendar = false
 
     // Recordings filter state (shared between RecordingsListView and iOS nav bar)
     @Published var recordingsFilter: RecordingsFilter = .completed

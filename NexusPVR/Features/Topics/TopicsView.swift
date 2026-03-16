@@ -136,6 +136,14 @@ struct TopicsView: View {
                 .frame(minWidth: 500, minHeight: 400)
                 #endif
         }
+        .sheet(isPresented: $appState.showingCalendar) {
+            CalendarView(programs: viewModel.matchingPrograms)
+                .environmentObject(client)
+                .environmentObject(appState)
+                #if os(macOS)
+                .frame(minWidth: 700, minHeight: 500)
+                #endif
+        }
         #endif
         .task {
             viewModel.epgCache = epgCache
@@ -413,7 +421,7 @@ struct TopicsView: View {
 }
 
 // Helper struct for sheet binding
-private struct ProgramTopicDetail: Identifiable {
+struct ProgramTopicDetail: Identifiable {
     var id: String { "\(program.id)-\(channel.id)" }
     let program: Program
     let channel: Channel
