@@ -1,12 +1,12 @@
-# CLAUDE.md - StreamCrate
+# CLAUDE.md - StreamClient
 
 ## Project Overview
 
-StreamCrate is a native Apple streaming client for PVR/DVR servers. Supports iOS, iPadOS, tvOS, and macOS from a single codebase using SwiftUI.
+StreamClient is a native Apple streaming client for PVR/DVR servers. Supports iOS, iPadOS, tvOS, and macOS from a single codebase using SwiftUI.
 
 ### Variants
-- **StreamCrate - For NextPVR** (scheme: `NextPVR`) — targets NextPVR server
-- **StreamCrate** (scheme: `DispatcharrPVR`) — targets Dispatcharr server (Django REST API)
+- **StreamClient - For NextPVR** (scheme: `NextPVR`) — targets NextPVR server
+- **StreamClient** (scheme: `DispatcharrPVR`) — targets Dispatcharr server (Django REST API)
 
 ## Tech Stack
 
@@ -153,8 +153,8 @@ Server config stored separately in `ServerConfig` (Core/Models/Session.swift).
 ## Build Instructions
 
 The project has two schemes:
-- **NextPVR** — StreamCrate - For NextPVR
-- **DispatcharrPVR** — StreamCrate
+- **NextPVR** — StreamClient - For NextPVR
+- **DispatcharrPVR** — StreamClient
 
 ### Build Commands
 
@@ -176,7 +176,7 @@ xcodebuild -project NexusPVR.xcodeproj -scheme NextPVR -configuration Debug -des
 ### Running the App
 
 1. Open `NexusPVR.xcodeproj` in Xcode
-2. Select scheme (NextPVR for StreamCrate - For NextPVR, or DispatcharrPVR for StreamCrate)
+2. Select scheme (NextPVR for StreamClient - For NextPVR, or DispatcharrPVR for StreamClient)
 3. Select target (iOS, tvOS, or macOS)
 4. Build and run (Cmd+R)
 
