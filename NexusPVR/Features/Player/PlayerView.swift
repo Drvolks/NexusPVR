@@ -1801,17 +1801,14 @@ final class MPVPlayerNSViewController: NSViewController, MPVPlayerMacOSControlle
     var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64) -> Void)?
 
     override func loadView() {
-        view = NSView(frame: NSRect(x: 0, y: 0, width: 1280, height: 720))
-        view.wantsLayer = true
-    }
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
+        let v = NSView(frame: NSRect(x: 0, y: 0, width: 1280, height: 720))
         metalLayer.backgroundColor = NSColor.black.cgColor
         metalLayer.pixelFormat = .bgra8Unorm
         metalLayer.framebufferOnly = true
-        view.layer = metalLayer
-        view.wantsLayer = true
+        // Set layer before wantsLayer for layer-hosting mode
+        v.layer = metalLayer
+        v.wantsLayer = true
+        view = v
     }
 
     override func viewDidLayout() {
@@ -1892,8 +1889,11 @@ final class MPVPlayerPixelBufferNSViewController: NSViewController, MPVPlayerMac
     var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64) -> Void)?
 
     override func loadView() {
-        view = NSView(frame: NSRect(x: 0, y: 0, width: 1280, height: 720))
-        view.wantsLayer = true
+        let v = NSView(frame: NSRect(x: 0, y: 0, width: 1280, height: 720))
+        // Set layer before wantsLayer for layer-hosting mode
+        v.layer = CALayer()
+        v.wantsLayer = true
+        view = v
     }
 
     override func viewDidLoad() {
@@ -1902,7 +1902,6 @@ final class MPVPlayerPixelBufferNSViewController: NSViewController, MPVPlayerMac
         bridge = MPVPixelBufferBridge(displayLayer: displayLayer)
         displayLayer.videoGravity = .resizeAspect
         displayLayer.backgroundColor = NSColor.black.cgColor
-        view.layer = CALayer()
         view.layer?.addSublayer(displayLayer)
     }
 
