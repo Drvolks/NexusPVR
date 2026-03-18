@@ -439,7 +439,8 @@ struct RecordingDetailView: View {
                     url: url,
                     title: recording.name,
                     recordingId: recording.id,
-                    resumePosition: recording.playbackPosition
+                    resumePosition: recording.playbackPosition,
+                    isRecordingInProgress: recording.recordingStatus == .recording
                 )
                 dismiss()
             } catch {
@@ -457,7 +458,8 @@ struct RecordingDetailView: View {
                     url: url,
                     title: recording.name,
                     recordingId: recording.id,
-                    resumePosition: 0
+                    resumePosition: 0,
+                    isRecordingInProgress: recording.recordingStatus == .recording
                 )
                 dismiss()
             } catch {

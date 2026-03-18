@@ -200,7 +200,8 @@ struct IOSNavigation: View {
                     url: url,
                     title: appState.currentlyPlayingTitle ?? "",
                     recordingId: appState.currentlyPlayingRecordingId,
-                    resumePosition: appState.currentlyPlayingResumePosition
+                    resumePosition: appState.currentlyPlayingResumePosition,
+                    isRecordingInProgress: appState.currentlyPlayingIsRecordingInProgress
                 )
                 .statusBarHidden()
             }
@@ -684,7 +685,8 @@ struct TVOSNavigation: View {
                     url: url,
                     title: appState.currentlyPlayingTitle ?? "",
                     recordingId: appState.currentlyPlayingRecordingId,
-                    resumePosition: appState.currentlyPlayingResumePosition
+                    resumePosition: appState.currentlyPlayingResumePosition,
+                    isRecordingInProgress: appState.currentlyPlayingIsRecordingInProgress
                 )
             }
         }
@@ -797,7 +799,8 @@ struct MacOSNavigation: View {
                     url: url,
                     title: appState.currentlyPlayingTitle ?? "",
                     recordingId: appState.currentlyPlayingRecordingId,
-                    resumePosition: appState.currentlyPlayingResumePosition
+                    resumePosition: appState.currentlyPlayingResumePosition,
+                    isRecordingInProgress: appState.currentlyPlayingIsRecordingInProgress
                 )
             } else {
                 // Show regular navigation with sidebar

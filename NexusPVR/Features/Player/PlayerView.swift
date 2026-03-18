@@ -31,6 +31,7 @@ struct PlayerView: View {
     let title: String
     let recordingId: Int?
     let resumePosition: Int?
+    let isRecordingInProgress: Bool
 
     @State private var showControls = true
     @State private var hideControlsTask: Task<Void, Never>?
@@ -45,6 +46,7 @@ struct PlayerView: View {
     @State private var seekForward: (() -> Void)?
     @State private var seekBackward: (() -> Void)?
     @State private var seekToPositionFunc: ((Double) -> Void)?
+    @State private var reloadAtPositionFunc: ((URL, Double) -> Void)?
     @State private var cleanupAction: (() -> Void)?
     @State private var hasResumed = false
     @State private var isPlayerReady = false
@@ -70,11 +72,15 @@ struct PlayerView: View {
     @State private var sleepAssertionID: IOPMAssertionID = 0
     #endif
 
-    init(url: URL, title: String, recordingId: Int? = nil, resumePosition: Int? = nil) {
+    // Continuation for in-progress recordings
+    @State private var recordingStillInProgress = false
+
+    init(url: URL, title: String, recordingId: Int? = nil, resumePosition: Int? = nil, isRecordingInProgress: Bool = false) {
         self.url = url
         self.title = title
         self.recordingId = recordingId
         self.resumePosition = resumePosition
+        self.isRecordingInProgress = isRecordingInProgress
     }
 
     var body: some View {
@@ -92,9 +98,28 @@ struct PlayerView: View {
                 seekToPosition: $seekToPositionFunc,
                 seekBackwardTime: seekBackwardTime,
                 seekForwardTime: seekForwardTime,
+                isRecordingInProgress: isRecordingInProgress,
                 onPlaybackEnded: {
-                    savePlaybackPosition()
-                    markAsWatched()
+                    if recordingStillInProgress {
+                        // In-progress recording: playlist will continue, don't mark as watched
+                    } else {
+                        savePlaybackPosition()
+                        markAsWatched()
+                    }
+                },
+                onPlaybackEndedEOF: {
+                    guard recordingStillInProgress else {
+                        savePlaybackPosition()
+                        markAsWatched()
+                        return
+                    }
+                    // EOF on in-progress recording — reload at current position
+                    let resumeAt = max(0, currentPosition - 5)
+                    print("MPV: EOF on in-progress recording, reloading at \(String(format: "%.1f", resumeAt))s")
+                    reloadAtPositionFunc?(url, resumeAt)
+                },
+                onFileLoaded: {
+                    handleRecordingReload()
                 },
                 onTogglePlayPause: {
                     isPlaying.toggle()
@@ -121,7 +146,8 @@ struct PlayerView: View {
                     audioChannelLayout = audioChannels
                     droppedFrames = dropped
                 },
-                cleanupAction: $cleanupAction
+                cleanupAction: $cleanupAction,
+                reloadAtPosition: $reloadAtPositionFunc
             )
                 .ignoresSafeArea()
             #elseif os(iOS)
@@ -136,9 +162,27 @@ struct PlayerView: View {
                 seekToPosition: $seekToPositionFunc,
                 seekBackwardTime: seekBackwardTime,
                 seekForwardTime: seekForwardTime,
+                isRecordingInProgress: isRecordingInProgress,
                 onPlaybackEnded: {
-                    savePlaybackPosition()
-                    markAsWatched()
+                    if recordingStillInProgress {
+                        // In-progress recording: playlist will continue, don't mark as watched
+                    } else {
+                        savePlaybackPosition()
+                        markAsWatched()
+                    }
+                },
+                onPlaybackEndedEOF: {
+                    guard recordingStillInProgress else {
+                        savePlaybackPosition()
+                        markAsWatched()
+                        return
+                    }
+                    let resumeAt = max(0, currentPosition - 5)
+                    print("MPV: EOF on in-progress recording, reloading at \(String(format: "%.1f", resumeAt))s")
+                    reloadAtPositionFunc?(url, resumeAt)
+                },
+                onFileLoaded: {
+                    handleRecordingReload()
                 },
                 onVideoInfoUpdate: { codec, height, hwdec, audioChannels, dropped in
                     videoCodec = codec
@@ -148,7 +192,8 @@ struct PlayerView: View {
                     droppedFrames = dropped
                 },
                 cleanupAction: $cleanupAction,
-                pixelBufferViewRef: $pixelBufferView
+                pixelBufferViewRef: $pixelBufferView,
+                reloadAtPosition: $reloadAtPositionFunc
             )
                 .ignoresSafeArea()
                 .onTapGesture {
@@ -172,9 +217,27 @@ struct PlayerView: View {
                 seekToPosition: $seekToPositionFunc,
                 seekBackwardTime: seekBackwardTime,
                 seekForwardTime: seekForwardTime,
+                isRecordingInProgress: isRecordingInProgress,
                 onPlaybackEnded: {
-                    savePlaybackPosition()
-                    markAsWatched()
+                    if recordingStillInProgress {
+                        // In-progress recording: playlist will continue, don't mark as watched
+                    } else {
+                        savePlaybackPosition()
+                        markAsWatched()
+                    }
+                },
+                onPlaybackEndedEOF: {
+                    guard recordingStillInProgress else {
+                        savePlaybackPosition()
+                        markAsWatched()
+                        return
+                    }
+                    let resumeAt = max(0, currentPosition - 5)
+                    print("MPV: EOF on in-progress recording, reloading at \(String(format: "%.1f", resumeAt))s")
+                    reloadAtPositionFunc?(url, resumeAt)
+                },
+                onFileLoaded: {
+                    handleRecordingReload()
                 },
                 onVideoInfoUpdate: { codec, height, hwdec, audioChannels, dropped in
                     videoCodec = codec
@@ -182,7 +245,8 @@ struct PlayerView: View {
                     hwDecoder = hwdec
                     audioChannelLayout = audioChannels
                     droppedFrames = dropped
-                }
+                },
+                reloadAtPosition: $reloadAtPositionFunc
             )
                 .ignoresSafeArea()
                 .onTapGesture {
@@ -398,6 +462,12 @@ struct PlayerView: View {
                 savePlaybackPosition()
             }
         }
+        .task {
+            // Initialize in-progress recording state
+            if isRecordingInProgress {
+                recordingStillInProgress = true
+            }
+        }
     }
 
     private func savePlaybackPosition() {
@@ -405,8 +475,8 @@ struct PlayerView: View {
         let position = Int(currentPosition)
         // Don't save if we're at the very beginning
         guard position > 10 else { return }
-        // If near the end, mark as fully watched instead
-        if duration > 0 && currentPosition > duration - 30 {
+        // If near the end, mark as fully watched instead (but not for in-progress recordings)
+        if !recordingStillInProgress && duration > 0 && currentPosition > duration - 30 {
             markAsWatched()
             return
         }
@@ -909,6 +979,32 @@ struct PlayerView: View {
     }
     #endif
 
+    // MARK: - In-Progress Recording Continuation
+
+    private func handleRecordingReload() {
+        guard recordingStillInProgress else { return }
+        // After a reload, check if the recording has completed
+        checkRecordingStatus()
+    }
+
+    private func checkRecordingStatus() {
+        guard let recordingId = recordingId else { return }
+        Task {
+            do {
+                let (completed, recording, _) = try await client.getAllRecordings()
+                let allRecordings = completed + recording
+                if let current = allRecordings.first(where: { $0.id == recordingId }) {
+                    if current.recordingStatus != .recording {
+                        print("MPV: Recording completed, disabling continuation")
+                        recordingStillInProgress = false
+                    }
+                }
+            } catch {
+                print("MPV: Failed to check recording status: \(error)")
+            }
+        }
+    }
+
     private func toggleControls() {
         withAnimation(.easeInOut(duration: 0.2)) {
             showControls.toggle()
@@ -945,12 +1041,15 @@ class MPVPlayerCore: NSObject {
     private let eventLoopGroup = DispatchGroup()
     var onPositionUpdate: ((Double, Double) -> Void)?
     var onPlaybackEnded: (() -> Void)?
+    var onPlaybackEndedEOF: (() -> Void)?
+    var onFileLoaded: (() -> Void)?
     var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64) -> Void)?
     private var lastCodec: String?
     private var lastHeight: Int?
     private var lastHwdec: String?
     private var lastAudioChannels: String?
     private var hasTriedHwdecCopy = false
+    private var hasNotifiedEOF = false
     private var currentURLPath: String?
     private var lastPlaybackError: String?
 
@@ -977,6 +1076,8 @@ class MPVPlayerCore: NSObject {
         // Nil out callbacks to break reference cycles with SwiftUI @State
         onPositionUpdate = nil
         onPlaybackEnded = nil
+        onPlaybackEndedEOF = nil
+        onFileLoaded = nil
         onVideoInfoUpdate = nil
 
         if let mpvGL = mpvGL {
@@ -1024,6 +1125,23 @@ class MPVPlayerCore: NSObject {
             if statsCounter % 10 == 0 {
                 self.logPerformanceStats()
             }
+            // Detect EOF via eof-reached property (keep-open=yes suppresses END_FILE event)
+            if !self.hasNotifiedEOF, let mpv = self.mpv {
+                var eofReached: Int32 = 0
+                mpv_get_property(mpv, "eof-reached", MPV_FORMAT_FLAG, &eofReached)
+                if eofReached != 0 {
+                    self.hasNotifiedEOF = true
+                    print("MPV: EOF detected via polling (eof-reached=true)")
+                    DispatchQueue.main.async {
+                        if let eofHandler = self.onPlaybackEndedEOF {
+                            eofHandler()
+                        } else {
+                            self.onPlaybackEnded?()
+                        }
+                    }
+                }
+            }
+
             DispatchQueue.main.async {
                 self.onPositionUpdate?(position, duration)
                 // Always send video info (includes dropped frames counter)
@@ -1123,6 +1241,22 @@ class MPVPlayerCore: NSObject {
         let result = mpv_command_string(mpv, command)
         if result < 0 {
             print("MPV: seekTo command failed: \(result)")
+        }
+    }
+
+    private var pendingSeekAfterReload: Double?
+
+    func reloadAtPosition(url: URL, startPosition: Double) {
+        guard let mpv = mpv else { return }
+        pendingSeekAfterReload = startPosition
+        hasNotifiedEOF = false
+        let command = "loadfile \"\(url.absoluteString)\" replace"
+        let result = mpv_command_string(mpv, command)
+        if result < 0 {
+            print("MPV: reloadAtPosition command failed: \(result)")
+            pendingSeekAfterReload = nil
+        } else {
+            print("MPV: Reloading, will seek to \(String(format: "%.1f", startPosition))s after load")
         }
     }
 
@@ -1630,6 +1764,15 @@ class MPVPlayerCore: NSObject {
 
         case MPV_EVENT_FILE_LOADED:
             print("MPV: File loaded successfully")
+            hasNotifiedEOF = false
+            if let seekPos = pendingSeekAfterReload {
+                pendingSeekAfterReload = nil
+                print("MPV: Applying pending seek to \(String(format: "%.1f", seekPos))s")
+                seekTo(position: seekPos)
+            }
+            DispatchQueue.main.async { [weak self] in
+                self?.onFileLoaded?()
+            }
 
         case MPV_EVENT_PLAYBACK_RESTART:
             print("MPV: Playback started/restarted")
@@ -1655,7 +1798,11 @@ class MPVPlayerCore: NSObject {
                     // Normal end of file - video finished playing
                     print("MPV: Video playback completed naturally")
                     DispatchQueue.main.async { [weak self] in
-                        self?.onPlaybackEnded?()
+                        if let eofHandler = self?.onPlaybackEndedEOF {
+                            eofHandler()
+                        } else {
+                            self?.onPlaybackEnded?()
+                        }
                     }
                 } else if reason == MPV_END_FILE_REASON_ERROR {
                     let error = data.error
@@ -1713,9 +1860,13 @@ struct MPVContainerView: NSViewControllerRepresentable {
     @Binding var seekToPosition: ((Double) -> Void)?
     let seekBackwardTime: Int
     let seekForwardTime: Int
+    let isRecordingInProgress: Bool
 
     var onPlaybackEnded: (() -> Void)?
+    var onPlaybackEndedEOF: (() -> Void)?
+    var onFileLoaded: (() -> Void)?
     var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64) -> Void)?
+    @Binding var reloadAtPosition: ((URL, Double) -> Void)?
 
     func makeNSViewController(context: Context) -> NSViewController {
         let controller: NSViewController & MPVPlayerMacOSController
@@ -1736,12 +1887,16 @@ struct MPVContainerView: NSViewControllerRepresentable {
             }
         }
         controller.onPlaybackEnded = onPlaybackEnded
+        if isRecordingInProgress {
+            controller.onPlaybackEndedEOF = onPlaybackEndedEOF
+            controller.onFileLoaded = onFileLoaded
+        }
         controller.onVideoInfoUpdate = onVideoInfoUpdate
         controller.loadURL(url)
         controller.startPositionPolling()
         context.coordinator.playerController = controller
 
-        // Set up seek closures
+        // Set up seek and playlist closures
         DispatchQueue.main.async {
             self.seekForward = {
                 controller.seek(seconds: self.seekForwardTime)
@@ -1751,6 +1906,9 @@ struct MPVContainerView: NSViewControllerRepresentable {
             }
             self.seekToPosition = { position in
                 controller.seekTo(position: position)
+            }
+            self.reloadAtPosition = { url, startPosition in
+                controller.reloadAtPosition(url: url, startPosition: startPosition)
             }
         }
 
@@ -1782,6 +1940,8 @@ struct MPVContainerView: NSViewControllerRepresentable {
 protocol MPVPlayerMacOSController: AnyObject {
     var onPositionUpdate: ((Double, Double) -> Void)? { get set }
     var onPlaybackEnded: (() -> Void)? { get set }
+    var onPlaybackEndedEOF: (() -> Void)? { get set }
+    var onFileLoaded: (() -> Void)? { get set }
     var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64) -> Void)? { get set }
     func setup(errorBinding: Binding<String?>?)
     func loadURL(_ url: URL)
@@ -1789,6 +1949,7 @@ protocol MPVPlayerMacOSController: AnyObject {
     func pause()
     func seek(seconds: Int)
     func seekTo(position: Double)
+    func reloadAtPosition(url: URL, startPosition: Double)
     func startPositionPolling()
     func cleanup()
 }
@@ -1798,6 +1959,8 @@ final class MPVPlayerNSViewController: NSViewController, MPVPlayerMacOSControlle
     private let metalLayer = StableMetalLayer()
     var onPositionUpdate: ((Double, Double) -> Void)?
     var onPlaybackEnded: (() -> Void)?
+    var onPlaybackEndedEOF: (() -> Void)?
+    var onFileLoaded: (() -> Void)?
     var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64) -> Void)?
 
     override func loadView() {
@@ -1828,6 +1991,12 @@ final class MPVPlayerNSViewController: NSViewController, MPVPlayerMacOSControlle
         player?.onPlaybackEnded = { [weak self] in
             self?.onPlaybackEnded?()
         }
+        player?.onPlaybackEndedEOF = { [weak self] in
+            self?.onPlaybackEndedEOF?()
+        }
+        player?.onFileLoaded = { [weak self] in
+            self?.onFileLoaded?()
+        }
         player?.onVideoInfoUpdate = { [weak self] codec, height, hwdec, audioChannels, dropped in
             self?.onVideoInfoUpdate?(codec, height, hwdec, audioChannels, dropped)
         }
@@ -1853,6 +2022,10 @@ final class MPVPlayerNSViewController: NSViewController, MPVPlayerMacOSControlle
         player?.seekTo(position: position)
     }
 
+    func reloadAtPosition(url: URL, startPosition: Double) {
+        player?.reloadAtPosition(url: url, startPosition: startPosition)
+    }
+
     func startPositionPolling() {
         player?.startPositionPolling()
     }
@@ -1862,6 +2035,8 @@ final class MPVPlayerNSViewController: NSViewController, MPVPlayerMacOSControlle
         player = nil
         onPositionUpdate = nil
         onPlaybackEnded = nil
+        onPlaybackEndedEOF = nil
+        onFileLoaded = nil
         onVideoInfoUpdate = nil
     }
 
@@ -1886,6 +2061,8 @@ final class MPVPlayerPixelBufferNSViewController: NSViewController, MPVPlayerMac
     private var bridge: MPVPixelBufferBridge?
     var onPositionUpdate: ((Double, Double) -> Void)?
     var onPlaybackEnded: (() -> Void)?
+    var onPlaybackEndedEOF: (() -> Void)?
+    var onFileLoaded: (() -> Void)?
     var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64) -> Void)?
 
     override func loadView() {
@@ -1922,6 +2099,12 @@ final class MPVPlayerPixelBufferNSViewController: NSViewController, MPVPlayerMac
         player?.onPlaybackEnded = { [weak self] in
             self?.onPlaybackEnded?()
         }
+        player?.onPlaybackEndedEOF = { [weak self] in
+            self?.onPlaybackEndedEOF?()
+        }
+        player?.onFileLoaded = { [weak self] in
+            self?.onFileLoaded?()
+        }
         player?.onVideoInfoUpdate = { [weak self] codec, height, hwdec, audioChannels, dropped in
             self?.onVideoInfoUpdate?(codec, height, hwdec, audioChannels, dropped)
         }
@@ -1941,6 +2124,10 @@ final class MPVPlayerPixelBufferNSViewController: NSViewController, MPVPlayerMac
         Task { @MainActor in bridge?.flush() }
     }
 
+    func reloadAtPosition(url: URL, startPosition: Double) {
+        player?.reloadAtPosition(url: url, startPosition: startPosition)
+    }
+
     func startPositionPolling() { player?.startPositionPolling() }
 
     func cleanup() {
@@ -1948,6 +2135,8 @@ final class MPVPlayerPixelBufferNSViewController: NSViewController, MPVPlayerMac
         player = nil
         onPositionUpdate = nil
         onPlaybackEnded = nil
+        onPlaybackEndedEOF = nil
+        onFileLoaded = nil
         onVideoInfoUpdate = nil
     }
 }
@@ -1956,6 +2145,8 @@ final class MPVPlayerNSOpenGLViewController: NSViewController, MPVPlayerMacOSCon
     private var glView: MPVPlayerMacOGLView!
     var onPositionUpdate: ((Double, Double) -> Void)?
     var onPlaybackEnded: (() -> Void)?
+    var onPlaybackEndedEOF: (() -> Void)?
+    var onFileLoaded: (() -> Void)?
     var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64) -> Void)?
 
     override func loadView() {
@@ -1978,6 +2169,12 @@ final class MPVPlayerNSOpenGLViewController: NSViewController, MPVPlayerMacOSCon
         }
         glView.onPlaybackEnded = { [weak self] in
             self?.onPlaybackEnded?()
+        }
+        glView.onPlaybackEndedEOF = { [weak self] in
+            self?.onPlaybackEndedEOF?()
+        }
+        glView.onFileLoaded = { [weak self] in
+            self?.onFileLoaded?()
         }
         glView.onVideoInfoUpdate = { [weak self] codec, height, hwdec, audioChannels, dropped in
             self?.onVideoInfoUpdate?(codec, height, hwdec, audioChannels, dropped)
@@ -2004,6 +2201,10 @@ final class MPVPlayerNSOpenGLViewController: NSViewController, MPVPlayerMacOSCon
         glView.seekTo(position: position)
     }
 
+    func reloadAtPosition(url: URL, startPosition: Double) {
+        glView.reloadAtPosition(url: url, startPosition: startPosition)
+    }
+
     func startPositionPolling() {
         glView.startPositionPolling()
     }
@@ -2012,6 +2213,8 @@ final class MPVPlayerNSOpenGLViewController: NSViewController, MPVPlayerMacOSCon
         glView.cleanup()
         onPositionUpdate = nil
         onPlaybackEnded = nil
+        onPlaybackEndedEOF = nil
+        onFileLoaded = nil
         onVideoInfoUpdate = nil
     }
 }
@@ -2024,6 +2227,8 @@ final class MPVPlayerMacOGLView: NSOpenGLView {
     var needsDrawing = true
     var onPositionUpdate: ((Double, Double) -> Void)?
     var onPlaybackEnded: (() -> Void)?
+    var onPlaybackEndedEOF: (() -> Void)?
+    var onFileLoaded: (() -> Void)?
     var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64) -> Void)?
 
     override init(frame frameRect: NSRect) {
@@ -2088,6 +2293,12 @@ final class MPVPlayerMacOGLView: NSOpenGLView {
         player?.onPlaybackEnded = { [weak self] in
             self?.onPlaybackEnded?()
         }
+        player?.onPlaybackEndedEOF = { [weak self] in
+            self?.onPlaybackEndedEOF?()
+        }
+        player?.onFileLoaded = { [weak self] in
+            self?.onFileLoaded?()
+        }
         player?.onVideoInfoUpdate = { [weak self] codec, height, hwdec, audioChannels, dropped in
             self?.onVideoInfoUpdate?(codec, height, hwdec, audioChannels, dropped)
         }
@@ -2144,6 +2355,10 @@ final class MPVPlayerMacOGLView: NSOpenGLView {
         player?.seekTo(position: position)
     }
 
+    func reloadAtPosition(url: URL, startPosition: Double) {
+        player?.reloadAtPosition(url: url, startPosition: startPosition)
+    }
+
     func startPositionPolling() {
         player?.startPositionPolling()
     }
@@ -2156,6 +2371,8 @@ final class MPVPlayerMacOGLView: NSOpenGLView {
         player = nil
         onPositionUpdate = nil
         onPlaybackEnded = nil
+        onPlaybackEndedEOF = nil
+        onFileLoaded = nil
         onVideoInfoUpdate = nil
     }
 
@@ -2204,14 +2421,18 @@ struct MPVContainerView: UIViewRepresentable {
     @Binding var seekToPosition: ((Double) -> Void)?
     let seekBackwardTime: Int
     let seekForwardTime: Int
+    let isRecordingInProgress: Bool
 
     var onPlaybackEnded: (() -> Void)?
+    var onPlaybackEndedEOF: (() -> Void)?
+    var onFileLoaded: (() -> Void)?
     var onTogglePlayPause: (() -> Void)?
     var onToggleControls: (() -> Void)?
     var onShowControls: (() -> Void)?
     var onDismiss: (() -> Void)?
     var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64) -> Void)?
     @Binding var cleanupAction: (() -> Void)?
+    @Binding var reloadAtPosition: ((URL, Double) -> Void)?
 
     private func configureCommonCallbacks(for view: MPVPlayerMetalView) {
         view.onPositionUpdate = { position, dur in
@@ -2221,6 +2442,10 @@ struct MPVContainerView: UIViewRepresentable {
             }
         }
         view.onPlaybackEnded = onPlaybackEnded
+        if isRecordingInProgress {
+            view.onPlaybackEndedEOF = onPlaybackEndedEOF
+            view.onFileLoaded = onFileLoaded
+        }
         view.onVideoInfoUpdate = onVideoInfoUpdate
         view.onPlayPause = onTogglePlayPause
         view.onSeekForward = {
@@ -2243,6 +2468,10 @@ struct MPVContainerView: UIViewRepresentable {
             }
         }
         view.onPlaybackEnded = onPlaybackEnded
+        if isRecordingInProgress {
+            view.onPlaybackEndedEOF = onPlaybackEndedEOF
+            view.onFileLoaded = onFileLoaded
+        }
         view.onVideoInfoUpdate = onVideoInfoUpdate
         view.onPlayPause = onTogglePlayPause
         view.onSeekForward = {
@@ -2265,6 +2494,10 @@ struct MPVContainerView: UIViewRepresentable {
             }
         }
         view.onPlaybackEnded = onPlaybackEnded
+        if isRecordingInProgress {
+            view.onPlaybackEndedEOF = onPlaybackEndedEOF
+            view.onFileLoaded = onFileLoaded
+        }
         view.onVideoInfoUpdate = onVideoInfoUpdate
         view.onPlayPause = onTogglePlayPause
         view.onSeekForward = {
@@ -2292,6 +2525,9 @@ struct MPVContainerView: UIViewRepresentable {
             self.seekToPosition = { position in
                 view.seekTo(position: position)
             }
+            self.reloadAtPosition = { url, startPosition in
+                view.reloadAtPosition(url: url, startPosition: startPosition)
+            }
         }
     }
 
@@ -2308,6 +2544,9 @@ struct MPVContainerView: UIViewRepresentable {
             self.seekToPosition = { position in
                 view.seekTo(position: position)
             }
+            self.reloadAtPosition = { url, startPosition in
+                view.reloadAtPosition(url: url, startPosition: startPosition)
+            }
         }
     }
 
@@ -2323,6 +2562,9 @@ struct MPVContainerView: UIViewRepresentable {
             }
             self.seekToPosition = { position in
                 view.seekTo(position: position)
+            }
+            self.reloadAtPosition = { url, startPosition in
+                view.reloadAtPosition(url: url, startPosition: startPosition)
             }
         }
     }
@@ -2420,11 +2662,15 @@ struct MPVContainerView: UIViewRepresentable {
     @Binding var seekToPosition: ((Double) -> Void)?
     let seekBackwardTime: Int
     let seekForwardTime: Int
+    let isRecordingInProgress: Bool
 
     var onPlaybackEnded: (() -> Void)?
+    var onPlaybackEndedEOF: (() -> Void)?
+    var onFileLoaded: (() -> Void)?
     var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64) -> Void)?
     @Binding var cleanupAction: (() -> Void)?
     @Binding var pixelBufferViewRef: MPVPlayerPixelBufferView?
+    @Binding var reloadAtPosition: ((URL, Double) -> Void)?
 
     private func configureCommonCallbacks(for view: MPVPlayerGLView) {
         view.setup(errorBinding: $errorMessage)
@@ -2435,6 +2681,10 @@ struct MPVContainerView: UIViewRepresentable {
             }
         }
         view.onPlaybackEnded = onPlaybackEnded
+        if isRecordingInProgress {
+            view.onPlaybackEndedEOF = onPlaybackEndedEOF
+            view.onFileLoaded = onFileLoaded
+        }
         view.onVideoInfoUpdate = onVideoInfoUpdate
     }
 
@@ -2447,6 +2697,10 @@ struct MPVContainerView: UIViewRepresentable {
             }
         }
         view.onPlaybackEnded = onPlaybackEnded
+        if isRecordingInProgress {
+            view.onPlaybackEndedEOF = onPlaybackEndedEOF
+            view.onFileLoaded = onFileLoaded
+        }
         view.onVideoInfoUpdate = onVideoInfoUpdate
     }
 
@@ -2459,6 +2713,10 @@ struct MPVContainerView: UIViewRepresentable {
             }
         }
         view.onPlaybackEnded = onPlaybackEnded
+        if isRecordingInProgress {
+            view.onPlaybackEndedEOF = onPlaybackEndedEOF
+            view.onFileLoaded = onFileLoaded
+        }
         view.onVideoInfoUpdate = onVideoInfoUpdate
     }
 
@@ -2472,6 +2730,9 @@ struct MPVContainerView: UIViewRepresentable {
             }
             self.seekToPosition = { position in
                 view.seekTo(position: position)
+            }
+            self.reloadAtPosition = { url, startPosition in
+                view.reloadAtPosition(url: url, startPosition: startPosition)
             }
         }
     }
@@ -2487,6 +2748,9 @@ struct MPVContainerView: UIViewRepresentable {
             self.seekToPosition = { position in
                 view.seekTo(position: position)
             }
+            self.reloadAtPosition = { url, startPosition in
+                view.reloadAtPosition(url: url, startPosition: startPosition)
+            }
         }
     }
 
@@ -2500,6 +2764,9 @@ struct MPVContainerView: UIViewRepresentable {
             }
             self.seekToPosition = { position in
                 view.seekTo(position: position)
+            }
+            self.reloadAtPosition = { url, startPosition in
+                view.reloadAtPosition(url: url, startPosition: startPosition)
             }
         }
     }
@@ -2589,6 +2856,8 @@ class MPVPlayerMetalView: UIView {
     private var metalLayer: CAMetalLayer?
     var onPositionUpdate: ((Double, Double) -> Void)?
     var onPlaybackEnded: (() -> Void)?
+    var onPlaybackEndedEOF: (() -> Void)?
+    var onFileLoaded: (() -> Void)?
     var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64) -> Void)?
 
     #if os(tvOS)
@@ -2675,6 +2944,12 @@ class MPVPlayerMetalView: UIView {
         player?.onPlaybackEnded = { [weak self] in
             self?.onPlaybackEnded?()
         }
+        player?.onPlaybackEndedEOF = { [weak self] in
+            self?.onPlaybackEndedEOF?()
+        }
+        player?.onFileLoaded = { [weak self] in
+            self?.onFileLoaded?()
+        }
         player?.onVideoInfoUpdate = { [weak self] codec, height, hwdec, audioChannels, dropped in
             self?.onVideoInfoUpdate?(codec, height, hwdec, audioChannels, dropped)
         }
@@ -2700,6 +2975,10 @@ class MPVPlayerMetalView: UIView {
         player?.seekTo(position: position)
     }
 
+    func reloadAtPosition(url: URL, startPosition: Double) {
+        player?.reloadAtPosition(url: url, startPosition: startPosition)
+    }
+
     func startPositionPolling() {
         player?.startPositionPolling()
     }
@@ -2709,6 +2988,8 @@ class MPVPlayerMetalView: UIView {
         player = nil
         onPositionUpdate = nil
         onPlaybackEnded = nil
+        onPlaybackEndedEOF = nil
+        onFileLoaded = nil
         onVideoInfoUpdate = nil
     }
 
@@ -2750,6 +3031,8 @@ class MPVPlayerPixelBufferView: UIView {
     var isPaused: Bool { session.player?.isPaused ?? true }
     var onPositionUpdate: ((Double, Double) -> Void)?
     var onPlaybackEnded: (() -> Void)?
+    var onPlaybackEndedEOF: (() -> Void)?
+    var onFileLoaded: (() -> Void)?
     var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64) -> Void)?
     private(set) var isReconnected = false
 
@@ -2837,6 +3120,12 @@ class MPVPlayerPixelBufferView: UIView {
         session.player?.onPlaybackEnded = { [weak self] in
             self?.onPlaybackEnded?()
         }
+        session.player?.onPlaybackEndedEOF = { [weak self] in
+            self?.onPlaybackEndedEOF?()
+        }
+        session.player?.onFileLoaded = { [weak self] in
+            self?.onFileLoaded?()
+        }
         session.player?.onVideoInfoUpdate = { [weak self] codec, width, hwdec, audioChannels, dropped in
             self?.onVideoInfoUpdate?(codec, width, hwdec, audioChannels, dropped)
         }
@@ -2860,6 +3149,10 @@ class MPVPlayerPixelBufferView: UIView {
         Task { @MainActor in session.bridge?.flush() }
     }
 
+    func reloadAtPosition(url: URL, startPosition: Double) {
+        session.player?.reloadAtPosition(url: url, startPosition: startPosition)
+    }
+
     func startPositionPolling() {
         session.player?.startPositionPolling()
     }
@@ -2869,12 +3162,16 @@ class MPVPlayerPixelBufferView: UIView {
             session.detachFromView()
             onPositionUpdate = nil
             onPlaybackEnded = nil
+            onPlaybackEndedEOF = nil
+            onFileLoaded = nil
             onVideoInfoUpdate = nil
             return
         }
         session.teardown()
         onPositionUpdate = nil
         onPlaybackEnded = nil
+        onPlaybackEndedEOF = nil
+        onFileLoaded = nil
         onVideoInfoUpdate = nil
     }
 
@@ -2935,6 +3232,8 @@ class MPVPlayerGLView: GLKView {
     let renderQueue = DispatchQueue(label: "nexuspvr.opengl", qos: .userInteractive)
     var onPositionUpdate: ((Double, Double) -> Void)?
     var onPlaybackEnded: (() -> Void)?
+    var onPlaybackEndedEOF: (() -> Void)?
+    var onFileLoaded: (() -> Void)?
     var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64) -> Void)?
     #if os(tvOS)
     var onPlayPause: (() -> Void)?
@@ -3050,6 +3349,12 @@ class MPVPlayerGLView: GLKView {
         player?.onPlaybackEnded = { [weak self] in
             self?.onPlaybackEnded?()
         }
+        player?.onPlaybackEndedEOF = { [weak self] in
+            self?.onPlaybackEndedEOF?()
+        }
+        player?.onFileLoaded = { [weak self] in
+            self?.onFileLoaded?()
+        }
         player?.onVideoInfoUpdate = { [weak self] codec, height, hwdec, audioChannels, dropped in
             self?.onVideoInfoUpdate?(codec, height, hwdec, audioChannels, dropped)
         }
@@ -3075,6 +3380,10 @@ class MPVPlayerGLView: GLKView {
         player?.seekTo(position: position)
     }
 
+    func reloadAtPosition(url: URL, startPosition: Double) {
+        player?.reloadAtPosition(url: url, startPosition: startPosition)
+    }
+
     func startPositionPolling() {
         player?.startPositionPolling()
     }
@@ -3092,6 +3401,8 @@ class MPVPlayerGLView: GLKView {
         player = nil
         onPositionUpdate = nil
         onPlaybackEnded = nil
+        onPlaybackEndedEOF = nil
+        onFileLoaded = nil
         onVideoInfoUpdate = nil
     }
 
