@@ -152,6 +152,19 @@ struct RecordingDetailView: View {
                             }
                             .buttonStyle(AccentButtonStyle())
 
+                            if let position = recording.playbackPosition, position > 10 {
+                                Button {
+                                    playRecording()
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "arrow.clockwise")
+                                        Text("Resume")
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(SecondaryButtonStyle())
+                            }
+
                             if recording.channelId != nil {
                                 Button {
                                     playLive()
@@ -344,6 +357,19 @@ struct RecordingDetailView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(AccentButtonStyle())
+
+                if let position = recording.playbackPosition, position > 10 {
+                    Button {
+                        playRecording()
+                    } label: {
+                        HStack {
+                            Image(systemName: "arrow.clockwise")
+                            Text("Resume")
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+                }
                 #endif
 
                 if recording.channelId != nil {
