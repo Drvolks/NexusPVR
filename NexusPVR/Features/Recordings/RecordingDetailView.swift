@@ -335,7 +335,7 @@ struct RecordingDetailView: View {
             if recording.recordingStatus == .recording {
                 #if !DISPATCHERPVR
                 Button {
-                    playRecording()
+                    playFromBeginning()
                 } label: {
                     HStack {
                         Image(systemName: "play.fill")
