@@ -134,7 +134,7 @@ private struct RecordingsListContentView: View {
             .confirmationDialog("Play Recording", isPresented: .constant(inProgressRecording != nil), presenting: inProgressRecording) { recording in
                 #if !DISPATCHERPVR
                 Button("Play from Beginning") {
-                    playRecording(recording)
+                    playRecordingFromBeginning(recording)
                     inProgressRecording = nil
                 }
                 #endif
@@ -287,7 +287,7 @@ private struct RecordingsListContentView: View {
                         if recording.recordingStatus == .recording {
                             #if !DISPATCHERPVR
                             Button {
-                                playRecording(recording)
+                                playRecordingFromBeginning(recording)
                             } label: {
                                 Label("Play from Beginning", systemImage: "play.fill")
                             }
@@ -360,7 +360,7 @@ private struct RecordingsListContentView: View {
                         if recording.recordingStatus == .recording {
                             #if !DISPATCHERPVR
                             Button {
-                                playRecording(recording)
+                                playRecordingFromBeginning(recording)
                             } label: {
                                 Label("Play from Beginning", systemImage: "play.fill")
                             }
