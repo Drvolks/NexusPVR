@@ -137,6 +137,12 @@ private struct RecordingsListContentView: View {
                     playRecordingFromBeginning(recording)
                     inProgressRecording = nil
                 }
+                if let position = recording.playbackPosition, position > 10 {
+                    Button("Resume") {
+                        playRecording(recording)
+                        inProgressRecording = nil
+                    }
+                }
                 #endif
                 if recording.channelId != nil {
                     Button("Watch Live") {
@@ -291,6 +297,13 @@ private struct RecordingsListContentView: View {
                             } label: {
                                 Label("Play from Beginning", systemImage: "play.fill")
                             }
+                            if let position = recording.playbackPosition, position > 10 {
+                                Button {
+                                    playRecording(recording)
+                                } label: {
+                                    Label("Resume", systemImage: "arrow.clockwise")
+                                }
+                            }
                             #endif
                             if recording.channelId != nil {
                                 Button {
@@ -363,6 +376,13 @@ private struct RecordingsListContentView: View {
                                 playRecordingFromBeginning(recording)
                             } label: {
                                 Label("Play from Beginning", systemImage: "play.fill")
+                            }
+                            if let position = recording.playbackPosition, position > 10 {
+                                Button {
+                                    playRecording(recording)
+                                } label: {
+                                    Label("Resume", systemImage: "arrow.clockwise")
+                                }
                             }
                             #endif
                             if recording.channelId != nil {
