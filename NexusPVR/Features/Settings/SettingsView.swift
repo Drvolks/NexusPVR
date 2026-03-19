@@ -21,6 +21,10 @@ struct SettingsView: View {
     @State private var iosGPUAPI: GPUAPI = UserPreferences.load().iosGPUAPI
     @State private var macosGPUAPI: GPUAPI = UserPreferences.load().macosGPUAPI
     @ObservedObject private var eventLog = NetworkEventLog.shared
+    #if DEBUG
+    @State private var debugStreamEnabled: Bool = UserDefaults.standard.bool(forKey: "debugStreamEnabled")
+    @State private var debugStreamURL: String = UserDefaults.standard.string(forKey: "debugStreamURL") ?? "http://localhost:9000/video"
+    #endif
 
 
     var body: some View {
@@ -40,6 +44,9 @@ struct SettingsView: View {
             List {
                 serverSection
                 playbackSection
+                #if DEBUG
+                debugStreamSection
+                #endif
                 eventLogLinkSection
             }
             .navigationTitle("Settings")
@@ -242,27 +249,44 @@ struct SettingsView: View {
                 .focusSection()
 
                 #if DEBUG
-                // Debug: Test Stream
                 TVSettingsSection(
                     title: "Debug",
                     icon: "ladybug"
                 ) {
-                    Button {
-                        let url = URL(filePath: "")
-                        appState.playStream(url: url, title: "Test MKV Stream")
-                    } label: {
-                        HStack {
-                            Image(systemName: "play.circle")
-                                .foregroundStyle(Theme.accent)
-                            Text("Test MKV Stream")
-                                .foregroundStyle(Theme.textPrimary)
-                            Spacer()
+                    VStack(spacing: Theme.spacingMD) {
+                        Toggle("Test Stream", isOn: $debugStreamEnabled)
+                            .onChange(of: debugStreamEnabled) { _, newValue in
+                                UserDefaults.standard.set(newValue, forKey: "debugStreamEnabled")
+                            }
+
+                        if debugStreamEnabled {
+                            HStack(spacing: 8) {
+                                TextField("Stream URL", text: $debugStreamURL)
+                                    .autocorrectionDisabled()
+                                    .onChange(of: debugStreamURL) { _, newValue in
+                                        UserDefaults.standard.set(newValue, forKey: "debugStreamURL")
+                                    }
+                            }
+
+                            Button {
+                                if let url = URL(string: debugStreamURL) {
+                                    appState.playStream(url: url, title: "Test Stream")
+                                }
+                            } label: {
+                                HStack {
+                                    Image(systemName: "play.circle")
+                                        .foregroundStyle(Theme.accent)
+                                    Text("Play Test Stream")
+                                        .foregroundStyle(Theme.textPrimary)
+                                    Spacer()
+                                }
+                                .padding()
+                                .background(Theme.surfaceElevated)
+                                .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
+                            }
+                            .buttonStyle(.card)
                         }
-                        .padding()
-                        .background(Theme.surfaceElevated)
-                        .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
                     }
-                    .buttonStyle(.card)
                 }
                 .focusSection()
                 #endif
@@ -445,6 +469,38 @@ struct SettingsView: View {
             return "Legacy OpenGL-based rendering. Broad compatibility but no Picture-in-Picture support."
         }
     }
+
+    #if DEBUG
+    private var debugStreamSection: some View {
+        Section {
+            Toggle("Test Stream Override", isOn: $debugStreamEnabled)
+                .onChange(of: debugStreamEnabled) { _, newValue in
+                    UserDefaults.standard.set(newValue, forKey: "debugStreamEnabled")
+                }
+
+            if debugStreamEnabled {
+                TextField("Stream URL", text: $debugStreamURL)
+                    .textContentType(.URL)
+                    .autocorrectionDisabled()
+                    #if os(iOS)
+                    .keyboardType(.URL)
+                    .textInputAutocapitalization(.never)
+                    #endif
+                    .onChange(of: debugStreamURL) { _, newValue in
+                        UserDefaults.standard.set(newValue, forKey: "debugStreamURL")
+                    }
+
+                Button("Play Test Stream") {
+                    if let url = URL(string: debugStreamURL) {
+                        appState.playStream(url: url, title: "Test Stream")
+                    }
+                }
+            }
+        } header: {
+            Text("Debug")
+        }
+    }
+    #endif
 
     private var eventLogLinkSection: some View {
         Section {

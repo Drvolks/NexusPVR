@@ -234,7 +234,20 @@ final class AppState: ObservableObject {
         channelName: String? = nil,
         isRecordingInProgress: Bool = false
     ) {
-        currentlyPlayingURL = url
+        #if DEBUG
+        let effectiveURL: URL
+        if UserDefaults.standard.bool(forKey: "debugStreamEnabled"),
+           let debugURL = UserDefaults.standard.string(forKey: "debugStreamURL"),
+           let override = URL(string: debugURL) {
+            effectiveURL = override
+            print("DEBUG: stream URL overridden to \(debugURL)")
+        } else {
+            effectiveURL = url
+        }
+        #else
+        let effectiveURL = url
+        #endif
+        currentlyPlayingURL = effectiveURL
         currentlyPlayingTitle = title
         currentlyPlayingRecordingId = recordingId
         currentlyPlayingResumePosition = resumePosition
