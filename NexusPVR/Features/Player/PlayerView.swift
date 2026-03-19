@@ -56,10 +56,14 @@ struct PlayerView: View {
     @State private var hwDecoder: String?
     @State private var audioChannelLayout: String?
     @State private var droppedFrames: Int64 = 0
+    @State private var videoGamma: String?
     @State private var showVideoInfo = false
     #if DISPATCHERPVR
     @State private var dispatchProfileBadge: String?
     @State private var dispatchProfileRefreshTask: Task<Void, Never>?
+    #endif
+    #if os(tvOS)
+    @State private var hasSetDisplayCriteria = false
     #endif
     #if os(iOS)
     @State private var pipIsSupported = AVPictureInPictureController.isPictureInPictureSupported()
@@ -139,12 +143,16 @@ struct PlayerView: View {
                     savePlaybackPosition()
                     appState.stopPlayback()
                 },
-                onVideoInfoUpdate: { codec, height, hwdec, audioChannels, dropped in
+                onVideoInfoUpdate: { codec, height, hwdec, audioChannels, dropped, gamma, fps in
                     videoCodec = codec
                     videoHeight = height
                     hwDecoder = hwdec
                     audioChannelLayout = audioChannels
                     droppedFrames = dropped
+                    videoGamma = gamma
+                    #if os(tvOS)
+                    updateDisplayCriteriaIfNeeded(gamma: gamma, fps: fps)
+                    #endif
                 },
                 cleanupAction: $cleanupAction,
                 reloadAtPosition: $reloadAtPositionFunc
@@ -184,12 +192,16 @@ struct PlayerView: View {
                 onFileLoaded: {
                     handleRecordingReload()
                 },
-                onVideoInfoUpdate: { codec, height, hwdec, audioChannels, dropped in
+                onVideoInfoUpdate: { codec, height, hwdec, audioChannels, dropped, gamma, fps in
                     videoCodec = codec
                     videoHeight = height
                     hwDecoder = hwdec
                     audioChannelLayout = audioChannels
                     droppedFrames = dropped
+                    videoGamma = gamma
+                    #if os(tvOS)
+                    updateDisplayCriteriaIfNeeded(gamma: gamma, fps: fps)
+                    #endif
                 },
                 cleanupAction: $cleanupAction,
                 pixelBufferViewRef: $pixelBufferView,
@@ -239,12 +251,16 @@ struct PlayerView: View {
                 onFileLoaded: {
                     handleRecordingReload()
                 },
-                onVideoInfoUpdate: { codec, height, hwdec, audioChannels, dropped in
+                onVideoInfoUpdate: { codec, height, hwdec, audioChannels, dropped, gamma, fps in
                     videoCodec = codec
                     videoHeight = height
                     hwDecoder = hwdec
                     audioChannelLayout = audioChannels
                     droppedFrames = dropped
+                    videoGamma = gamma
+                    #if os(tvOS)
+                    updateDisplayCriteriaIfNeeded(gamma: gamma, fps: fps)
+                    #endif
                 },
                 reloadAtPosition: $reloadAtPositionFunc
             )
@@ -292,7 +308,8 @@ struct PlayerView: View {
                 controlsOverlay
             }
 
-            // Keep video info visible even when controls are hidden
+            // Keep video info dropdown visible even when controls are hidden (iOS/macOS only)
+            #if !os(tvOS)
             if !showControls && showVideoInfo && isPlayerReady {
                 VStack {
                     HStack {
@@ -304,6 +321,7 @@ struct PlayerView: View {
                     Spacer()
                 }
             }
+            #endif
 
             // Error message
             if let error = errorMessage {
@@ -389,6 +407,9 @@ struct PlayerView: View {
             #endif
         }
         .onDisappear {
+            #if os(tvOS)
+            clearDisplayCriteria()
+            #endif
             #if os(iOS)
             let session = ActivePlayerSession.shared
             let nativePiPActive = isUsingPixelBufferRenderer && (session.isPiPActive || session.dismissingForPiP)
@@ -633,6 +654,73 @@ struct PlayerView: View {
         return max(0, min(totalWidth, CGFloat(progress) * totalWidth))
     }
 
+    #if os(tvOS)
+    private func updateDisplayCriteriaIfNeeded(gamma: String?, fps: Double) {
+        guard !hasSetDisplayCriteria else { return }
+        guard let gamma, !gamma.isEmpty else { return }
+
+        // Map mpv's gamma/transfer to CoreMedia transfer function
+        let transferFunction: CFString
+        switch gamma.lowercased() {
+        case "pq", "smpte-st2084", "smpte2084":
+            transferFunction = kCMFormatDescriptionTransferFunction_SMPTE_ST_2084_PQ
+        case "hlg", "arib-std-b67":
+            transferFunction = kCMFormatDescriptionTransferFunction_ITU_R_2100_HLG
+        case "bt.1886", "gamma2.2", "srgb":
+            return // SDR — no need to change display mode
+        default:
+            return
+        }
+
+        // Create a format description that describes the HDR video
+        let width = videoHeight.map { Int($0) * 16 / 9 } ?? 3840  // Estimate width from height
+        let height = videoHeight ?? 2160
+        var formatDescription: CMFormatDescription?
+        let extensions: [String: Any] = [
+            kCMFormatDescriptionExtension_TransferFunction as String: transferFunction,
+            kCMFormatDescriptionExtension_ColorPrimaries as String: kCMFormatDescriptionColorPrimaries_ITU_R_2020,
+            kCMFormatDescriptionExtension_YCbCrMatrix as String: kCMFormatDescriptionYCbCrMatrix_ITU_R_2020,
+        ]
+        CMVideoFormatDescriptionCreate(
+            allocator: kCFAllocatorDefault,
+            codecType: kCMVideoCodecType_HEVC,
+            width: Int32(width),
+            height: Int32(height),
+            extensions: extensions as CFDictionary,
+            formatDescriptionOut: &formatDescription
+        )
+
+        guard let formatDescription else {
+            print("DisplayManager: failed to create format description")
+            return
+        }
+
+        let refreshRate = fps > 0 ? Float(fps) : 0
+        let criteria = AVDisplayCriteria(refreshRate: refreshRate, formatDescription: formatDescription)
+
+        guard let window = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .flatMap({ $0.windows })
+            .first(where: { $0.isKeyWindow }) else { return }
+
+        window.avDisplayManager.preferredDisplayCriteria = criteria
+        hasSetDisplayCriteria = true
+        print("DisplayManager: set HDR criteria transfer=\(gamma) fps=\(refreshRate)")
+    }
+
+    private func clearDisplayCriteria() {
+        guard hasSetDisplayCriteria else { return }
+        guard let window = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .flatMap({ $0.windows })
+            .first(where: { $0.isKeyWindow }) else { return }
+
+        window.avDisplayManager.preferredDisplayCriteria = nil
+        hasSetDisplayCriteria = false
+        print("DisplayManager: cleared criteria")
+    }
+    #endif
+
     private var isUsingPixelBufferRenderer: Bool {
         #if os(tvOS)
         return UserPreferences.load().tvosGPUAPI == .pixelbuffer
@@ -746,6 +834,9 @@ struct PlayerView: View {
     }
 
     private var videoBadges: some View {
+        #if os(tvOS)
+        tvBadges
+        #else
         VStack(alignment: .trailing, spacing: 4) {
             if let height = videoHeight {
                 Button {
@@ -773,7 +864,63 @@ struct PlayerView: View {
                 }
             }
         }
+        #endif
     }
+
+    #if os(tvOS)
+    private var tvBadges: some View {
+        HStack(spacing: 6) {
+            if let height = videoHeight {
+                badgeText(resolutionLabel(height: height))
+            }
+            if let codec = videoCodec {
+                badgeText(formatCodecName(codec), color: hwBadgeColor)
+            }
+            if let gamma = videoGamma, isHDR(gamma) {
+                badgeText(hdrBadgeLabel(gamma), color: .cyan)
+            }
+            #if DISPATCHERPVR
+            if let profile = dispatchProfileBadge {
+                badgeText(profile)
+            }
+            #endif
+            if let audio = audioChannelLayout {
+                badgeText(audio)
+            }
+        }
+    }
+
+    private var hwBadgeColor: Color {
+        if let hw = hwDecoder, !hw.isEmpty, hw != "no" {
+            return .green
+        }
+        return .yellow
+    }
+
+    private func isHDR(_ gamma: String) -> Bool {
+        let g = gamma.lowercased()
+        return g == "pq" || g == "smpte-st2084" || g == "smpte2084" || g == "hlg" || g == "arib-std-b67"
+    }
+
+    private func hdrBadgeLabel(_ gamma: String) -> String {
+        switch gamma.lowercased() {
+        case "pq", "smpte-st2084", "smpte2084": return "HDR10"
+        case "hlg", "arib-std-b67": return "HLG"
+        default: return "HDR"
+        }
+    }
+
+    private func badgeText(_ text: String, color: Color = .white) -> some View {
+        Text(text)
+            .font(.caption2)
+            .fontWeight(.semibold)
+            .foregroundStyle(color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.black.opacity(0.6))
+            .cornerRadius(4)
+    }
+    #endif
 
     private var videoInfoDropdown: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -796,6 +943,9 @@ struct PlayerView: View {
                 videoInfoRow("Profile", profile)
             }
             #endif
+            if let gamma = videoGamma, !gamma.isEmpty {
+                videoInfoRow("HDR", hdrLabel(gamma))
+            }
             videoInfoRow("Renderer", rendererTag)
             if droppedFrames > 0 {
                 videoInfoRow("Dropped", "\(droppedFrames)")
@@ -805,6 +955,16 @@ struct PlayerView: View {
         .background(Color.black.opacity(0.8))
         .cornerRadius(8)
         .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+
+    private func hdrLabel(_ gamma: String) -> String {
+        switch gamma.lowercased() {
+        case "pq", "smpte-st2084", "smpte2084": return "HDR10 (PQ)"
+        case "hlg", "arib-std-b67": return "HLG"
+        case "bt.1886": return "SDR (BT.1886)"
+        case "srgb": return "SDR (sRGB)"
+        default: return gamma
+        }
     }
 
     private func videoInfoRow(_ label: String, _ value: String) -> some View {
@@ -1043,7 +1203,7 @@ class MPVPlayerCore: NSObject {
     var onPlaybackEnded: (() -> Void)?
     var onPlaybackEndedEOF: (() -> Void)?
     var onFileLoaded: (() -> Void)?
-    var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64) -> Void)?
+    var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64, String?, Double) -> Void)?
     private var lastCodec: String?
     private var lastHeight: Int?
     private var lastHwdec: String?
@@ -1114,7 +1274,7 @@ class MPVPlayerCore: NSObject {
             statsCounter += 1
             let shouldQueryInfo = statsCounter % 4 == 0 || self.lastCodec == nil
 
-            var info: (codec: String?, width: Int?, height: Int?, hwdec: String?, audioChannels: String?, droppedFrames: Int64)?
+            var info: (codec: String?, width: Int?, height: Int?, hwdec: String?, audioChannels: String?, droppedFrames: Int64, gamma: String?, fps: Double)?
             if shouldQueryInfo {
                 let i = self.getVideoInfo()
                 info = i
@@ -1157,7 +1317,7 @@ class MPVPlayerCore: NSObject {
             DispatchQueue.main.async {
                 self.onPositionUpdate?(position, duration)
                 if let info {
-                    self.onVideoInfoUpdate?(info.codec, info.height, info.hwdec, info.audioChannels, info.droppedFrames)
+                    self.onVideoInfoUpdate?(info.codec, info.height, info.hwdec, info.audioChannels, info.droppedFrames, info.gamma, info.fps)
                 }
             }
         }
@@ -1273,8 +1433,8 @@ class MPVPlayerCore: NSObject {
         }
     }
 
-    func getVideoInfo() -> (codec: String?, width: Int?, height: Int?, hwdec: String?, audioChannels: String?, droppedFrames: Int64) {
-        guard let mpv = mpv else { return (nil, nil, nil, nil, nil, 0) }
+    func getVideoInfo() -> (codec: String?, width: Int?, height: Int?, hwdec: String?, audioChannels: String?, droppedFrames: Int64, gamma: String?, fps: Double) {
+        guard let mpv = mpv else { return (nil, nil, nil, nil, nil, 0, nil, 0) }
 
         var codec: String?
         var width: Int?
@@ -1319,12 +1479,23 @@ class MPVPlayerCore: NSObject {
         var droppedFrames: Int64 = 0
         mpv_get_property(mpv, "frame-drop-count", MPV_FORMAT_INT64, &droppedFrames)
 
-        return (codec, width, height, hwdec, audioChannels, droppedFrames)
+        // Color transfer function (e.g. "pq", "hlg", "bt.1886") for HDR display mode matching
+        var gamma: String?
+        if let cString = mpv_get_property_string(mpv, "video-params/gamma") {
+            gamma = String(cString: cString)
+            mpv_free(cString)
+        }
+
+        // Frame rate for display mode matching
+        var fps: Double = 0
+        mpv_get_property(mpv, "container-fps", MPV_FORMAT_DOUBLE, &fps)
+
+        return (codec, width, height, hwdec, audioChannels, droppedFrames, gamma, fps)
     }
 
     private var hasLoggedVideoInfo = false
 
-    private func logVideoInfo(_ info: (codec: String?, width: Int?, height: Int?, hwdec: String?, audioChannels: String?, droppedFrames: Int64)) {
+    private func logVideoInfo(_ info: (codec: String?, width: Int?, height: Int?, hwdec: String?, audioChannels: String?, droppedFrames: Int64, gamma: String?, fps: Double)) {
         guard !hasLoggedVideoInfo, info.codec != nil else { return }
         hasLoggedVideoInfo = true
 
@@ -1792,7 +1963,7 @@ class MPVPlayerCore: NSObject {
             print("MPV: Playback started/restarted")
             let info = getVideoInfo()
             DispatchQueue.main.async { [weak self] in
-                self?.onVideoInfoUpdate?(info.codec, info.height, info.hwdec, info.audioChannels, info.droppedFrames)
+                self?.onVideoInfoUpdate?(info.codec, info.height, info.hwdec, info.audioChannels, info.droppedFrames, info.gamma, info.fps)
                 if let self = self, info.codec != nil {
                     self.logVideoInfo(info)
                 }
@@ -1879,7 +2050,7 @@ struct MPVContainerView: NSViewControllerRepresentable {
     var onPlaybackEnded: (() -> Void)?
     var onPlaybackEndedEOF: (() -> Void)?
     var onFileLoaded: (() -> Void)?
-    var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64) -> Void)?
+    var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64, String?, Double) -> Void)?
     @Binding var reloadAtPosition: ((URL, Double) -> Void)?
 
     func makeNSViewController(context: Context) -> NSViewController {
@@ -1956,7 +2127,7 @@ protocol MPVPlayerMacOSController: AnyObject {
     var onPlaybackEnded: (() -> Void)? { get set }
     var onPlaybackEndedEOF: (() -> Void)? { get set }
     var onFileLoaded: (() -> Void)? { get set }
-    var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64) -> Void)? { get set }
+    var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64, String?, Double) -> Void)? { get set }
     func setup(errorBinding: Binding<String?>?)
     func loadURL(_ url: URL)
     func play()
@@ -1975,7 +2146,7 @@ final class MPVPlayerNSViewController: NSViewController, MPVPlayerMacOSControlle
     var onPlaybackEnded: (() -> Void)?
     var onPlaybackEndedEOF: (() -> Void)?
     var onFileLoaded: (() -> Void)?
-    var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64) -> Void)?
+    var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64, String?, Double) -> Void)?
 
     override func loadView() {
         let v = NSView(frame: NSRect(x: 0, y: 0, width: 1280, height: 720))
@@ -2011,8 +2182,8 @@ final class MPVPlayerNSViewController: NSViewController, MPVPlayerMacOSControlle
         player?.onFileLoaded = { [weak self] in
             self?.onFileLoaded?()
         }
-        player?.onVideoInfoUpdate = { [weak self] codec, height, hwdec, audioChannels, dropped in
-            self?.onVideoInfoUpdate?(codec, height, hwdec, audioChannels, dropped)
+        player?.onVideoInfoUpdate = { [weak self] codec, height, hwdec, audioChannels, dropped, gamma, fps in
+            self?.onVideoInfoUpdate?(codec, height, hwdec, audioChannels, dropped, gamma, fps)
         }
     }
 
@@ -2077,7 +2248,7 @@ final class MPVPlayerPixelBufferNSViewController: NSViewController, MPVPlayerMac
     var onPlaybackEnded: (() -> Void)?
     var onPlaybackEndedEOF: (() -> Void)?
     var onFileLoaded: (() -> Void)?
-    var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64) -> Void)?
+    var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64, String?, Double) -> Void)?
 
     override func loadView() {
         let v = NSView(frame: NSRect(x: 0, y: 0, width: 1280, height: 720))
@@ -2119,8 +2290,8 @@ final class MPVPlayerPixelBufferNSViewController: NSViewController, MPVPlayerMac
         player?.onFileLoaded = { [weak self] in
             self?.onFileLoaded?()
         }
-        player?.onVideoInfoUpdate = { [weak self] codec, height, hwdec, audioChannels, dropped in
-            self?.onVideoInfoUpdate?(codec, height, hwdec, audioChannels, dropped)
+        player?.onVideoInfoUpdate = { [weak self] codec, height, hwdec, audioChannels, dropped, gamma, fps in
+            self?.onVideoInfoUpdate?(codec, height, hwdec, audioChannels, dropped, gamma, fps)
         }
     }
 
@@ -2161,7 +2332,7 @@ final class MPVPlayerNSOpenGLViewController: NSViewController, MPVPlayerMacOSCon
     var onPlaybackEnded: (() -> Void)?
     var onPlaybackEndedEOF: (() -> Void)?
     var onFileLoaded: (() -> Void)?
-    var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64) -> Void)?
+    var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64, String?, Double) -> Void)?
 
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 1280, height: 720))
@@ -2190,8 +2361,8 @@ final class MPVPlayerNSOpenGLViewController: NSViewController, MPVPlayerMacOSCon
         glView.onFileLoaded = { [weak self] in
             self?.onFileLoaded?()
         }
-        glView.onVideoInfoUpdate = { [weak self] codec, height, hwdec, audioChannels, dropped in
-            self?.onVideoInfoUpdate?(codec, height, hwdec, audioChannels, dropped)
+        glView.onVideoInfoUpdate = { [weak self] codec, height, hwdec, audioChannels, dropped, gamma, fps in
+            self?.onVideoInfoUpdate?(codec, height, hwdec, audioChannels, dropped, gamma, fps)
         }
     }
 
@@ -2243,7 +2414,7 @@ final class MPVPlayerMacOGLView: NSOpenGLView {
     var onPlaybackEnded: (() -> Void)?
     var onPlaybackEndedEOF: (() -> Void)?
     var onFileLoaded: (() -> Void)?
-    var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64) -> Void)?
+    var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64, String?, Double) -> Void)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect, pixelFormat: Self.defaultPixelFormat())!
@@ -2313,8 +2484,8 @@ final class MPVPlayerMacOGLView: NSOpenGLView {
         player?.onFileLoaded = { [weak self] in
             self?.onFileLoaded?()
         }
-        player?.onVideoInfoUpdate = { [weak self] codec, height, hwdec, audioChannels, dropped in
-            self?.onVideoInfoUpdate?(codec, height, hwdec, audioChannels, dropped)
+        player?.onVideoInfoUpdate = { [weak self] codec, height, hwdec, audioChannels, dropped, gamma, fps in
+            self?.onVideoInfoUpdate?(codec, height, hwdec, audioChannels, dropped, gamma, fps)
         }
     }
 
@@ -2444,7 +2615,7 @@ struct MPVContainerView: UIViewRepresentable {
     var onToggleControls: (() -> Void)?
     var onShowControls: (() -> Void)?
     var onDismiss: (() -> Void)?
-    var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64) -> Void)?
+    var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64, String?, Double) -> Void)?
     @Binding var cleanupAction: (() -> Void)?
     @Binding var reloadAtPosition: ((URL, Double) -> Void)?
 
@@ -2681,7 +2852,7 @@ struct MPVContainerView: UIViewRepresentable {
     var onPlaybackEnded: (() -> Void)?
     var onPlaybackEndedEOF: (() -> Void)?
     var onFileLoaded: (() -> Void)?
-    var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64) -> Void)?
+    var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64, String?, Double) -> Void)?
     @Binding var cleanupAction: (() -> Void)?
     @Binding var pixelBufferViewRef: MPVPlayerPixelBufferView?
     @Binding var reloadAtPosition: ((URL, Double) -> Void)?
@@ -2872,7 +3043,7 @@ class MPVPlayerMetalView: UIView {
     var onPlaybackEnded: (() -> Void)?
     var onPlaybackEndedEOF: (() -> Void)?
     var onFileLoaded: (() -> Void)?
-    var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64) -> Void)?
+    var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64, String?, Double) -> Void)?
 
     #if os(tvOS)
     // tvOS remote control callbacks
@@ -2964,8 +3135,8 @@ class MPVPlayerMetalView: UIView {
         player?.onFileLoaded = { [weak self] in
             self?.onFileLoaded?()
         }
-        player?.onVideoInfoUpdate = { [weak self] codec, height, hwdec, audioChannels, dropped in
-            self?.onVideoInfoUpdate?(codec, height, hwdec, audioChannels, dropped)
+        player?.onVideoInfoUpdate = { [weak self] codec, height, hwdec, audioChannels, dropped, gamma, fps in
+            self?.onVideoInfoUpdate?(codec, height, hwdec, audioChannels, dropped, gamma, fps)
         }
     }
 
@@ -3047,7 +3218,7 @@ class MPVPlayerPixelBufferView: UIView {
     var onPlaybackEnded: (() -> Void)?
     var onPlaybackEndedEOF: (() -> Void)?
     var onFileLoaded: (() -> Void)?
-    var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64) -> Void)?
+    var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64, String?, Double) -> Void)?
     private(set) var isReconnected = false
 
     #if os(tvOS)
@@ -3140,8 +3311,8 @@ class MPVPlayerPixelBufferView: UIView {
         session.player?.onFileLoaded = { [weak self] in
             self?.onFileLoaded?()
         }
-        session.player?.onVideoInfoUpdate = { [weak self] codec, width, hwdec, audioChannels, dropped in
-            self?.onVideoInfoUpdate?(codec, width, hwdec, audioChannels, dropped)
+        session.player?.onVideoInfoUpdate = { [weak self] codec, width, hwdec, audioChannels, dropped, gamma, fps in
+            self?.onVideoInfoUpdate?(codec, width, hwdec, audioChannels, dropped, gamma, fps)
         }
     }
 
@@ -3248,7 +3419,7 @@ class MPVPlayerGLView: GLKView {
     var onPlaybackEnded: (() -> Void)?
     var onPlaybackEndedEOF: (() -> Void)?
     var onFileLoaded: (() -> Void)?
-    var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64) -> Void)?
+    var onVideoInfoUpdate: ((String?, Int?, String?, String?, Int64, String?, Double) -> Void)?
     #if os(tvOS)
     var onPlayPause: (() -> Void)?
     var onSeekForward: (() -> Void)?
@@ -3369,8 +3540,8 @@ class MPVPlayerGLView: GLKView {
         player?.onFileLoaded = { [weak self] in
             self?.onFileLoaded?()
         }
-        player?.onVideoInfoUpdate = { [weak self] codec, height, hwdec, audioChannels, dropped in
-            self?.onVideoInfoUpdate?(codec, height, hwdec, audioChannels, dropped)
+        player?.onVideoInfoUpdate = { [weak self] codec, height, hwdec, audioChannels, dropped, gamma, fps in
+            self?.onVideoInfoUpdate?(codec, height, hwdec, audioChannels, dropped, gamma, fps)
         }
     }
 
