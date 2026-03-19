@@ -78,30 +78,13 @@ struct ContentView: View {
                 client.updateConfig(cloudConfig)
             }
 
-            // Authenticate before showing main UI to avoid race with GuideView
-            // Retry briefly — macOS network may not be ready on cold launch
-            // Cap total wait to 5s so unreachable servers don't block startup
+            // Authenticate before showing main UI.
+            // Single attempt with no artificial timeout — URLSession's
+            // timeoutIntervalForRequest (30s) handles unreachable servers.
+            // The previous task-group cancel pattern was aborting in-flight
+            // SSL handshakes on remote servers, causing -999 errors.
             if client.isConfigured && !client.isAuthenticated {
-                await withTaskGroup(of: Void.self) { group in
-                    group.addTask {
-                        for attempt in 1...3 {
-                            do {
-                                try await client.authenticate()
-                                return
-                            } catch {
-                                if attempt < 3 {
-                                    try? await Task.sleep(for: .seconds(1))
-                                }
-                            }
-                        }
-                    }
-                    group.addTask {
-                        try? await Task.sleep(for: .seconds(5))
-                    }
-                    // Whichever finishes first (auth success or timeout) unblocks
-                    await group.next()
-                    group.cancelAll()
-                }
+                try? await client.authenticate()
             }
 
             #if DISPATCHERPVR
