@@ -45,6 +45,7 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
     private let session: URLSession
     private let deviceName = Brand.deviceName
     private let liveClientName: String
+    private var authInProgress: Task<Void, Error>?
 
     private static let liveClientIDKey = "NextPVRLiveClientID"
 
@@ -243,6 +244,20 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
             throw NextPVRError.notConfigured
         }
 
+        // Coalesce concurrent auth calls — only one in-flight at a time
+        if let existing = authInProgress {
+            return try await existing.value
+        }
+
+        let task = Task {
+            try await self.authenticateImpl()
+        }
+        authInProgress = task
+        defer { authInProgress = nil }
+        try await task.value
+    }
+
+    private func authenticateImpl() async throws {
         isConnecting = true
         lastError = nil
 

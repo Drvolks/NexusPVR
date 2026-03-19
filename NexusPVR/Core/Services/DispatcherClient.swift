@@ -20,6 +20,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
     private var useApiKeyAuth = false
     /// When true, use output/XC endpoints instead of REST API (for Streamer users)
     var useOutputEndpoints = false
+    private var authInProgress: Task<Void, Error>?
     private let session: URLSession
     /// Maps tvg_id (e.g. "TSN1.ca") → channel id for EPG lookups
     private var tvgIdToChannelId: [String: Int] = [:]
@@ -214,6 +215,20 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
             throw PVRClientError.notConfigured
         }
 
+        // Coalesce concurrent auth calls — only one in-flight at a time
+        if let existing = authInProgress {
+            return try await existing.value
+        }
+
+        let task = Task {
+            try await self.authenticateImpl()
+        }
+        authInProgress = task
+        defer { authInProgress = nil }
+        try await task.value
+    }
+
+    private func authenticateImpl() async throws {
         // API key auth: use X-API-Key header, no JWT flow needed
         if !config.apiKey.isEmpty {
             isConnecting = true
