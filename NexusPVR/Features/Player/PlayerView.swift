@@ -1108,23 +1108,35 @@ class MPVPlayerCore: NSObject {
             guard let self = self else { return }
             let position = self.getTimePosition()
             let duration = self.getDuration()
-            let info = self.getVideoInfo()
-            let changed = info.codec != self.lastCodec || info.height != self.lastHeight || info.hwdec != self.lastHwdec || info.audioChannels != self.lastAudioChannels
-            if changed {
-                self.lastCodec = info.codec
-                self.lastHeight = info.height
-                self.lastHwdec = info.hwdec
-                self.lastAudioChannels = info.audioChannels
-                // Log video info to event log when it first becomes available
-                if info.codec != nil {
-                    self.logVideoInfo(info)
+
+            // Only query full video info every 2 seconds (4 ticks) to reduce mpv lock contention.
+            // Position/duration are lightweight reads; getVideoInfo reads 6+ properties.
+            statsCounter += 1
+            let shouldQueryInfo = statsCounter % 4 == 0 || self.lastCodec == nil
+
+            var info: (codec: String?, width: Int?, height: Int?, hwdec: String?, audioChannels: String?, droppedFrames: Int64)?
+            if shouldQueryInfo {
+                let i = self.getVideoInfo()
+                info = i
+                let changed = i.codec != self.lastCodec || i.height != self.lastHeight || i.hwdec != self.lastHwdec || i.audioChannels != self.lastAudioChannels
+                if changed {
+                    self.lastCodec = i.codec
+                    self.lastHeight = i.height
+                    self.lastHwdec = i.hwdec
+                    self.lastAudioChannels = i.audioChannels
+                    if i.codec != nil {
+                        self.logVideoInfo(i)
+                    }
                 }
             }
-            // Log performance stats every 5 seconds
-            statsCounter += 1
-            if statsCounter % 10 == 0 {
-                self.logPerformanceStats()
-            }
+
+            // Log performance stats every 10 seconds (less frequent to reduce lock pressure)
+            // Disabled by default — uncomment for diagnostics. Each call reads 7 mpv properties
+            // which can cause frame drops on constrained hardware (4K HEVC on Apple TV).
+            // if statsCounter % 20 == 0 {
+            //     self.logPerformanceStats()
+            // }
+
             // Detect EOF via eof-reached property (keep-open=yes suppresses END_FILE event)
             if !self.hasNotifiedEOF, let mpv = self.mpv {
                 var eofReached: Int32 = 0
@@ -1144,8 +1156,9 @@ class MPVPlayerCore: NSObject {
 
             DispatchQueue.main.async {
                 self.onPositionUpdate?(position, duration)
-                // Always send video info (includes dropped frames counter)
-                self.onVideoInfoUpdate?(info.codec, info.height, info.hwdec, info.audioChannels, info.droppedFrames)
+                if let info {
+                    self.onVideoInfoUpdate?(info.codec, info.height, info.hwdec, info.audioChannels, info.droppedFrames)
+                }
             }
         }
     }
@@ -1447,11 +1460,12 @@ class MPVPlayerCore: NSObject {
         // Buffering for streaming - wait for video to buffer before starting
         mpv_set_option_string(mpv, "cache", "yes")
         mpv_set_option_string(mpv, "cache-secs", "120")
-        mpv_set_option_string(mpv, "cache-pause-initial", "yes")  // Pause until cache is filled initially
+        mpv_set_option_string(mpv, "cache-pause-initial", "yes")
         mpv_set_option_string(mpv, "demuxer-max-bytes", "150MiB")
         mpv_set_option_string(mpv, "demuxer-max-back-bytes", "150MiB")
         mpv_set_option_string(mpv, "demuxer-seekable-cache", "yes")
-        mpv_set_option_string(mpv, "cache-pause-wait", "5")
+        mpv_set_option_string(mpv, "cache-pause-wait", "1")       // Shorter pause to avoid visible glitches
+        mpv_set_option_string(mpv, "cache-pause", "no")           // Don't auto-pause on buffer underrun during playback
         mpv_set_option_string(mpv, "demuxer-readahead-secs", "60")
 
         // Network
