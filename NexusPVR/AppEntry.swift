@@ -50,7 +50,11 @@ struct PVRApp: App {
                 .ignoresSafeArea()
                 #endif
                 .onReceive(NotificationCenter.default.publisher(for: NSUbiquitousKeyValueStore.didChangeExternallyNotification)) { _ in
-                    // Reload server config if it changed from iCloud
+                    // Reload server config if it changed from iCloud.
+                    // Skip if the user just unlinked — the iCloud removal
+                    // notification can arrive after the clear() and re-apply
+                    // a stale config from the sync queue.
+                    guard client.isConfigured else { return }
                     let newConfig = ServerConfig.load()
                     if newConfig.isConfigured && newConfig != client.config {
                         client.updateConfig(newConfig)
