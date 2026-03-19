@@ -85,6 +85,12 @@ nonisolated struct Recording: Identifiable, Codable, Hashable {
         return Double(position) / Double(duration) >= 0.9
     }
 
+    /// True if the recording has any saved playback position (partially or fully watched).
+    var hasResumePosition: Bool {
+        guard let position = playbackPosition else { return false }
+        return position > 10 // Ignore trivial positions from accidental plays
+    }
+
     /// Total recording duration including pre/post padding, in seconds
     var totalRecordingDuration: Int? {
         guard let duration else { return nil }

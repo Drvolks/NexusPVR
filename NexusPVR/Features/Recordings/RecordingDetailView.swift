@@ -189,7 +189,7 @@ struct RecordingDetailView: View {
                             }
                             .buttonStyle(AccentButtonStyle())
 
-                            if recording.isWatched {
+                            if recording.hasResumePosition {
                                 Button {
                                     playFromBeginning()
                                 } label: {
@@ -396,7 +396,7 @@ struct RecordingDetailView: View {
                 }
                 .buttonStyle(AccentButtonStyle())
 
-                if recording.isWatched {
+                if recording.hasResumePosition {
                     Button {
                         playFromBeginning()
                     } label: {

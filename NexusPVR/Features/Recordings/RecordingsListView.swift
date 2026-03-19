@@ -318,7 +318,7 @@ private struct RecordingsListContentView: View {
                             } label: {
                                 Label("Play", systemImage: "play.fill")
                             }
-                            if recording.isWatched {
+                            if recording.hasResumePosition {
                                 Button {
                                     playRecordingFromBeginning(recording)
                                 } label: {
@@ -398,7 +398,7 @@ private struct RecordingsListContentView: View {
                             } label: {
                                 Label("Play", systemImage: "play.fill")
                             }
-                            if recording.isWatched {
+                            if recording.hasResumePosition {
                                 Button {
                                     playRecordingFromBeginning(recording)
                                 } label: {
