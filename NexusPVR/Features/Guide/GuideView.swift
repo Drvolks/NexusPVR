@@ -853,7 +853,7 @@ struct GuideView: View {
             // Programs row
             ZStack(alignment: .leading) {
                 Rectangle()
-                    .fill(isRowFocused ? Color(white: 0.08) : Color(white: 0.05))
+                    .fill(isRowFocused ? Theme.surfaceElevated : Theme.surface)
 
                 if programs.isEmpty {
                     // Show channel name as tappable placeholder so user can still play
@@ -899,7 +899,7 @@ struct GuideView: View {
         .padding(.leading, 40)
         .padding(.trailing, 10)
         .frame(width: channelWidth, height: rowHeight)
-        .background(isSelected ? Color(white: 0.15) : Theme.surfaceElevated)
+        .background(isSelected ? Theme.surfaceHighlight : Theme.surfaceElevated)
     }
 
     private func tvOSProgramCell(program: Program, isFocused: Bool, gridWidth: CGFloat, pxPerMinute: CGFloat) -> some View {
@@ -914,9 +914,9 @@ struct GuideView: View {
             } else if isRecording {
                 return Theme.recording.opacity(0.3)
             } else if isAiring {
-                return Color(white: 0.18)
+                return Theme.guideNowPlaying
             } else {
-                return Color(white: 0.12)
+                return Theme.surfaceElevated
             }
         }()
 

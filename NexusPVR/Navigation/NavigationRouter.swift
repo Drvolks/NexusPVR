@@ -749,7 +749,7 @@ struct TVOSNavigation: View {
         .padding(.horizontal, 40)
         .background(
             LinearGradient(
-                colors: [Color.black.opacity(0.8), Color.black.opacity(0.4), Color.clear],
+                colors: [Theme.background.opacity(0.8), Theme.background.opacity(0.4), Color.clear],
                 startPoint: .top,
                 endPoint: .bottom
             )

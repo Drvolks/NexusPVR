@@ -78,6 +78,11 @@ enum Theme {
     // MARK: - Guide Colors
 
     static let guideNowPlaying = Brand.guideNowPlaying
+
+    // MARK: - Focus Colors (tvOS)
+
+    static let focusBorder = Color(light: Color(hex: "#1c1c1e"), dark: .white)
+    static let focusShadow = Color(light: Color(hex: "#1c1c1e").opacity(0.4), dark: Color.white.opacity(0.5))
     static let guidePast = Brand.surface.opacity(0.5)
     static let guideScheduled = Brand.accent.opacity(0.3)
 
@@ -209,10 +214,10 @@ private struct TVGuideFocusWrapper<Content: View>: View {
             .overlay {
                 if isFocused {
                     RoundedRectangle(cornerRadius: Theme.cornerRadiusSM)
-                        .strokeBorder(Color.white, lineWidth: 4)
+                        .strokeBorder(Theme.focusBorder, lineWidth: 4)
                 }
             }
-            .shadow(color: isFocused ? Color.white.opacity(0.5) : .clear, radius: 15)
+            .shadow(color: isFocused ? Theme.focusShadow : .clear, radius: 15)
             .animation(.easeInOut(duration: 0.15), value: isFocused)
     }
 }
@@ -241,10 +246,10 @@ private struct TVChannelFocusWrapper<Content: View>: View {
             .overlay {
                 if isFocused {
                     RoundedRectangle(cornerRadius: Theme.cornerRadiusSM)
-                        .strokeBorder(Color.white, lineWidth: 4)
+                        .strokeBorder(Theme.focusBorder, lineWidth: 4)
                 }
             }
-            .shadow(color: isFocused ? Color.white.opacity(0.5) : .clear, radius: 15)
+            .shadow(color: isFocused ? Theme.focusShadow : .clear, radius: 15)
             .animation(.easeInOut(duration: 0.15), value: isFocused)
     }
 }
