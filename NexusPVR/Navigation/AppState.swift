@@ -152,20 +152,23 @@ final class AppState: ObservableObject {
         guard !client.useOutputEndpoints else { return }
         streamCountTask = Task { [weak self] in
             while !Task.isCancelled {
-                do {
-                    let status = try await client.getProxyStatus()
-                    let newCount = status.count ?? status.channels?.count ?? 0
-                    self?.activeStreamCount = newCount
-                } catch {
-                    // Silently ignore - badge just won't update
-                }
-                do {
-                    let accounts = try await client.getM3UAccounts()
-                    let activeAccounts = accounts.filter { $0.isActive && !$0.locked }
-                    let hasErrors = activeAccounts.contains { $0.status != "success" }
-                    self?.hasM3UErrors = hasErrors
-                } catch {
-                    // Silently ignore
+                // Skip polling while player is active to reduce network/CPU during playback
+                if self?.isShowingPlayer != true {
+                    do {
+                        let status = try await client.getProxyStatus()
+                        let newCount = status.count ?? status.channels?.count ?? 0
+                        self?.activeStreamCount = newCount
+                    } catch {
+                        // Silently ignore - badge just won't update
+                    }
+                    do {
+                        let accounts = try await client.getM3UAccounts()
+                        let activeAccounts = accounts.filter { $0.isActive && !$0.locked }
+                        let hasErrors = activeAccounts.contains { $0.status != "success" }
+                        self?.hasM3UErrors = hasErrors
+                    } catch {
+                        // Silently ignore
+                    }
                 }
                 try? await Task.sleep(for: .seconds(10))
             }
@@ -185,7 +188,10 @@ final class AppState: ObservableObject {
         stopRecordingsActivityPolling()
         recordingsActivityTask = Task { [weak self] in
             while !Task.isCancelled {
-                await self?.refreshRecordingsActivity(client: client)
+                // Skip polling while player is active to reduce network/CPU during playback
+                if self?.isShowingPlayer != true {
+                    await self?.refreshRecordingsActivity(client: client)
+                }
                 try? await Task.sleep(for: .seconds(10))
             }
         }
