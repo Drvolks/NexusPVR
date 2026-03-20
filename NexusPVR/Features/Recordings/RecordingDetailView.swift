@@ -346,7 +346,6 @@ struct RecordingDetailView: View {
     private var actionSection: some View {
         VStack(spacing: Theme.spacingMD) {
             if recording.recordingStatus == .recording {
-                #if !DISPATCHERPVR
                 Button {
                     playFromBeginning()
                 } label: {
@@ -370,7 +369,6 @@ struct RecordingDetailView: View {
                     }
                     .buttonStyle(SecondaryButtonStyle())
                 }
-                #endif
 
                 if recording.channelId != nil {
                     Button {
