@@ -61,6 +61,7 @@ enum Theme {
     static let surface = Brand.surface
     static let surfaceElevated = Brand.surfaceElevated
     static let surfaceHighlight = Brand.surfaceHighlight
+    static let channelColumnBackground = Brand.channelColumnBackground
 
     // MARK: - Text Colors
 

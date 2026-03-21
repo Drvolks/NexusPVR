@@ -35,6 +35,7 @@ nonisolated enum DispatcherPVRBrand: BrandConfig {
     static let surface = Color(light: Color(hex: "#ffffff"), dark: Color(hex: "#1a1a1e"))
     static let surfaceElevated = Color(light: Color(hex: "#f2f2f7"), dark: Color(hex: "#242428"))
     static let surfaceHighlight = Color(light: Color(hex: "#e5e5ea"), dark: Color(hex: "#2e2e34"))
+    static let channelColumnBackground = Color(light: Color(hex: "#e0e0e5"), dark: Color(hex: "#242428"))
     static let textPrimary = Color(light: Color(hex: "#1c1c1e"), dark: Color(hex: "#f0f0f2"))
     static let textSecondary = Color(light: Color(hex: "#636366"), dark: Color(hex: "#b0b0b8"))
     static let textTertiary = Color(light: Color(hex: "#aeaeb2"), dark: Color(hex: "#6e6e78"))
