@@ -34,16 +34,6 @@
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "6E74159A2F315369001FE083"
-               BuildableName = "NexusPVRTests.xctest"
-               BlueprintName = "NexusPVRTests"
-               ReferencedContainer = "container:NexusPVR.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
-         <TestableReference
-            skipped = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
                BlueprintIdentifier = "6E7415A42F315369001FE083"
                BuildableName = "NexusPVRUITests.xctest"
                BlueprintName = "NexusPVRUITests"

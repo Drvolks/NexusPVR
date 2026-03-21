@@ -12,11 +12,13 @@
 set -euo pipefail
 
 # --- Configuration ---
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT="${SCRIPT_DIR}/NexusPVR.xcodeproj"
 SCHEMES=("NextPVR" "Dispatcharr")
 DESTINATIONS=(
     "platform=macOS"
     "platform=iOS Simulator,name=iPhone 17 Pro"
-    "platform=tvOS Simulator,name=Apple TV 4K (3rd generation)"
+    "platform=tvOS Simulator,name=Apple TV"
 )
 DEST_LABELS=("macOS" "iOS" "tvOS")
 
@@ -102,6 +104,7 @@ run_test() {
     start_time=$(date +%s)
 
     if xcodebuild test \
+        -project "$PROJECT" \
         -scheme "$scheme" \
         -destination "$destination" \
         -resultBundlePath "/tmp/TestResults_${scheme}_${label}.xcresult" \
