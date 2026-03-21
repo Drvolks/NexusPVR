@@ -396,6 +396,7 @@ struct IOSNavigation: View {
             TextField("Search...", text: $searchText)
                 .font(.subheadline)
                 .textFieldStyle(.plain)
+                .accessibilityIdentifier("global-search-field")
                 .focused($isSearchFocused)
                 .submitLabel(.search)
                 .onSubmit {
@@ -953,6 +954,7 @@ struct MacOSNavigation: View {
             TextField("Search...", text: $searchText)
                 .font(.subheadline)
                 .textFieldStyle(.plain)
+                .accessibilityIdentifier("global-search-field")
                 .submitLabel(.search)
                 .onSubmit {
                     if searchText.count >= 2 {

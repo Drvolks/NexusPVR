@@ -33,6 +33,7 @@ struct SearchView: View {
                     resultsList
                 }
             }
+            .accessibilityIdentifier("search-view")
             #if os(tvOS)
             .safeAreaInset(edge: .top) {
                 tvSearchBar
@@ -78,6 +79,7 @@ struct SearchView: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(Theme.textSecondary)
             TextField("Search programs", text: $viewModel.searchText)
+                .accessibilityIdentifier("search-view-field")
                 .onSubmit {
                     viewModel.search()
                 }

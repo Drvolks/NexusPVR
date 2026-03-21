@@ -122,6 +122,7 @@ struct CalendarView: View {
                     weekView
                 }
             }
+            .accessibilityIdentifier("calendar-view")
             .frame(maxHeight: .infinity)
             .background(Theme.background)
             .onGeometryChange(for: CGFloat.self) { geo in
