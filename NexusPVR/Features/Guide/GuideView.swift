@@ -36,6 +36,11 @@ struct GuideView: View {
     // Keywords for pre-computing matches
     @State private var keywords: [String] = []
 
+    #if os(iOS)
+    @StateObject private var calendarViewModel = TopicsViewModel()
+    @State private var showingNoTopicsAlert = false
+    #endif
+
     private let hourWidth: CGFloat = Theme.hourColumnWidth
     private let channelWidth: CGFloat = Theme.channelColumnWidth
     private let rowHeight: CGFloat = Theme.cellHeight
@@ -92,6 +97,32 @@ struct GuideView: View {
             } message: {
                 streamErrorMessage
             }
+            #if os(iOS)
+            .sheet(isPresented: $appState.showingCalendar) {
+                CalendarView(programs: calendarViewModel.matchingPrograms)
+                    .environmentObject(client)
+                    .environmentObject(appState)
+                    .task {
+                        calendarViewModel.epgCache = epgCache
+                        await calendarViewModel.loadData()
+                    }
+            }
+            .alert("No Topics", isPresented: $showingNoTopicsAlert) {
+                Button("Add Topics") {
+                    appState.showingKeywordsEditor = true
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Add topic keywords to see your personalized program calendar.")
+            }
+            .sheet(isPresented: $appState.showingKeywordsEditor) {
+                KeywordsEditorView()
+                    .onDisappear {
+                        keywords = UserPreferences.load().keywords
+                        viewModel.updateKeywordMatches(keywords: keywords)
+                    }
+            }
+            #endif
             .task {
                 keywords = UserPreferences.load().keywords
                 await viewModel.loadData(using: client, epgCache: epgCache)
@@ -319,6 +350,22 @@ struct GuideView: View {
                 .padding(.vertical, 4)
                 .background(.ultraThinMaterial)
                 .clipShape(Capsule())
+                .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 2)
+
+                Button {
+                    if keywords.isEmpty {
+                        showingNoTopicsAlert = true
+                    } else {
+                        appState.showingCalendar = true
+                    }
+                } label: {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Theme.accent)
+                        .frame(width: 32, height: 32)
+                }
+                .background(.ultraThinMaterial)
+                .clipShape(Circle())
                 .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 2)
 
                 Spacer()
