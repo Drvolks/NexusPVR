@@ -154,6 +154,7 @@ struct TopicProgramRow: View {
         }
         .padding(.vertical, Theme.spacingSM)
         .contentShape(Rectangle())
+        .accessibilityIdentifier("topic-program-\(program.id)")
         .onTapGesture {
             onShowDetails?(existingRecordingId, existingRecording)
         }
@@ -424,6 +425,7 @@ struct TopicProgramRowTV: View {
             }
         }
         .disabled(isProcessing)
+        .accessibilityIdentifier("topic-program-\(program.id)")
         .task {
             await checkIfScheduled()
         }

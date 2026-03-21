@@ -126,6 +126,7 @@ private struct RecordingsListContentView: View {
                     }
                 }
             }
+            .accessibilityIdentifier("recordings-view")
             .sheet(item: $selectedRecording) { recording in
                 RecordingDetailView(recording: recording)
                     .environmentObject(client)

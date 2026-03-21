@@ -112,6 +112,7 @@ struct TopicsView: View {
                     contentView
                 }
             }
+            .accessibilityIdentifier("topics-view")
             .sheet(item: $selectedProgramDetail) { detail in
                 ProgramDetailView(
                     program: detail.program,

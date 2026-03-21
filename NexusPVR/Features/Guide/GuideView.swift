@@ -59,6 +59,7 @@ struct GuideView: View {
 
     var body: some View {
         contentView
+            .accessibilityIdentifier("guide-view")
             .background(Theme.background)
             #if os(macOS)
             .toolbar(.hidden)

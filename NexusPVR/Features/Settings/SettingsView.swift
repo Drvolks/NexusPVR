@@ -61,6 +61,7 @@ struct SettingsView: View {
             #endif
             #endif
         }
+        .accessibilityIdentifier("settings-view")
         .background(Theme.background)
     }
 
