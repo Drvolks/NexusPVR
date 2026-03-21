@@ -78,11 +78,22 @@ struct ContentView: View {
                 client.updateConfig(cloudConfig)
             }
 
-            // Authenticate before showing main UI.
-            // Single attempt with no artificial timeout — URLSession's
-            // timeoutIntervalForRequest (30s) handles unreachable servers.
-            // The previous task-group cancel pattern was aborting in-flight
-            // SSL handshakes on remote servers, causing -999 errors.
+            // Show the UI immediately — don't block on authentication.
+            // Auth + EPG loading continue below but the NavigationRouter
+            // (or setup screen) is already visible.
+            isCheckingCloud = false
+
+            // Only scan if no config found (NextPVR auto-scans; Dispatcharr waits for credentials)
+            #if !DISPATCHERPVR
+            if !client.isConfigured {
+                discovery.startScan()
+            }
+            #endif
+
+            // Authenticate without blocking the UI.
+            // No artificial timeout — URLSession's timeoutIntervalForRequest (30s)
+            // handles unreachable servers. We don't cancel the task to avoid
+            // aborting in-flight SSL handshakes on remote servers (-999 errors).
             if client.isConfigured && !client.isAuthenticated {
                 try? await client.authenticate()
             }
@@ -94,19 +105,10 @@ struct ContentView: View {
             }
             #endif
 
-            isCheckingCloud = false
-
             // Load EPG cache once authenticated
             if client.isConfigured {
                 await epgCache.loadData(using: client)
             }
-
-            // Only scan if no config found (NextPVR auto-scans; Dispatcharr waits for credentials)
-            #if !DISPATCHERPVR
-            if !client.isConfigured {
-                discovery.startScan()
-            }
-            #endif
         }
         #if os(tvOS)
         .onChange(of: discovery.discoveredServers) { _, servers in
