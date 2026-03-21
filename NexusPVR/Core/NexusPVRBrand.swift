@@ -35,6 +35,7 @@ nonisolated enum NexusPVRBrand: BrandConfig {
     static let surface = Color(light: Color(hex: "#ffffff"), dark: Color(hex: "#141414"))
     static let surfaceElevated = Color(light: Color(hex: "#f2f2f7"), dark: Color(hex: "#1a1a1a"))
     static let surfaceHighlight = Color(light: Color(hex: "#e5e5ea"), dark: Color(hex: "#222222"))
+    static let channelColumnBackground = Color(light: Color(hex: "#e0e0e5"), dark: Color(hex: "#1a1a1a"))
     static let textPrimary = Color(light: Color(hex: "#1c1c1e"), dark: .white)
     static let textSecondary = Color(light: Color(hex: "#636366"), dark: Color(hex: "#b3b3b3"))
     static let textTertiary = Color(light: Color(hex: "#aeaeb2"), dark: Color(hex: "#666666"))

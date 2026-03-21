@@ -1476,7 +1476,7 @@ struct GuideView: View {
         }
         .padding(Theme.spacingSM)
         .frame(width: channelWidth, height: rowHeight)
-        .background(Theme.surfaceElevated)
+        .background(Theme.channelColumnBackground)
         #else
         // iOS/macOS: tappable to play live
         Button {
@@ -1492,7 +1492,7 @@ struct GuideView: View {
             }
             .frame(width: Theme.iconSize, height: Theme.iconSize)
             .frame(width: channelWidth, height: rowHeight)
-            .background(Theme.surfaceElevated)
+            .background(Theme.channelColumnBackground)
             .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
         }
         .buttonStyle(.plain)
