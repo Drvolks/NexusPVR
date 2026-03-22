@@ -27,6 +27,8 @@ struct ContentView: View {
     @StateObject private var discovery = ServerDiscoveryService()
     @State private var sheetConfig: SetupSheetConfig?
     @State private var isCheckingCloud = true
+    @State private var startupTask: Task<Void, Never>?
+    @State private var startupTaskConfig: ServerConfig?
     #if os(tvOS)
     @FocusState private var focusedServerId: String?
     #endif
@@ -92,32 +94,8 @@ struct ContentView: View {
 
             // Authenticate without blocking the UI.
             // No artificial timeout — URLSession's timeoutIntervalForRequest (30s)
-            // handles unreachable servers. We don't cancel the task to avoid
-            // aborting in-flight SSL handshakes on remote servers (-999 errors).
-            // Retry up to 3 times with backoff for transient HTTPS failures on cold start.
-            if client.isConfigured && !client.isAuthenticated {
-                for attempt in 1...3 {
-                    do {
-                        try await client.authenticate()
-                        break
-                    } catch {
-                        if attempt < 3 {
-                            try? await Task.sleep(for: .seconds(Double(attempt) * 2))
-                        }
-                    }
-                }
-            }
-
-            #if DISPATCHERPVR
-            if client.isAuthenticated, let level = try? await client.fetchUserLevel() {
-                appState.userLevel = level
-                client.useOutputEndpoints = level < 1
-            }
-            #endif
-
-            // Load EPG cache once authenticated
             if client.isConfigured {
-                await epgCache.loadData(using: client)
+                queueConfiguredStartupIfNeeded()
             }
         }
         #if os(tvOS)
@@ -131,21 +109,13 @@ struct ContentView: View {
             Task {
                 if isConfigured {
                     discovery.stopScan()
-                    // Authenticate, fetch user level, then load EPG — all sequentially
-                    if !client.isAuthenticated {
-                        try? await client.authenticate()
-                    }
-                    #if DISPATCHERPVR
-                    if client.isAuthenticated, let level = try? await client.fetchUserLevel() {
-                        appState.userLevel = level
-                        client.useOutputEndpoints = level < 1
-                    }
-                    #endif
-                    await epgCache.loadData(using: client)
+                    queueConfiguredStartupIfNeeded()
                 } else {
                     // Server was unlinked — reset and restart discovery
                     epgCache.invalidate()
                     sheetConfig = nil
+                    startupTask = nil
+                    startupTaskConfig = nil
                     #if DISPATCHERPVR
                     hasStartedDiscovery = false
                     discoveryUsername = ""
@@ -156,6 +126,62 @@ struct ContentView: View {
                     discovery.startScan()
                     #endif
                 }
+            }
+        }
+    }
+
+    private func queueConfiguredStartupIfNeeded() {
+        guard client.isConfigured else { return }
+
+        let config = client.config
+        let taskIsAlreadyRunning = startupTask != nil && startupTaskConfig == config
+        let startupIsAlreadyComplete = startupTaskConfig == config && client.isAuthenticated && (epgCache.hasLoaded || epgCache.isLoading)
+
+        guard !taskIsAlreadyRunning, !startupIsAlreadyComplete else { return }
+
+        startupTaskConfig = config
+        startupTask = Task {
+            await bootstrapConfiguredClient(expectedConfig: config)
+            await MainActor.run {
+                if startupTaskConfig == config {
+                    startupTask = nil
+                }
+            }
+        }
+    }
+
+    private func bootstrapConfiguredClient(expectedConfig: ServerConfig) async {
+        guard client.isConfigured, client.config == expectedConfig else { return }
+
+        if !client.isAuthenticated {
+            await authenticateConfiguredClientWithRetry(expectedConfig: expectedConfig)
+        }
+
+        guard client.isConfigured, client.config == expectedConfig, client.isAuthenticated else { return }
+
+        #if DISPATCHERPVR
+        if let level = try? await client.fetchUserLevel() {
+            appState.userLevel = level
+            client.useOutputEndpoints = level < 1
+        }
+        #endif
+
+        guard client.isConfigured, client.config == expectedConfig else { return }
+        await epgCache.loadData(using: client)
+    }
+
+    private func authenticateConfiguredClientWithRetry(expectedConfig: ServerConfig) async {
+        let retryDelays: [Double] = [0.75, 1.5, 3.0, 5.0, 8.0]
+
+        for attempt in 1...retryDelays.count {
+            guard client.isConfigured, client.config == expectedConfig else { return }
+
+            do {
+                try await client.authenticate()
+                return
+            } catch {
+                guard attempt < retryDelays.count else { return }
+                try? await Task.sleep(for: .seconds(retryDelays[attempt - 1]))
             }
         }
     }

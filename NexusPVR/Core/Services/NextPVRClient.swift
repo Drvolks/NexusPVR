@@ -118,18 +118,64 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
         .callIsActive,
         .dataNotAllowed,
         .cannotLoadFromNetwork,
-        .secureConnectionFailed
+        .secureConnectionFailed,
+        .badServerResponse,
+        .cannotParseResponse
+    ]
+    private static let retryablePOSIXErrorCodes: Set<POSIXErrorCode> = [
+        .ECONNABORTED,
+        .ECONNREFUSED,
+        .ECONNRESET,
+        .EPIPE,
+        .ETIMEDOUT
     ]
 
     private func isRetryableNetworkError(_ error: Error) -> Bool {
         if let urlError = error as? URLError {
             return Self.retryableURLErrorCodes.contains(urlError.code)
         }
-        let nsError = error as NSError
-        if nsError.domain == NSURLErrorDomain {
-            let code = URLError.Code(rawValue: nsError.code)
-            return Self.retryableURLErrorCodes.contains(code)
+        return isRetryableNSError(error as NSError)
+    }
+
+    private func isRetryableNSError(_ error: NSError) -> Bool {
+        NetworkEventLog.shared.log(NetworkEvent(
+            timestamp: Date(),
+            method: "RETRY",
+            path: "/retryability/ns-error",
+            statusCode: nil,
+            isSuccess: false,
+            durationMs: 0,
+            responseSize: 0,
+            errorDetail: "Inspecting NSError domain=\(error.domain) code=\(error.code) desc=\(error.localizedDescription)"
+        ))
+
+        if error.domain == NSURLErrorDomain {
+            let code = URLError.Code(rawValue: error.code)
+            if Self.retryableURLErrorCodes.contains(code) {
+                return true
+            }
         }
+
+        if error.domain == NSPOSIXErrorDomain,
+           let code = POSIXErrorCode(rawValue: Int32(error.code)),
+           Self.retryablePOSIXErrorCodes.contains(code) {
+            return true
+        }
+
+        if let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError {
+            return isRetryableNSError(underlying)
+        }
+
+        NetworkEventLog.shared.log(NetworkEvent(
+            timestamp: Date(),
+            method: "RETRY",
+            path: "/retryability/ns-error",
+            statusCode: nil,
+            isSuccess: false,
+            durationMs: 0,
+            responseSize: 0,
+            errorDetail: "NSError is not retryable; returning false for domain=\(error.domain) code=\(error.code)"
+        ))
         return false
     }
 

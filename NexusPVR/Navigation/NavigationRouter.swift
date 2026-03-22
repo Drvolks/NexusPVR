@@ -788,7 +788,6 @@ struct MacOSNavigation: View {
     @EnvironmentObject private var client: PVRClient
     @EnvironmentObject private var epgCache: EPGCache
 
-    @State private var selectedTab: Tab = .guide
     @State private var searchText = ""
     @State private var showSearchDropdown = false
     @State private var channelMatchCount = 0
@@ -796,6 +795,13 @@ struct MacOSNavigation: View {
     @State private var matchingGroups: [ChannelGroup] = []
     @State private var searchDebounceTask: Task<Void, Never>?
     @State private var lastSearchedText = ""
+
+    private var selectedTabBinding: Binding<Tab> {
+        Binding(
+            get: { appState.selectedTab },
+            set: { appState.selectedTab = $0 }
+        )
+    }
 
     var body: some View {
         Group {
@@ -811,7 +817,7 @@ struct MacOSNavigation: View {
             } else {
                 // Show regular navigation with sidebar
                 NavigationSplitView {
-                    List(Tab.macOSTabs(userLevel: appState.userLevel), selection: $selectedTab) { tab in
+                    List(Tab.macOSTabs(userLevel: appState.userLevel), selection: selectedTabBinding) { tab in
                         HStack {
                             Label(tab.label, systemImage: tab.icon)
                             if tab == .recordings && appState.recordingsHasActive {
@@ -847,7 +853,7 @@ struct MacOSNavigation: View {
                     ZStack(alignment: .bottom) {
                         // Detail content
                         Group {
-                            switch selectedTab {
+                            switch appState.selectedTab {
                             case .guide:
                                 GuideView()
                             case .topics:
@@ -880,7 +886,7 @@ struct MacOSNavigation: View {
                         }
 
                         // Floating search bar + dropdown (guide tab only)
-                        if selectedTab == .guide {
+                        if appState.selectedTab == .guide {
                             VStack(spacing: 6) {
                                 if showSearchDropdown {
                                     macSearchDropdown
@@ -930,15 +936,9 @@ struct MacOSNavigation: View {
                 }
             }
         }
-        .onChange(of: selectedTab) {
-            Task { appState.selectedTab = selectedTab }
+        .onChange(of: appState.selectedTab) {
             withAnimation(.easeInOut(duration: 0.2)) {
                 showSearchDropdown = false
-            }
-        }
-        .onChange(of: appState.selectedTab) {
-            if selectedTab != appState.selectedTab {
-                selectedTab = appState.selectedTab
             }
         }
     }

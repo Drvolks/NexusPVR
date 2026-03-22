@@ -88,6 +88,7 @@ final class EPGCache: ObservableObject {
                 do {
                     let listings = try await client.getAllListings(for: channelsForEPG)
                     guard let self, !Task.isCancelled else { return }
+                    defer { self.isLoadInProgress = false }
                     self.epg = listings
                     // Compute loaded days off main actor
                     let days = await Task.detached(priority: .utility) {
@@ -106,6 +107,7 @@ final class EPGCache: ObservableObject {
                     print("[EPGCache] Total load: \(self.ms(since: totalStart))ms")
                 } catch {
                     guard !Task.isCancelled else { return }
+                    self?.isLoadInProgress = false
                     print("[EPGCache] EPG load failed: \(error.localizedDescription)")
                 }
             }
