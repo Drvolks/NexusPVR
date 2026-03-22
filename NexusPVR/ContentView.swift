@@ -94,8 +94,18 @@ struct ContentView: View {
             // No artificial timeout — URLSession's timeoutIntervalForRequest (30s)
             // handles unreachable servers. We don't cancel the task to avoid
             // aborting in-flight SSL handshakes on remote servers (-999 errors).
+            // Retry up to 3 times with backoff for transient HTTPS failures on cold start.
             if client.isConfigured && !client.isAuthenticated {
-                try? await client.authenticate()
+                for attempt in 1...3 {
+                    do {
+                        try await client.authenticate()
+                        break
+                    } catch {
+                        if attempt < 3 {
+                            try? await Task.sleep(for: .seconds(Double(attempt) * 2))
+                        }
+                    }
+                }
             }
 
             #if DISPATCHERPVR

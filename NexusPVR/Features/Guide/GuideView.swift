@@ -181,7 +181,9 @@ struct GuideView: View {
     private var contentView: some View {
         VStack(spacing: 0) {
             Group {
-                if !epgCache.isFullyLoaded {
+                if let error = epgCache.error {
+                    errorView(error)
+                } else if !epgCache.isFullyLoaded {
                     loadingView
                 } else if let error = viewModel.error, viewModel.channels.isEmpty {
                     errorView(error)

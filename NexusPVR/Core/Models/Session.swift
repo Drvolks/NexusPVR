@@ -44,6 +44,10 @@ nonisolated struct ServerConfig: Codable, Equatable {
 
     var baseURL: String {
         let scheme = useHTTPS ? "https" : "http"
+        let defaultPort = useHTTPS ? 443 : 80
+        if port == defaultPort {
+            return "\(scheme)://\(host)"
+        }
         return "\(scheme)://\(host):\(port)"
     }
 

@@ -93,7 +93,8 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         .internationalRoamingOff,
         .callIsActive,
         .dataNotAllowed,
-        .cannotLoadFromNetwork
+        .cannotLoadFromNetwork,
+        .secureConnectionFailed
     ]
 
     private func isRetryableNetworkError(_ error: Error) -> Bool {
