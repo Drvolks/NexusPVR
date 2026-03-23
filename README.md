@@ -1,51 +1,93 @@
 # StreamClient
 
-A native Apple streaming client for PVR/DVR servers. Built with SwiftUI, it runs on iOS, iPadOS, tvOS, and macOS from a single codebase.
+A native Apple streaming client for PVR/DVR servers. Built with SwiftUI, StreamClient runs on iPhone, iPad, Apple TV, and Mac from a single codebase.
 
 Two variants are available:
 - **StreamClient - For NextPVR** — connects to [NextPVR](https://www.nextpvr.com/) servers
 - **StreamClient** — connects to [Dispatcharr](https://github.com/Dispatcharr/Dispatcharr) servers
 
+## Screenshots
+
+| Guide | Recordings | Topics | Calendar |
+|-------|------------|--------|----------|
+| ![Guide](images/guide.png) | ![Recordings](images/recordings-new.png) | ![Topics](images/topics-new.png) | ![Calendar](images/calendar.png) |
+
+**Apple TV**
+
+![Apple TV Guide](images/appletv.png)
+
 ## Features
 
-- **Electronic Program Guide** — Interactive grid with horizontal scrolling timeline, day navigation, program details, and one-tap recording scheduling
-- **Live TV** — Browse channels and stream live television
-- **Recordings** — View completed, in-progress, and scheduled recordings with resume playback support
-- **Topics** — Keyword-based program discovery that scans the EPG and highlights upcoming shows matching your interests
-- **Video Player** — Hardware-accelerated playback powered by MPV with Metal rendering and configurable seek times
-- **Server Auto-Discovery** — Automatically detects servers on your local network
-- **iCloud Sync** — Server configuration, keywords, and preferences sync across all your Apple devices
-- **Demo Mode** — Explore the full app with built-in sample data, no server required
-- **Platform-Adaptive UI** — Tab bar on iOS/iPadOS, top navigation on tvOS with Siri Remote support, sidebar on macOS
+### Electronic Program Guide
+Interactive grid with horizontal scrolling timeline, pinned channel column, day navigation, and program details. Tap any program to view details or schedule a recording. Live programs show real-time progress. Filter channels by name, number, or group.
 
-| Guide | Recordings | Topics |
-|-------|------------|--------|
-| ![Guide](images/grid.png) | ![Recordings](images/recordings.png) | ![Topics](images/topics.png) |
+### Live TV
+Browse channels with icons and start streaming with a single tap. Channels are searchable and support server-defined groups and profiles.
 
-## Server Requirements
+### Recordings
+View completed, in-progress, and scheduled recordings. Resume playback from where you left off. Schedule or cancel recordings from anywhere in the app. Recordings show file size, duration, and quality details.
 
-### NextPVR
+### Topics
+Define keywords to automatically discover programs across the entire EPG. Matching shows are listed with live/upcoming status and one-tap recording. Great for tracking sports teams, shows, or any subject.
 
-- [NextPVR](https://www.nextpvr.com/) v5 or later
-- Default port: **8866**
-- Authentication: PIN (default `0000`)
-- JSON API enabled (enabled by default)
+### Calendar
+Day and week views of your topic matches laid out on a visual timeline. Color-coded by keyword for quick scanning. Tap any block to view details or record.
 
-### Dispatcharr
+### Search
+Full-text search across all program titles, subtitles, and descriptions. Results link directly to program details and recording controls.
 
-- [Dispatcharr](https://github.com/Dispatcharr/Dispatcharr) server
-- Default port: **9191**
-- Authentication: Username and password
-- The Dispatcharr build includes an additional **stream status** view showing active proxy connections
+### Video Player
+Hardware-accelerated playback powered by MPV with Metal rendering. Features include:
+- Configurable seek forward/backward durations
+- Audio track selection
+- Playback statistics overlay (FPS, bitrate, codec, dropped frames)
+- Picture-in-Picture (iOS/iPadOS)
+- Resume position tracking for recordings
+
+### Sport Detection
+Automatic sport icon recognition for 40+ sports from program metadata. Covers team sports, individual sports, motorsports, combat sports, winter sports, and water sports.
+
+### Server Discovery
+Automatically scans your local network to find PVR servers. No manual IP entry required.
+
+### iCloud Sync
+Server configuration, topic keywords, seek preferences, and audio settings sync across all your Apple devices via iCloud.
+
+### Demo Mode
+Explore the full app without a server. Provides 15 simulated channels across 5 groups, 3 days of EPG data, sample recordings, and pre-configured topic keywords. Enter `demo` as the server host to activate.
+
+### Dispatcharr-Specific Features
+- **Stream Status** — Live monitoring of active proxy streams and viewer counts
+- **Channel Profiles** — Curated channel collections (Sports, News, Entertainment)
+- **M3U Account Health** — Connection status indicators for your stream sources
+
+## Platform Experience
+
+| Platform | Navigation | Highlights |
+|----------|-----------|------------|
+| **iPhone / iPad** | Tab bar | Gesture-driven, Picture-in-Picture, landscape support |
+| **Apple TV** | Top navigation bar | Siri Remote optimized, focus-driven UI, Top Shelf extension |
+| **Mac** | Sidebar | Mouse/trackpad, window management, keyboard shortcuts |
 
 ## Supported Platforms
 
 | Platform | Minimum Version |
 |----------|----------------|
-| iOS      | 26.0+          |
-| iPadOS   | 26.0+          |
-| tvOS     | 26.0+          |
-| macOS    | 26.0+          |
+| iOS / iPadOS | 26.0+ |
+| tvOS     | 26.0+ |
+| macOS    | 26.0+ |
+
+## Server Requirements
+
+### NextPVR
+- [NextPVR](https://www.nextpvr.com/) v5 or later
+- Default port: **8866**
+- Authentication: PIN (default `0000`)
+
+### Dispatcharr
+- [Dispatcharr](https://github.com/Dispatcharr/Dispatcharr) server
+- Default port: **9191**
+- Authentication: Username and password
 
 ## Build Instructions
 
@@ -53,53 +95,11 @@ Two variants are available:
 2. Select a scheme:
    - **NextPVR** — StreamClient - For NextPVR
    - **DispatcharrPVR** — StreamClient
-3. Select a destination platform (iOS, tvOS, or macOS)
+3. Select a destination (iOS, tvOS, or macOS)
 4. Build and run (`Cmd+R`)
 
-MPVKit is fetched automatically by Swift Package Manager on first build.
+[MPVKit](https://github.com/mpvkit/MPVKit) is fetched automatically by Swift Package Manager on first build.
 
-### Dependencies
+## License
 
-| Package | Purpose |
-|---------|---------|
-| [MPVKit](https://github.com/mpvkit/MPVKit) (0.41.0+) | libmpv wrapper for hardware-accelerated video playback |
-
-## Demo Mode
-
-Demo mode lets you explore the app without connecting to a server. It provides 8 simulated channels with a 3-day EPG, sample recordings, topic keywords, and video playback using a bundled clip.
-
-### Activating Demo Mode
-
-**NextPVR build:** Enter `demo` as the server host.
-
-**Dispatcharr build:** Enter `demo` as the server host, *or* enter `demo` / `demo` as the username and password.
-
-### What's Included
-
-- **8 channels** with icons — SportsCenter HD, News 24/7, Hockey Night, The Movie Channel, Comedy Gold, Nature & Discovery, Premier League TV, Breaking News Now
-- **3 days of EPG data** (yesterday, today, tomorrow) with program schedules per channel
-- **Recordings** — 3 completed (one partially watched) and 2 scheduled
-- **Topic keywords** — "Hockey", "Ironing", "Cat Videos" pre-configured
-- **Recording management** — Schedule and cancel recordings interactively (session state, not persisted)
-- **Video playback** — All streams play a bundled sample video
-
-## Project Structure
-
-```
-NexusPVR/
-├── Core/
-│   ├── Models/          # Channel, Program, Recording, Session, UserPreferences
-│   ├── Services/        # NextPVRClient, DispatcherClient, DemoDataProvider, ImageCache
-│   └── Extensions/
-├── Design/
-│   └── Theme.swift      # Colors, spacing, typography, platform sizes
-├── Features/
-│   ├── Guide/           # EPG grid view
-│   ├── LiveTV/          # Channel list and streaming
-│   ├── Player/          # MPV video player
-│   ├── Recordings/      # Recording management
-│   ├── Settings/        # Server config, keyword editor
-│   ├── Topics/          # Keyword-based program discovery
-│   └── Stats/           # Stream status (Dispatcharr only)
-└── Navigation/          # AppState, platform-adaptive NavigationRouter
-```
+See [LICENSE](LICENSE) for details.
