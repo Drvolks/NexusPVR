@@ -547,8 +547,8 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
     }
 
     func channelIconURL(channelId: Int) throws -> URL? {
-        guard let sid else { throw NextPVRError.sessionExpired }
         guard !config.isDemoMode else { return DemoDataProvider.channelIconURL(channelId: channelId) }
+        guard let sid else { throw NextPVRError.sessionExpired }
         return URL(string: "\(baseURL)/service?method=channel.icon&channel_id=\(channelId)&sid=\(sid)")
     }
 }

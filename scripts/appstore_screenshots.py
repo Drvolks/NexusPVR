@@ -12,6 +12,12 @@ Examples:
     # Convert a directory of screenshots
     python3 scripts/appstore_screenshots.py ~/Desktop/screenshots/ --output ~/Desktop/appstore/
 
+    # Force macOS sizing for all input files
+    python3 scripts/appstore_screenshots.py ~/Desktop/Capture*.png -d mac
+
+    # Force macOS with a custom background color
+    python3 scripts/appstore_screenshots.py ~/Desktop/Capture*.png -d mac --mac-bg 000000
+
 App Store required sizes:
     iPhone 6.5"   : 1242 x 2688 (portrait) or 2688 x 1242 (landscape)
     iPhone 6.7"   : 1284 x 2778 (portrait) or 2778 x 1284 (landscape)
@@ -21,6 +27,9 @@ App Store required sizes:
 
 The script auto-detects iPhone / iPad / Mac from the screenshot dimensions,
 auto-detects orientation, and scales to fill then center-crops.
+
+For macOS, window screenshots are centered on a solid background (default:
+dark navy #1a1a2e) at 85% max size, preserving the window chrome and shadow.
 """
 
 import argparse
@@ -97,7 +106,47 @@ def scale_and_crop(img: Image.Image, target_w: int, target_h: int) -> Image.Imag
     return img
 
 
-def process_file(input_path: Path, output_dir: Path, force_device: str | None = None) -> int:
+# Background color for macOS screenshots (matches app dark theme)
+MAC_BG_COLOR = (26, 26, 46)
+
+
+def scale_and_place_mac(img: Image.Image, target_w: int, target_h: int,
+                        bg_color: tuple = MAC_BG_COLOR) -> Image.Image:
+    """Scale macOS window screenshot to fit within target, centered on a solid background.
+
+    Unlike iPhone screenshots (which fill and crop), macOS screenshots are
+    typically window captures that should be displayed at a nice size on a
+    solid background — not stretched or cropped.
+    """
+    src_w, src_h = img.size
+
+    # Scale the window to fit inside the target with some padding (85% max)
+    max_w = int(target_w * 0.85)
+    max_h = int(target_h * 0.85)
+    scale = min(max_w / src_w, max_h / src_h, 1.0)  # don't upscale
+    new_w = round(src_w * scale)
+    new_h = round(src_h * scale)
+
+    if scale < 1.0:
+        img = img.resize((new_w, new_h), Image.LANCZOS)
+
+    # Center on background
+    canvas = Image.new("RGB", (target_w, target_h), bg_color)
+    x = (target_w - new_w) // 2
+    y = (target_h - new_h) // 2
+
+    # Handle alpha channel if present (macOS window screenshots have transparency)
+    if img.mode == "RGBA":
+        canvas.paste(img, (x, y), img)
+    else:
+        canvas.paste(img, (x, y))
+
+    return canvas
+
+
+def process_file(input_path: Path, output_dir: Path,
+                  force_device: str | None = None,
+                  mac_bg: tuple = MAC_BG_COLOR) -> int:
     """Process a single screenshot file, generating App Store sizes for the detected device."""
     img = Image.open(input_path)
     stem = input_path.stem
@@ -107,7 +156,10 @@ def process_file(input_path: Path, output_dir: Path, force_device: str | None = 
     print(f"  {input_path.name} ({img.size[0]}x{img.size[1]}) [{device}]")
 
     for label, (tw, th) in targets.items():
-        result = scale_and_crop(img.copy(), tw, th)
+        if device == "mac":
+            result = scale_and_place_mac(img.copy(), tw, th, bg_color=mac_bg)
+        else:
+            result = scale_and_crop(img.copy(), tw, th)
         actual_w, actual_h = result.size
         out_name = f"{device}_{stem}_{label}_{actual_w}x{actual_h}.png"
         out_path = output_dir / out_name
@@ -123,7 +175,13 @@ def main():
     parser.add_argument("--output", "-o", default=None, help="Output directory (default: <input_dir>/appstore/)")
     parser.add_argument("--device", "-d", choices=["iphone", "ipad", "mac"], default=None,
                         help="Force device type (skip auto-detection)")
+    parser.add_argument("--mac-bg", default="1a1a2e",
+                        help="Hex background color for macOS screenshots (default: 1a1a2e)")
     args = parser.parse_args()
+
+    # Parse macOS background color
+    hex_bg = args.mac_bg.lstrip("#")
+    mac_bg = tuple(int(hex_bg[i:i+2], 16) for i in (0, 2, 4))
 
     # Collect input files
     files: list[Path] = []
@@ -151,7 +209,7 @@ def main():
 
     total = 0
     for f in files:
-        total += process_file(f, output_dir, force_device=args.device)
+        total += process_file(f, output_dir, force_device=args.device, mac_bg=mac_bg)
 
     print(f"\nDone! {total} images saved to {output_dir}/")
 
