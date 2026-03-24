@@ -448,7 +448,7 @@ private struct RecordingsListContentView: View {
 
     private func seriesRecordingRow(_ recording: Recording) -> some View {
         HStack(alignment: .center, spacing: Theme.spacingMD) {
-            seriesStatusIcon(recording)
+            RecordingStatusIcon(recording: recording, size: 44)
 
             VStack(alignment: .leading, spacing: Theme.spacingXS) {
                 HStack {
@@ -514,56 +514,6 @@ private struct RecordingsListContentView: View {
         }
         .listRowBackground(Theme.surface)
     }
-    @ViewBuilder
-    private func seriesStatusIcon(_ recording: Recording) -> some View {
-        let sport = SportDetector.detect(from: recording)
-        let watchProgress: Double? = {
-            guard let position = recording.playbackPosition,
-                  let duration = recording.duration,
-                  duration > 0, position > 0 else { return nil }
-            return min(1.0, Double(position) / Double(duration))
-        }()
-
-        if recording.recordingStatus.isCompleted, let progress = watchProgress {
-            WatchProgressCircle(progress: progress, size: 44, sport: sport)
-        } else if recording.recordingStatus.isCompleted {
-            ZStack {
-                Circle()
-                    .fill(Theme.accent.opacity(0.2))
-                    .frame(width: 44, height: 44)
-                Image(systemName: sport?.sfSymbol ?? "play.fill")
-                    .font(.system(size: 44 * 0.38))
-                    .foregroundStyle(Theme.accent)
-            }
-        } else {
-            let statusColor: Color = {
-                switch recording.recordingStatus {
-                case .pending, .conflict: return Theme.warning
-                case .recording: return Theme.recording
-                case .ready: return Theme.success
-                case .failed, .deleted: return Theme.error
-                }
-            }()
-            let statusIcon: String = {
-                switch recording.recordingStatus {
-                case .pending: return "clock"
-                case .recording: return "record.circle"
-                case .ready: return "checkmark.circle"
-                case .failed: return "exclamationmark.triangle"
-                case .conflict: return "exclamationmark.triangle"
-                case .deleted: return "trash"
-                }
-            }()
-            ZStack {
-                Circle()
-                    .fill(statusColor.opacity(0.2))
-                    .frame(width: 44, height: 44)
-                Image(systemName: sport?.sfSymbol ?? statusIcon)
-                    .font(.system(size: 44 * 0.38))
-                    .foregroundStyle(statusColor)
-            }
-        }
-    }
     #endif
 
     private func playRecording(_ recording: Recording) {
@@ -573,6 +523,7 @@ private struct RecordingsListContentView: View {
         }
         Task {
             do {
+                // Use viewModel.playRecording for URL (handles stream URL logic)
                 let url = try await viewModel.playRecording(recording)
                 appState.playStream(
                     url: url,
@@ -591,16 +542,9 @@ private struct RecordingsListContentView: View {
         viewModel.resetPlaybackPosition(for: recording.id)
         Task {
             do {
-                try await client.setRecordingPosition(recordingId: recording.id, positionSeconds: 0)
-                let url = try await viewModel.playRecording(recording)
-                appState.playStream(
-                    url: url,
-                    title: recording.name,
-                    recordingId: recording.id,
-                    resumePosition: 0,
-                    isRecordingInProgress: recording.recordingStatus == .recording
+                try await RecordingPlaybackHelper.playFromBeginning(
+                    recording: recording, using: client, appState: appState
                 )
-                NotificationCenter.default.post(name: .recordingsDidChange, object: nil)
             } catch {
                 deleteError = error.localizedDescription
             }
@@ -608,15 +552,10 @@ private struct RecordingsListContentView: View {
     }
 
     private func playRecordingLive(_ recording: Recording) {
-        guard let channelId = recording.channelId else { return }
         Task {
             do {
-                let url = try await client.liveStreamURL(channelId: channelId)
-                appState.playStream(
-                    url: url,
-                    title: recording.name,
-                    channelId: channelId,
-                    channelName: recording.channel ?? "Channel \(channelId)"
+                try await RecordingPlaybackHelper.playLive(
+                    recording: recording, using: client, appState: appState
                 )
             } catch {
                 deleteError = error.localizedDescription

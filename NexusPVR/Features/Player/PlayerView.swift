@@ -410,17 +410,21 @@ struct PlayerView: View {
             #if os(tvOS)
             clearDisplayCriteria()
             #endif
+            // Save position BEFORE cleanup — cleanup destroys the MPV player
+            // which can interfere with reading currentPosition.
+            // Always save unconditionally — on tvOS the Menu button may be
+            // intercepted by SwiftUI's fullScreenCover dismiss before reaching
+            // the MPV view, so the onDismiss callback never fires.
+            savePlaybackPosition()
             #if os(iOS)
             let session = ActivePlayerSession.shared
             let nativePiPActive = isUsingPixelBufferRenderer && (session.isPiPActive || session.dismissingForPiP)
             if nativePiPActive {
-                savePlaybackPosition()
                 // Don't stop player — mpv continues feeding PiP
             } else {
                 cleanupAction?()
                 cleanupAction = nil
                 if appState.isShowingPlayer {
-                    savePlaybackPosition()
                     appState.stopPlayback()
                 }
             }
@@ -428,13 +432,16 @@ struct PlayerView: View {
             cleanupAction?()
             cleanupAction = nil
             if appState.isShowingPlayer {
-                savePlaybackPosition()
                 appState.stopPlayback()
             }
             #endif
-            // Notify recordings list to refresh with updated progress
+            // Notify recordings list to refresh with updated progress.
+            // Delay slightly so the async position save completes first.
             if recordingId != nil {
-                NotificationCenter.default.post(name: .recordingsDidChange, object: nil)
+                Task {
+                    try? await Task.sleep(for: .milliseconds(500))
+                    NotificationCenter.default.post(name: .recordingsDidChange, object: nil)
+                }
             }
             #if os(macOS)
             // Re-enable display sleep
@@ -492,17 +499,22 @@ struct PlayerView: View {
     }
 
     private func savePlaybackPosition() {
-        guard let recordingId = recordingId else { return }
+        guard let recordingId = recordingId else {
+            print("[Player] savePlaybackPosition: no recordingId")
+            return
+        }
         let position = Int(currentPosition)
+        let dur = duration
+        print("[Player] savePlaybackPosition: id=\(recordingId) pos=\(position) dur=\(Int(dur))")
         // Don't save if we're at the very beginning
         guard position > 10 else { return }
         // If near the end, mark as fully watched instead (but not for in-progress recordings)
-        if !recordingStillInProgress && duration > 0 && currentPosition > duration - 30 {
+        if !recordingStillInProgress && dur > 0 && Double(position) > dur - 30 {
             markAsWatched()
             return
         }
 
-        Task {
+        Task.detached { [client] in
             try? await client.setRecordingPosition(recordingId: recordingId, positionSeconds: position)
         }
     }
@@ -511,9 +523,9 @@ struct PlayerView: View {
         guard let recordingId = recordingId else { return }
         // Set position to full duration to mark as watched
         let watchedPosition = Int(duration > 0 ? duration : currentPosition)
-        Task {
+        Task.detached { [client] in
             try? await client.setRecordingPosition(recordingId: recordingId, positionSeconds: watchedPosition)
-            print("NextPVR: Marked recording \(recordingId) as watched")
+            print("[Player] Marked recording \(recordingId) as watched")
             // Notify recordings list to refresh
             NotificationCenter.default.post(name: .recordingsDidChange, object: nil)
         }

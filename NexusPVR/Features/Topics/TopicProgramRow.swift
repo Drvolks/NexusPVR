@@ -7,18 +7,98 @@
 
 import SwiftUI
 
-private func normalizeProgramName(_ name: String) -> String {
-    name
-        .replacingOccurrences(of: " ᴺᵉʷ", with: "")
-        .lowercased()
-        .split(separator: " ")
-        .joined(separator: " ")
-        .trimmingCharacters(in: .whitespaces)
+// MARK: - Shared Sport Icon View
+
+struct ProgramSportIcon: View {
+    let program: Program
+    var size: CGFloat = 56
+    var iconSize: CGFloat = 22
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Theme.surfaceElevated)
+
+            if let sport = SportDetector.detect(from: program) {
+                Image(systemName: sport.sfSymbol)
+                    .font(.system(size: iconSize))
+                    .foregroundStyle(Theme.textSecondary)
+            } else {
+                Image(systemName: "tv")
+                    .font(.system(size: iconSize))
+                    .foregroundStyle(Theme.textTertiary)
+            }
+        }
+        .frame(width: size, height: size)
+    }
 }
 
-private func programNamesAreEqual(_ name1: String, _ name2: String) -> Bool {
-    normalizeProgramName(name1) == normalizeProgramName(name2)
+// MARK: - Recording Status Badge
+
+struct RecordingStatusBadge: View {
+    let isProcessing: Bool
+    let isRecording: Bool
+    let isScheduled: Bool
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if isProcessing {
+                ProgressView()
+                    .scaleEffect(0.8)
+            } else if isRecording {
+                Image(systemName: "record.circle")
+                    .foregroundStyle(Theme.recording)
+                Text("Recording")
+                    .font(.caption)
+                    .foregroundStyle(Theme.recording)
+            } else if isScheduled {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(Theme.success)
+                Text("Scheduled")
+                    .font(.caption)
+                    .foregroundStyle(Theme.textSecondary)
+                    .accessibilityIdentifier("scheduled-indicator")
+            } else {
+                Image(systemName: "record.circle")
+                    .foregroundStyle(Theme.accent)
+                Text("Record")
+                    .font(.caption)
+                    .foregroundStyle(Theme.accent)
+            }
+        }
+        .padding(.horizontal, Theme.spacingSM)
+        .padding(.vertical, Theme.spacingXS)
+        .background(isRecording ? Theme.recording.opacity(0.1) : isScheduled ? Theme.success.opacity(0.1) : Theme.accent.opacity(0.1))
+        .clipShape(Capsule())
+    }
 }
+
+// MARK: - Existing Recording Info
+
+struct ExistingRecordingInfo: View {
+    let existingRecording: Recording?
+    let earlierScheduled: Recording?
+
+    var body: some View {
+        if let existing = existingRecording {
+            HStack(spacing: 4) {
+                Image(systemName: "checkmark.circle")
+                Text("Already recorded \(existing.startDate ?? Date(), style: .time)")
+            }
+            .font(.caption)
+            .foregroundStyle(Theme.warning)
+        } else if let earlier = earlierScheduled {
+            HStack(spacing: 4) {
+                Image(systemName: "clock.badge.checkmark")
+                Text("Scheduled \(earlier.startDate ?? Date(), style: .time)")
+            }
+            .font(.caption)
+            .foregroundStyle(Theme.success)
+        }
+    }
+}
+
+// MARK: - iOS/macOS Row
 
 struct TopicProgramRow: View {
     @EnvironmentObject private var client: PVRClient
@@ -30,54 +110,35 @@ struct TopicProgramRow: View {
     var onRecordingChanged: (() -> Void)? = nil
     var onShowDetails: ((Int?, Recording?) -> Void)? = nil
 
-    @State private var isScheduled = false
-    @State private var isRecording = false
-    @State private var existingRecordingId: Int?
-    @State private var isProcessing = false
-    @State private var existingRecording: Recording?
-    @State private var earlierScheduled: Recording?
+    @StateObject private var vm: TopicProgramRowViewModel
 
-    private var programScheduleText: String {
-        let start = program.startDate.formatted(date: .abbreviated, time: .shortened)
-        let end = program.endDate.formatted(date: .omitted, time: .shortened)
-        return "\(start) - \(end)"
+    init(program: Program, channel: Channel, matchedKeyword: String,
+         onRecordingChanged: (() -> Void)? = nil,
+         onShowDetails: ((Int?, Recording?) -> Void)? = nil) {
+        self.program = program
+        self.channel = channel
+        self.matchedKeyword = matchedKeyword
+        self.onRecordingChanged = onRecordingChanged
+        self.onShowDetails = onShowDetails
+        _vm = StateObject(wrappedValue: TopicProgramRowViewModel(program: program, channel: channel))
     }
 
     var body: some View {
         HStack(alignment: .center, spacing: Theme.spacingMD) {
-            // Left column: Sport icon or default TV icon
-            ZStack {
-                Circle()
-                    .fill(Theme.surfaceElevated)
+            ProgramSportIcon(program: program)
 
-                if let sport = SportDetector.detect(from: program) {
-                    Image(systemName: sport.sfSymbol)
-                        .font(.system(size: 22))
-                        .foregroundStyle(Theme.textSecondary)
-                } else {
-                    Image(systemName: "tv")
-                        .font(.system(size: 22))
-                        .foregroundStyle(Theme.textTertiary)
-                }
-            }
-            .frame(width: 56, height: 56)
-
-            // Content area
             VStack(alignment: .leading, spacing: Theme.spacingXS) {
-                // Live indicator
                 if program.isCurrentlyAiring {
                     Label("Live", systemImage: "circle.fill")
                         .font(.caption)
                         .foregroundStyle(Theme.accent)
                 }
 
-                // Row 1: Program title
                 Text(program.name)
                     .font(.headline)
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(2)
 
-                // Row 2: Channel name | Action button
                 HStack {
                     Text(channel.name)
                         .font(.subheadline)
@@ -86,69 +147,32 @@ struct TopicProgramRow: View {
 
                     Spacer()
 
-                    // Action button (hidden for streamers who can't record)
                     if !program.hasEnded && appState.userLevel >= 1 {
                         Button {
-                            toggleRecording()
+                            vm.toggleRecording(using: client, onChanged: onRecordingChanged)
                         } label: {
-                            HStack(spacing: 4) {
-                                if isProcessing {
-                                    ProgressView()
-                                        .scaleEffect(0.8)
-                                } else if isRecording {
-                                    Image(systemName: "record.circle")
-                                        .foregroundStyle(Theme.recording)
-                                    Text("Recording")
-                                        .font(.caption)
-                                        .foregroundStyle(Theme.recording)
-                                } else if isScheduled {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(Theme.success)
-                                    Text("Scheduled")
-                                        .font(.caption)
-                                        .foregroundStyle(Theme.textSecondary)
-                                        .accessibilityIdentifier("scheduled-indicator")
-                                } else {
-                                    Image(systemName: "record.circle")
-                                        .foregroundStyle(Theme.accent)
-                                    Text("Record")
-                                        .font(.caption)
-                                        .foregroundStyle(Theme.accent)
-                                }
-                            }
-                            .padding(.horizontal, Theme.spacingSM)
-                            .padding(.vertical, Theme.spacingXS)
-                            .background(isRecording ? Theme.recording.opacity(0.1) : isScheduled ? Theme.success.opacity(0.1) : Theme.accent.opacity(0.1))
-                            .clipShape(Capsule())
+                            RecordingStatusBadge(
+                                isProcessing: vm.isProcessing,
+                                isRecording: vm.isRecording,
+                                isScheduled: vm.isScheduled
+                            )
                         }
                         .buttonStyle(.plain)
-                        .disabled(isProcessing)
+                        .disabled(vm.isProcessing)
                     }
                 }
 
-                // Row 3: Date | Already recorded / Earlier scheduled info
                 HStack {
-                    Text(programScheduleText)
+                    Text(vm.programScheduleText)
                         .font(.caption)
                         .foregroundStyle(Theme.textTertiary)
 
                     Spacer()
 
-                    if let existing = existingRecording {
-                        HStack(spacing: 4) {
-                            Image(systemName: "checkmark.circle")
-                            Text("Already recorded \(existing.startDate ?? Date(), style: .time)")
-                        }
-                        .font(.caption)
-                        .foregroundStyle(Theme.warning)
-                    } else if let earlier = earlierScheduled {
-                        HStack(spacing: 4) {
-                            Image(systemName: "clock.badge.checkmark")
-                            Text("Scheduled \(earlier.startDate ?? Date(), style: .time)")
-                        }
-                        .font(.caption)
-                        .foregroundStyle(Theme.success)
-                    }
+                    ExistingRecordingInfo(
+                        existingRecording: vm.existingRecording,
+                        earlierScheduled: vm.earlierScheduled
+                    )
                 }
             }
         }
@@ -156,98 +180,19 @@ struct TopicProgramRow: View {
         .contentShape(Rectangle())
         .accessibilityIdentifier("topic-program-\(program.id)")
         .onTapGesture {
-            onShowDetails?(existingRecordingId, existingRecording)
+            onShowDetails?(vm.existingRecordingId, vm.existingRecording)
         }
         .task {
             if appState.userLevel >= 1 {
-                await checkIfScheduled()
-            }
-        }
-    }
-
-
-    private func checkIfScheduled() async {
-        do {
-            let (completed, recording, scheduled) = try await client.getAllRecordings()
-            let allRecordings = completed + recording + scheduled
-
-            // Check if this exact program is scheduled or recording
-            if let rec = allRecordings.first(where: { $0.epgEventId == program.id }) {
-                isScheduled = true
-                isRecording = rec.recordingStatus == .recording
-                existingRecordingId = rec.id
-            }
-
-            // Check for existing completed recording with similar name (within 48h)
-            let cutoff = Date().addingTimeInterval(-48 * 3600)
-            if let existing = completed.first(where: { recording in
-                programNamesAreEqual(recording.name, program.name) &&
-                recording.recordingStatus == .ready &&
-                (recording.startDate ?? .distantPast) > cutoff
-            }) {
-                existingRecording = existing
-            }
-
-            if let earlier = scheduled.first(where: { recording in
-                programNamesAreEqual(recording.name, program.name) &&
-                recording.epgEventId != program.id &&  // Exclude current program
-                (recording.startTime ?? 0) < program.start &&
-                recording.recordingStatus == .pending
-            }) {
-                earlierScheduled = earlier
-            }
-        } catch {
-            // Silently fail
-        }
-    }
-
-    private func toggleRecording() {
-        isProcessing = true
-
-        Task {
-            do {
-                if isScheduled, let recordingId = existingRecordingId {
-                    // Cancel existing recording
-                    try await client.cancelRecording(recordingId: recordingId)
-                    isScheduled = false
-                    existingRecordingId = nil
-                } else {
-                    // Schedule new recording
-                    try await client.scheduleRecording(eventId: program.id)
-                    isScheduled = true
-                    await checkIfScheduled()
-                }
-                isProcessing = false
-
-                // Notify parent that recording state changed
-                onRecordingChanged?()
-            } catch {
-                isProcessing = false
-            }
-        }
-    }
-
-    private func playExistingRecording(_ recording: Recording) {
-        Task {
-            do {
-                let url = try await client.recordingStreamURL(recordingId: recording.id)
-                appState.playStream(
-                    url: url,
-                    title: recording.name,
-                    recordingId: recording.id,
-                    resumePosition: recording.playbackPosition
-                )
-            } catch {
-                // Error playing - could show an alert but for now just fail silently
+                await vm.checkIfScheduled(using: client)
             }
         }
     }
 }
 
-// MARK: - tvOS Helper Views
+// MARK: - tvOS Row
 
 #if os(tvOS)
-/// Combined row for tvOS - single focusable button with action on the right
 struct TopicProgramRowTV: View {
     @EnvironmentObject private var client: PVRClient
     @EnvironmentObject private var appState: AppState
@@ -258,17 +203,17 @@ struct TopicProgramRowTV: View {
     var onRecordingChanged: (() -> Void)? = nil
     var onShowDetails: (() -> Void)? = nil
 
-    @State private var isScheduled = false
-    @State private var isRecording = false
-    @State private var existingRecordingId: Int?
-    @State private var isProcessing = false
-    @State private var existingRecording: Recording?
-    @State private var earlierScheduled: Recording?
+    @StateObject private var vm: TopicProgramRowViewModel
 
-    private var programScheduleText: String {
-        let start = program.startDate.formatted(date: .abbreviated, time: .shortened)
-        let end = program.endDate.formatted(date: .omitted, time: .shortened)
-        return "\(start) - \(end)"
+    init(program: Program, channel: Channel, matchedKeyword: String,
+         onRecordingChanged: (() -> Void)? = nil,
+         onShowDetails: (() -> Void)? = nil) {
+        self.program = program
+        self.channel = channel
+        self.matchedKeyword = matchedKeyword
+        self.onRecordingChanged = onRecordingChanged
+        self.onShowDetails = onShowDetails
+        _vm = StateObject(wrappedValue: TopicProgramRowViewModel(program: program, channel: channel))
     }
 
     private var canRecord: Bool { appState.userLevel >= 1 }
@@ -276,12 +221,12 @@ struct TopicProgramRowTV: View {
     private var actionLabel: String {
         if !canRecord {
             return program.isCurrentlyAiring ? "Watch" : "Details"
-        } else if isRecording {
+        } else if vm.isRecording {
             return "Recording"
-        } else if isScheduled {
+        } else if vm.isScheduled {
             return "Scheduled"
         } else if program.hasEnded {
-            return existingRecording != nil ? "Watch Recording" : "Ended"
+            return vm.existingRecording != nil ? "Watch Recording" : "Ended"
         } else {
             return "Record"
         }
@@ -290,12 +235,12 @@ struct TopicProgramRowTV: View {
     private var actionIcon: String {
         if !canRecord {
             return program.isCurrentlyAiring ? "play.circle.fill" : "info.circle"
-        } else if isRecording {
+        } else if vm.isRecording {
             return "record.circle"
-        } else if isScheduled {
+        } else if vm.isScheduled {
             return "checkmark.circle.fill"
         } else if program.hasEnded {
-            return existingRecording != nil ? "play.circle.fill" : "clock"
+            return vm.existingRecording != nil ? "play.circle.fill" : "clock"
         } else {
             return "record.circle"
         }
@@ -304,20 +249,15 @@ struct TopicProgramRowTV: View {
     private var actionColor: Color {
         if !canRecord {
             return Theme.accent
-        } else if isRecording {
+        } else if vm.isRecording {
             return Theme.recording
-        } else if isScheduled {
+        } else if vm.isScheduled {
             return Theme.success
         } else if program.hasEnded {
-            return existingRecording != nil ? Theme.accent : Theme.textTertiary
+            return vm.existingRecording != nil ? Theme.accent : Theme.textTertiary
         } else {
             return Theme.accent
         }
-    }
-
-    private var isActionable: Bool {
-        if !canRecord { return true }
-        return existingRecording != nil || !program.hasEnded
     }
 
     var body: some View {
@@ -325,33 +265,15 @@ struct TopicProgramRowTV: View {
             onShowDetails?()
         } label: {
             HStack(alignment: .center, spacing: Theme.spacingLG) {
-                // Sport icon or default TV icon
-                ZStack {
-                    Circle()
-                        .fill(Theme.surfaceElevated)
+                ProgramSportIcon(program: program, size: 80, iconSize: 32)
 
-                    if let sport = SportDetector.detect(from: program) {
-                        Image(systemName: sport.sfSymbol)
-                            .font(.system(size: 32))
-                            .foregroundStyle(Theme.textSecondary)
-                    } else {
-                        Image(systemName: "tv")
-                            .font(.system(size: 32))
-                            .foregroundStyle(Theme.textTertiary)
-                    }
-                }
-                .frame(width: 80, height: 80)
-
-                // Program info
                 VStack(alignment: .leading, spacing: Theme.spacingSM) {
-                    // Live indicator (if currently airing)
                     if program.isCurrentlyAiring {
                         Label("Live", systemImage: "circle.fill")
                             .font(.caption)
                             .foregroundStyle(Theme.accent)
                     }
 
-                    // Program title
                     Text(program.name)
                         .font(.headline)
                         .foregroundStyle(Theme.textPrimary)
@@ -365,14 +287,13 @@ struct TopicProgramRowTV: View {
                             .lineLimit(1)
                     }
 
-                    // Channel and time info
                     HStack(spacing: Theme.spacingMD) {
                         Label(channel.name, systemImage: "tv")
                             .font(.caption)
                             .foregroundStyle(Theme.textTertiary)
 
                         Label {
-                            Text(programScheduleText)
+                            Text(vm.programScheduleText)
                         } icon: {
                             Image(systemName: "clock")
                         }
@@ -380,15 +301,14 @@ struct TopicProgramRowTV: View {
                         .foregroundStyle(Theme.textTertiary)
                     }
 
-                    // Already recorded info (prioritized over already scheduled)
-                    if let existing = existingRecording {
+                    if let existing = vm.existingRecording {
                         HStack(spacing: 4) {
                             Image(systemName: "checkmark.circle")
                             Text("Already recorded \(existing.startDate ?? Date(), style: .time)")
                         }
                         .font(.caption2)
                         .foregroundStyle(Theme.warning)
-                    } else if let earlier = earlierScheduled {
+                    } else if let earlier = vm.earlierScheduled {
                         HStack(spacing: 4) {
                             Image(systemName: "clock.badge.checkmark")
                             Text("Already scheduled at \(earlier.startDate ?? Date(), style: .time) on \(earlier.startDate ?? Date(), style: .date)")
@@ -399,9 +319,8 @@ struct TopicProgramRowTV: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                // Action label on the right
                 HStack(spacing: 8) {
-                    if isProcessing {
+                    if vm.isProcessing {
                         ProgressView()
                     } else {
                         Image(systemName: actionIcon)
@@ -424,91 +343,10 @@ struct TopicProgramRowTV: View {
                 Label("Details", systemImage: "info.circle")
             }
         }
-        .disabled(isProcessing)
+        .disabled(vm.isProcessing)
         .accessibilityIdentifier("topic-program-\(program.id)")
         .task {
-            await checkIfScheduled()
-        }
-    }
-
-    private func performAction() {
-        if !canRecord {
-            onShowDetails?()
-            return
-        }
-        if !program.hasEnded {
-            toggleRecording()
-        } else if let existing = existingRecording {
-            playExistingRecording(existing)
-        }
-    }
-
-
-    private func checkIfScheduled() async {
-        guard canRecord else { return }
-        do {
-            let (completed, recording, scheduled) = try await client.getAllRecordings()
-            let allRecordings = completed + recording + scheduled
-
-            if let rec = allRecordings.first(where: { $0.epgEventId == program.id }) {
-                isScheduled = true
-                isRecording = rec.recordingStatus == .recording
-                existingRecordingId = rec.id
-            }
-
-            if let existing = completed.first(where: { recording in
-                programNamesAreEqual(recording.name, program.name) && recording.recordingStatus == .ready
-            }) {
-                existingRecording = existing
-            }
-
-            if let earlier = scheduled.first(where: { recording in
-                programNamesAreEqual(recording.name, program.name) &&
-                recording.epgEventId != program.id &&
-                (recording.startTime ?? 0) < program.start &&
-                recording.recordingStatus == .pending
-            }) {
-                earlierScheduled = earlier
-            }
-        } catch {
-            // Silently fail
-        }
-    }
-
-    private func toggleRecording() {
-        isProcessing = true
-        Task {
-            do {
-                if isScheduled, let recordingId = existingRecordingId {
-                    try await client.cancelRecording(recordingId: recordingId)
-                    isScheduled = false
-                    existingRecordingId = nil
-                } else {
-                    try await client.scheduleRecording(eventId: program.id)
-                    isScheduled = true
-                    await checkIfScheduled()
-                }
-                isProcessing = false
-                onRecordingChanged?()
-            } catch {
-                isProcessing = false
-            }
-        }
-    }
-
-    private func playExistingRecording(_ recording: Recording) {
-        Task {
-            do {
-                let url = try await client.recordingStreamURL(recordingId: recording.id)
-                appState.playStream(
-                    url: url,
-                    title: recording.name,
-                    recordingId: recording.id,
-                    resumePosition: recording.playbackPosition
-                )
-            } catch {
-                // Silently fail
-            }
+            await vm.checkIfScheduled(using: client)
         }
     }
 }

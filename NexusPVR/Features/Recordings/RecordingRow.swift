@@ -135,20 +135,6 @@ struct RecordingRow: View {
     var durationVerified: Bool = false
     var durationUnverifiable: Bool = false
 
-    private var watchProgress: Double? {
-        guard let position = recording.playbackPosition,
-              let duration = recording.duration,
-              duration > 0,
-              position > 0 else {
-            return nil
-        }
-        return min(1.0, Double(position) / Double(duration))
-    }
-
-    private var detectedSport: Sport? {
-        SportDetector.detect(from: recording)
-    }
-
     private func recordingProgress(at date: Date) -> Double? {
         guard recording.recordingStatus == .recording,
               let recordingStart = recording.recordingStartTime,
@@ -229,66 +215,8 @@ struct RecordingRow: View {
         .accessibilityIdentifier("recording-row-\(recording.id)")
     }
 
-    @ViewBuilder
     private var statusIcon: some View {
-        // For completed recordings with watch progress, show the progress circle
-        if recording.recordingStatus.isCompleted, let progress = watchProgress {
-            WatchProgressCircle(progress: progress, size: 44, sport: detectedSport)
-        } else if recording.recordingStatus.isCompleted {
-            // Completed but not started watching
-            ZStack {
-                Circle()
-                    .fill(Theme.accent.opacity(0.2))
-                    .frame(width: 44, height: 44)
-
-                Image(systemName: detectedSport?.sfSymbol ?? "play.fill")
-                    .font(.system(size: 44 * 0.38))
-                    .foregroundStyle(Theme.accent)
-            }
-        } else {
-            // Other statuses (pending, recording, failed, etc.)
-            ZStack {
-                Circle()
-                    .fill(statusColor.opacity(0.2))
-                    .frame(width: 44, height: 44)
-
-                Image(systemName: detectedSport?.sfSymbol ?? statusIconName)
-                    .font(.system(size: 44 * 0.38))
-                    .foregroundStyle(statusColor)
-            }
-        }
-    }
-
-    private var statusIconName: String {
-        switch recording.recordingStatus {
-        case .pending:
-            return "clock"
-        case .recording:
-            return "record.circle"
-        case .ready:
-            return "checkmark.circle"
-        case .failed:
-            return "xmark.circle"
-        case .conflict:
-            return "exclamationmark.triangle"
-        case .deleted:
-            return "trash"
-        }
-    }
-
-    private var statusColor: Color {
-        switch recording.recordingStatus {
-        case .pending:
-            return Theme.warning
-        case .recording:
-            return Theme.recording
-        case .ready:
-            return Theme.success
-        case .failed, .deleted:
-            return Theme.error
-        case .conflict:
-            return Theme.warning
-        }
+        RecordingStatusIcon(recording: recording, size: 44)
     }
 }
 
@@ -307,10 +235,7 @@ struct RecordingRowTV: View {
     private var watchProgress: Double? {
         guard let position = recording.playbackPosition,
               let duration = recording.duration,
-              duration > 0,
-              position > 0 else {
-            return nil
-        }
+              duration > 0, position > 0 else { return nil }
         return min(1.0, Double(position) / Double(duration))
     }
 
@@ -339,27 +264,6 @@ struct RecordingRowTV: View {
         }
     }
 
-    private var actionIcon: String {
-        switch recording.recordingStatus {
-        case .ready:
-            return "play.circle.fill"
-        case .recording:
-            return "record.circle"
-        case .pending:
-            return "clock"
-        case .failed:
-            return "xmark.circle"
-        case .conflict:
-            return "exclamationmark.triangle"
-        case .deleted:
-            return "trash"
-        }
-    }
-
-    private var detectedSport: Sport? {
-        SportDetector.detect(from: recording)
-    }
-
     private func recordingProgress(at date: Date) -> Double? {
         guard recording.recordingStatus == .recording,
               let recordingStart = recording.recordingStartTime,
@@ -367,21 +271,6 @@ struct RecordingRowTV: View {
               totalDuration > 0 else { return nil }
         let elapsed = date.timeIntervalSince1970 - Double(recordingStart)
         return min(max(elapsed / Double(totalDuration), 0), 1)
-    }
-
-    private var actionColor: Color {
-        switch recording.recordingStatus {
-        case .ready:
-            return Theme.accent
-        case .recording:
-            return Theme.recording
-        case .pending:
-            return Theme.warning
-        case .failed, .deleted:
-            return Theme.error
-        case .conflict:
-            return Theme.warning
-        }
     }
 
     var body: some View {
@@ -393,20 +282,7 @@ struct RecordingRowTV: View {
             }
         } label: {
             HStack(spacing: Theme.spacingLG) {
-                // Status icon or watch progress (with sport icon merged in center)
-                if recording.recordingStatus.isCompleted, let progress = watchProgress {
-                    WatchProgressCircle(progress: progress, size: 60, sport: detectedSport)
-                } else {
-                    ZStack {
-                        Circle()
-                            .fill(actionColor.opacity(0.2))
-                            .frame(width: 60, height: 60)
-
-                        Image(systemName: detectedSport?.sfSymbol ?? actionIcon)
-                            .font(.system(size: 60 * 0.38))
-                            .foregroundStyle(actionColor)
-                    }
-                }
+                RecordingStatusIcon(recording: recording, size: 60)
 
                 // Recording info
                 VStack(alignment: .leading, spacing: Theme.spacingXS) {
@@ -469,7 +345,7 @@ struct RecordingRowTV: View {
                         Text(actionLabel)
                             .font(.callout)
                             .fontWeight(.medium)
-                            .foregroundStyle(actionColor)
+                            .foregroundStyle(recording.recordingStatus.statusColor)
                     }
 
                     if let size = recording.fileSizeFormatted {

@@ -54,10 +54,8 @@ final class TopicsViewModel: ObservableObject {
         keywords = prefs.keywords
 
         guard let cache = epgCache, cache.hasLoaded else {
-            print("[Topics] loadData: epgCache=\(epgCache == nil ? "nil" : "set") hasLoaded=\(epgCache?.hasLoaded ?? false) client=\(client == nil ? "nil" : "set")")
             return
         }
-        print("[Topics] loadData: starting with \(keywords.count) keywords, client=\(client == nil ? "nil" : "set")")
 
         isLoading = true
         error = nil

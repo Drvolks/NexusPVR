@@ -799,7 +799,11 @@ struct MacOSNavigation: View {
     private var selectedTabBinding: Binding<Tab> {
         Binding(
             get: { appState.selectedTab },
-            set: { appState.selectedTab = $0 }
+            set: { newValue in
+                Task { @MainActor in
+                    appState.selectedTab = newValue
+                }
+            }
         )
     }
 

@@ -461,18 +461,7 @@ struct RecordingDetailView: View {
     }
 
     private var statusColor: Color {
-        switch recording.recordingStatus {
-        case .pending:
-            return Theme.warning
-        case .recording:
-            return Theme.recording
-        case .ready:
-            return Theme.success
-        case .failed, .deleted:
-            return Theme.error
-        case .conflict:
-            return Theme.warning
-        }
+        recording.recordingStatus.statusColor
     }
 
     private func playRecording() {
@@ -482,15 +471,9 @@ struct RecordingDetailView: View {
         }
         Task {
             do {
-                let url = try await client.recordingStreamURL(recordingId: recording.id)
-                appState.playStream(
-                    url: url,
-                    title: recording.name,
-                    recordingId: recording.id,
-                    resumePosition: recording.playbackPosition,
-                    isRecordingInProgress: recording.recordingStatus == .recording
+                try await RecordingPlaybackHelper.play(
+                    recording: recording, using: client, appState: appState, dismiss: { dismiss() }
                 )
-                dismiss()
             } catch {
                 deleteError = error.localizedDescription
             }
@@ -500,17 +483,9 @@ struct RecordingDetailView: View {
     private func playFromBeginning() {
         Task {
             do {
-                try await client.setRecordingPosition(recordingId: recording.id, positionSeconds: 0)
-                let url = try await client.recordingStreamURL(recordingId: recording.id)
-                appState.playStream(
-                    url: url,
-                    title: recording.name,
-                    recordingId: recording.id,
-                    resumePosition: 0,
-                    isRecordingInProgress: recording.recordingStatus == .recording
+                try await RecordingPlaybackHelper.playFromBeginning(
+                    recording: recording, using: client, appState: appState, dismiss: { dismiss() }
                 )
-                NotificationCenter.default.post(name: .recordingsDidChange, object: nil)
-                dismiss()
             } catch {
                 deleteError = error.localizedDescription
             }
@@ -518,17 +493,11 @@ struct RecordingDetailView: View {
     }
 
     private func playLive() {
-        guard let channelId = recording.channelId else { return }
         Task {
             do {
-                let url = try await client.liveStreamURL(channelId: channelId)
-                appState.playStream(
-                    url: url,
-                    title: recording.name,
-                    channelId: channelId,
-                    channelName: recording.channel ?? "Channel \(channelId)"
+                try await RecordingPlaybackHelper.playLive(
+                    recording: recording, using: client, appState: appState, dismiss: { dismiss() }
                 )
-                dismiss()
             } catch {
                 deleteError = error.localizedDescription
             }
