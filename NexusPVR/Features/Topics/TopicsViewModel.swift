@@ -13,6 +13,8 @@ nonisolated struct MatchingProgram: Identifiable, Sendable {
     let program: Program
     let channel: Channel
     let matchedKeyword: String
+
+    static let scheduledKeyword = "Scheduled"
 }
 
 @MainActor
@@ -23,6 +25,7 @@ final class TopicsViewModel: ObservableObject {
     @Published var error: String?
 
     weak var epgCache: EPGCache?
+    var client: PVRClient?
     private var syncObserver: NSObjectProtocol?
 
     init() {
@@ -50,18 +53,66 @@ final class TopicsViewModel: ObservableObject {
         let prefs = UserPreferences.load()
         keywords = prefs.keywords
 
-        guard !keywords.isEmpty else {
-            matchingPrograms = []
+        guard let cache = epgCache, cache.hasLoaded else {
+            print("[Topics] loadData: epgCache=\(epgCache == nil ? "nil" : "set") hasLoaded=\(epgCache?.hasLoaded ?? false) client=\(client == nil ? "nil" : "set")")
             return
         }
-
-        guard let cache = epgCache, cache.hasLoaded else { return }
+        print("[Topics] loadData: starting with \(keywords.count) keywords, client=\(client == nil ? "nil" : "set")")
 
         isLoading = true
         error = nil
 
-        let matches = await cache.matchingPrograms(keywords: keywords)
+        // Load keyword matches
+        var matches: [MatchingProgram] = []
+        if !keywords.isEmpty {
+            matches = await cache.matchingPrograms(keywords: keywords)
+        }
+
+        // Load scheduled recordings and convert to MatchingProgram
+        if let client {
+            let scheduledMatches = await loadScheduledAsTopics(cache: cache)
+            matches.append(contentsOf: scheduledMatches)
+            matches.sort { $0.program.startDate < $1.program.startDate }
+        }
+
         matchingPrograms = matches
         isLoading = false
+    }
+
+    private func loadScheduledAsTopics(cache: EPGCache) async -> [MatchingProgram] {
+        guard let client else { return [] }
+        do {
+            let (_, recording, scheduled) = try await client.getAllRecordings()
+            let allScheduled = recording + scheduled
+            let channelMap = cache.channelMap
+
+            return allScheduled.compactMap { rec -> MatchingProgram? in
+                guard let channelId = rec.channelId,
+                      let channel = channelMap[channelId],
+                      let startTime = rec.startTime,
+                      let duration = rec.duration else { return nil }
+
+                let program = Program(
+                    id: rec.epgEventId ?? rec.id,
+                    name: rec.name,
+                    subtitle: rec.subtitle,
+                    desc: rec.desc,
+                    start: startTime,
+                    end: startTime + duration,
+                    genres: rec.genres,
+                    channelId: channelId,
+                    season: rec.season,
+                    episode: rec.episode
+                )
+
+                return MatchingProgram(
+                    program: program,
+                    channel: channel,
+                    matchedKeyword: MatchingProgram.scheduledKeyword
+                )
+            }
+        } catch {
+            return []
+        }
     }
 }

@@ -36,9 +36,8 @@ struct GuideView: View {
     // Keywords for pre-computing matches
     @State private var keywords: [String] = []
 
-    #if os(iOS)
+    #if !os(tvOS)
     @StateObject private var calendarViewModel = TopicsViewModel()
-    @State private var showingNoTopicsAlert = false
     #endif
 
     private let hourWidth: CGFloat = Theme.hourColumnWidth
@@ -98,23 +97,21 @@ struct GuideView: View {
             } message: {
                 streamErrorMessage
             }
-            #if os(iOS)
+            #if !os(tvOS)
+            .onChange(of: appState.showingCalendar) {
+                if appState.showingCalendar {
+                    calendarViewModel.epgCache = epgCache
+                    calendarViewModel.client = client
+                    Task { await calendarViewModel.loadData() }
+                }
+            }
             .sheet(isPresented: $appState.showingCalendar) {
                 CalendarView(programs: calendarViewModel.matchingPrograms)
                     .environmentObject(client)
                     .environmentObject(appState)
-                    .task {
-                        calendarViewModel.epgCache = epgCache
-                        await calendarViewModel.loadData()
-                    }
-            }
-            .alert("No Topics", isPresented: $showingNoTopicsAlert) {
-                Button("Add Topics") {
-                    appState.showingKeywordsEditor = true
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Add topic keywords to see your personalized program calendar.")
+                    #if os(macOS)
+                    .frame(minWidth: 700, minHeight: 500)
+                    #endif
             }
             .sheet(isPresented: $appState.showingKeywordsEditor) {
                 KeywordsEditorView()
@@ -122,6 +119,9 @@ struct GuideView: View {
                         keywords = UserPreferences.load().keywords
                         viewModel.updateKeywordMatches(keywords: keywords)
                     }
+                    #if os(macOS)
+                    .frame(minWidth: 500, minHeight: 400)
+                    #endif
             }
             #endif
             .task {
@@ -356,11 +356,7 @@ struct GuideView: View {
                 .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 2)
 
                 Button {
-                    if keywords.isEmpty {
-                        showingNoTopicsAlert = true
-                    } else {
-                        appState.showingCalendar = true
-                    }
+                    appState.showingCalendar = true
                 } label: {
                     Image(systemName: "calendar")
                         .font(.system(size: 14, weight: .semibold))

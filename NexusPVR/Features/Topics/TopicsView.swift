@@ -25,17 +25,11 @@ struct TopicsView: View {
     @State private var selectedKeyword: String = ""
     #endif
 
-    #if os(tvOS)
     private var filteredPrograms: [MatchingProgram] {
-        guard !selectedKeyword.isEmpty else { return viewModel.matchingPrograms }
-        return viewModel.matchingPrograms.filter { $0.matchedKeyword == selectedKeyword }
+        let nonScheduled = viewModel.matchingPrograms.filter { $0.matchedKeyword != MatchingProgram.scheduledKeyword }
+        guard !selectedKeyword.isEmpty else { return nonScheduled }
+        return nonScheduled.filter { $0.matchedKeyword == selectedKeyword }
     }
-    #else
-    private var filteredPrograms: [MatchingProgram] {
-        guard !selectedKeyword.isEmpty else { return viewModel.matchingPrograms }
-        return viewModel.matchingPrograms.filter { $0.matchedKeyword == selectedKeyword }
-    }
-    #endif
 
     private func syncTopicSelection(with keywords: [String], preferFirst: Bool = false) {
         appState.topicKeywords = keywords
@@ -151,6 +145,13 @@ struct TopicsView: View {
                 .frame(minWidth: 500, minHeight: 400)
                 #endif
         }
+        .onChange(of: appState.showingCalendar) {
+            if appState.showingCalendar {
+                viewModel.epgCache = epgCache
+                viewModel.client = client
+                Task { await viewModel.loadData() }
+            }
+        }
         .sheet(isPresented: $appState.showingCalendar) {
             CalendarView(programs: viewModel.matchingPrograms)
                 .environmentObject(client)
@@ -162,6 +163,7 @@ struct TopicsView: View {
         #endif
         .task {
             viewModel.epgCache = epgCache
+            viewModel.client = client
             await viewModel.loadData()
             #if os(iOS)
             syncTopicSelection(with: viewModel.keywords, preferFirst: true)
@@ -188,6 +190,9 @@ struct TopicsView: View {
                 Task { await viewModel.loadData() }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .recordingsDidChange)) { _ in
+            Task { await viewModel.loadData() }
+        }
         #if os(iOS)
         .onChange(of: appState.selectedTab) {
             guard appState.selectedTab == .topics else { return }
@@ -211,9 +216,7 @@ struct TopicsView: View {
             programsList
         }
         #else
-        if viewModel.keywords.isEmpty {
-            emptyKeywordsView
-        } else if viewModel.isLoading && viewModel.matchingPrograms.isEmpty {
+        if viewModel.isLoading && viewModel.matchingPrograms.isEmpty {
             loadingView
         } else if let error = viewModel.error {
             errorView(error)
@@ -223,37 +226,6 @@ struct TopicsView: View {
             programsList
         }
         #endif
-    }
-
-    private var emptyKeywordsView: some View {
-        VStack(spacing: Theme.spacingMD) {
-            Image(systemName: "star.fill")
-                .font(.system(size: 48))
-                .foregroundStyle(Theme.textTertiary)
-            Text("No Topics Configured")
-                .font(.headline)
-                .foregroundStyle(Theme.textPrimary)
-            Text("Add keywords to find matching programs")
-                .font(.subheadline)
-                .foregroundStyle(Theme.textSecondary)
-                .multilineTextAlignment(.center)
-
-            Button {
-                #if os(tvOS)
-                showingKeywordsEditor = true
-                #else
-                appState.showingKeywordsEditor = true
-                #endif
-            } label: {
-                HStack {
-                    Image(systemName: "pencil")
-                    Text("Edit Keywords")
-                }
-            }
-            .buttonStyle(AccentButtonStyle())
-        }
-        .padding()
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var loadingView: some View {

@@ -63,8 +63,24 @@ struct CalendarView: View {
     }
 
     private var filteredPrograms: [MatchingProgram] {
-        guard !selectedKeyword.isEmpty else { return programs }
-        return programs.filter { $0.matchedKeyword == selectedKeyword }
+        if selectedKeyword == MatchingProgram.scheduledKeyword {
+            // Show all scheduled recordings
+            return programs.filter { $0.matchedKeyword == MatchingProgram.scheduledKeyword }
+        } else if !selectedKeyword.isEmpty {
+            // Show only the selected topic keyword
+            return programs.filter { $0.matchedKeyword == selectedKeyword }
+        }
+        // "All": deduplicate — if a program has both a topic and "Scheduled" entry, keep the topic one
+        let scheduledIds = Set(
+            programs.filter { $0.matchedKeyword == MatchingProgram.scheduledKeyword }.map { $0.program.id }
+        )
+        let topicIds = Set(
+            programs.filter { $0.matchedKeyword != MatchingProgram.scheduledKeyword }.map { $0.program.id }
+        )
+        let duplicateIds = scheduledIds.intersection(topicIds)
+        return programs.filter {
+            !($0.matchedKeyword == MatchingProgram.scheduledKeyword && duplicateIds.contains($0.program.id))
+        }
     }
 
     private var blockTextColor: Color {
@@ -561,6 +577,7 @@ struct CalendarTabView: View {
             .environmentObject(appState)
             .task {
                 viewModel.epgCache = epgCache
+                viewModel.client = client
                 await viewModel.loadData()
             }
     }
