@@ -59,6 +59,8 @@ nonisolated struct Recording: Identifiable, Codable, Hashable {
     var playbackPosition: Int?  // Resume position in seconds
     let prePadding: Int?   // Minutes before program start
     let postPadding: Int?  // Minutes after program end
+    let season: Int?
+    let episode: Int?
 
     var startDate: Date? {
         guard let startTime else { return nil }
@@ -111,6 +113,13 @@ nonisolated struct Recording: Identifiable, Codable, Hashable {
         return RecordingStatus(rawValue: status.lowercased()) ?? .pending
     }
 
+    var seriesInfo: SeriesInfo? {
+        if let season, let episode, season > 0, episode > 0 {
+            return SeriesInfo(season: season, episode: episode, seriesName: name)
+        }
+        return SeriesInfo.parse(name: name, subtitle: subtitle, desc: desc)
+    }
+
     var fileSizeFormatted: String? {
         guard let size else { return nil }
         let formatter = ByteCountFormatter()
@@ -125,7 +134,8 @@ nonisolated struct Recording: Identifiable, Codable, Hashable {
          channelId: Int? = nil, status: String? = nil, file: String? = nil,
          recurring: Bool? = nil, recurringParent: Int? = nil, epgEventId: Int? = nil,
          size: Int64? = nil, quality: String? = nil, genres: [String]? = nil,
-         playbackPosition: Int? = nil, prePadding: Int? = nil, postPadding: Int? = nil) {
+         playbackPosition: Int? = nil, prePadding: Int? = nil, postPadding: Int? = nil,
+         season: Int? = nil, episode: Int? = nil) {
         self.id = id
         self.name = name
         self.subtitle = subtitle
@@ -145,6 +155,8 @@ nonisolated struct Recording: Identifiable, Codable, Hashable {
         self.playbackPosition = playbackPosition
         self.prePadding = prePadding
         self.postPadding = postPadding
+        self.season = season
+        self.episode = episode
     }
 
     enum CodingKeys: String, CodingKey {
@@ -167,11 +179,44 @@ nonisolated struct Recording: Identifiable, Codable, Hashable {
         case playbackPosition
         case prePadding
         case postPadding
+        case season
+        case episode
     }
 }
 
 nonisolated struct RecordingListResponse: Codable {
     let recordings: [Recording]?
+}
+
+nonisolated struct RecurringRecording: Identifiable, Decodable {
+    let id: Int
+    let name: String
+    let channelID: Int?
+    let channel: String?
+    let enabled: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, channelID, channel, enabled
+        case epgTitle
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(Int.self, forKey: .id)
+        // Try epgTitle first, then name
+        if let title = try? container.decode(String.self, forKey: .epgTitle) {
+            name = title
+        } else {
+            name = try container.decode(String.self, forKey: .name)
+        }
+        channelID = try container.decodeIfPresent(Int.self, forKey: .channelID)
+        channel = try container.decodeIfPresent(String.self, forKey: .channel)
+        enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled)
+    }
+}
+
+nonisolated struct RecurringRecordingListResponse: Decodable {
+    let recurrings: [RecurringRecording]?
 }
 
 extension Recording {

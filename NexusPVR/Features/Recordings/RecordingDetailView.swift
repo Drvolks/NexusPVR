@@ -33,8 +33,8 @@ struct RecordingDetailView: View {
                 VStack(alignment: .leading, spacing: Theme.spacingLG) {
                     headerSection
                     infoSection
-                    if let desc = recording.desc, !desc.isEmpty {
-                        descriptionSection(desc)
+                    if recording.desc != nil || recording.seriesInfo != nil {
+                        descriptionSection
                     }
                     actionSection
                 }
@@ -123,15 +123,24 @@ struct RecordingDetailView: View {
                     .font(.subheadline)
 
                     // Description
-                    if let desc = recording.desc, !desc.isEmpty {
+                    if recording.desc != nil || recording.seriesInfo != nil {
                         VStack(alignment: .leading, spacing: Theme.spacingSM) {
                             Text("Description")
                                 .font(.headline)
                                 .foregroundStyle(Theme.textPrimary)
 
-                            Text(tvOSDescriptionWithGenres(desc))
-                                .font(.body)
-                                .foregroundStyle(Theme.textSecondary)
+                            if let desc = recording.desc, !desc.isEmpty {
+                                Text(tvOSDescriptionWithGenres(desc))
+                                    .font(.body)
+                                    .foregroundStyle(Theme.textSecondary)
+                            }
+
+                            if let series = recording.seriesInfo {
+                                Text(series.displayString)
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundStyle(Theme.accent)
+                            }
                         }
                         .padding()
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -328,15 +337,24 @@ struct RecordingDetailView: View {
         .font(.subheadline)
     }
 
-    private func descriptionSection(_ description: String) -> some View {
+    private var descriptionSection: some View {
         VStack(alignment: .leading, spacing: Theme.spacingSM) {
             Text("Description")
                 .font(.headline)
                 .foregroundStyle(Theme.textPrimary)
 
-            Text(description)
-                .font(.body)
-                .foregroundStyle(Theme.textSecondary)
+            if let desc = recording.desc, !desc.isEmpty {
+                Text(desc)
+                    .font(.body)
+                    .foregroundStyle(Theme.textSecondary)
+            }
+
+            if let series = recording.seriesInfo {
+                Text(series.displayString)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundStyle(Theme.accent)
+            }
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -733,6 +733,7 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
 
         let allPrograms: [DispatcharrProgram] = try await fetchAllPages(url, maxPages: 50)
 
+
         let tvgMap = tvgIdToChannelId
         let result = await Task.detached(priority: .userInitiated) {
             var mapped = [Int: [Program]]()
@@ -831,6 +832,21 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         let body = try encoder.encode(recordingRequest)
 
         let _: DispatcharrRecording = try await authenticatedRequest(url, method: "POST", body: body)
+    }
+
+    func scheduleSeriesRecording(eventId: Int) async throws {
+        // Dispatcharr doesn't have native series recording — schedule as a single recording
+        try await scheduleRecording(eventId: eventId)
+    }
+
+    func cancelSeriesRecording(recurringId: Int) async throws {
+        // Dispatcharr doesn't have native series recording — cancel as a single recording
+        try await cancelRecording(recordingId: recurringId)
+    }
+
+    func getRecurringRecordings() async throws -> [RecurringRecording] {
+        // Dispatcharr doesn't have native recurring recordings
+        return []
     }
 
     func cancelRecording(recordingId: Int) async throws {
@@ -1158,6 +1174,10 @@ private class XMLTVParserDelegate: NSObject, XMLParserDelegate {
     private var currentSubTitle = ""
     private var currentDesc = ""
     private var currentCategory = ""
+    private var currentEpisodeNum = ""
+    private var currentEpisodeNumSystem = ""
+    private var parsedSeason: Int?
+    private var parsedEpisode: Int?
     private var inProgramme = false
 
     private static let dateFormatter: DateFormatter = {
@@ -1183,6 +1203,15 @@ private class XMLTVParserDelegate: NSObject, XMLParserDelegate {
             currentSubTitle = ""
             currentDesc = ""
             currentCategory = ""
+            currentEpisodeNum = ""
+            currentEpisodeNumSystem = ""
+            parsedSeason = nil
+            parsedEpisode = nil
+        }
+
+        if elementName == "episode-num" {
+            currentEpisodeNumSystem = attributeDict["system"] ?? ""
+            currentEpisodeNum = ""
         }
     }
 
@@ -1193,11 +1222,33 @@ private class XMLTVParserDelegate: NSObject, XMLParserDelegate {
         case "sub-title": currentSubTitle += string
         case "desc": currentDesc += string
         case "category": currentCategory += string
+        case "episode-num": currentEpisodeNum += string
         default: break
         }
     }
 
     func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
+        if elementName == "episode-num" && inProgramme {
+            let num = currentEpisodeNum.trimmingCharacters(in: .whitespacesAndNewlines)
+            if currentEpisodeNumSystem == "xmltv_ns" {
+                // Format: "season.episode.part" (0-indexed)
+                let parts = num.split(separator: ".")
+                if parts.count >= 2,
+                   let s = Int(parts[0]), let e = Int(parts[1]) {
+                    parsedSeason = s + 1  // Convert from 0-indexed
+                    parsedEpisode = e + 1
+                }
+            } else if currentEpisodeNumSystem == "onscreen" {
+                // Format: "S01E05" or similar
+                if let info = SeriesInfo.parse(name: num) {
+                    parsedSeason = info.season
+                    parsedEpisode = info.episode
+                }
+            }
+            currentElement = ""
+            return
+        }
+
         if elementName == "programme" {
             inProgramme = false
 
@@ -1221,13 +1272,15 @@ private class XMLTVParserDelegate: NSObject, XMLParserDelegate {
                 start: Int(startDate.timeIntervalSince1970),
                 end: Int(stopDate.timeIntervalSince1970),
                 genres: genres,
-                channelId: channelId
+                channelId: channelId,
+                season: parsedSeason,
+                episode: parsedEpisode
             )
 
             programs[channelId, default: []].append(program)
         }
 
-        if elementName != "programme" {
+        if elementName != "programme" && elementName != "episode-num" {
             currentElement = ""
         }
     }
@@ -1412,6 +1465,8 @@ nonisolated struct DispatcharrProgram: Decodable, Sendable {
     let description: String?
     let tvgId: String?
     let channel: Int?
+    let season: Int?
+    let episode: Int?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -1422,6 +1477,8 @@ nonisolated struct DispatcharrProgram: Decodable, Sendable {
         case description
         case tvgId = "tvg_id"
         case channel
+        case season
+        case episode
     }
 
     init(from decoder: Decoder) throws {
@@ -1455,6 +1512,9 @@ nonisolated struct DispatcharrProgram: Decodable, Sendable {
         } else {
             channel = nil
         }
+
+        season = try container.decodeIfPresent(Int.self, forKey: .season)
+        episode = try container.decodeIfPresent(Int.self, forKey: .episode)
     }
 
     func toProgram(channelId: Int? = nil) -> Program? {
@@ -1476,7 +1536,9 @@ nonisolated struct DispatcharrProgram: Decodable, Sendable {
             start: Int(startDate.timeIntervalSince1970),
             end: Int(endDate.timeIntervalSince1970),
             genres: nil,
-            channelId: channelId ?? channel
+            channelId: channelId ?? channel,
+            season: season,
+            episode: episode
         )
     }
 }
@@ -1569,13 +1631,23 @@ nonisolated struct DispatcharrRecording: Decodable {
             size: nil,
             quality: nil,
             genres: nil,
-            playbackPosition: playbackPosition > 0 ? playbackPosition : nil
+            playbackPosition: playbackPosition > 0 ? playbackPosition : nil,
+            season: customProperties?.season,
+            episode: customProperties?.episode
         )
     }
 }
 
 nonisolated struct DispatcharrCustomProperties: Codable {
     let program: DispatcharrProgramRef?
+    let season: Int?
+    let episode: Int?
+
+    init(program: DispatcharrProgramRef?, season: Int? = nil, episode: Int? = nil) {
+        self.program = program
+        self.season = season
+        self.episode = episode
+    }
 }
 
 nonisolated struct DispatcharrProgramRef: Codable {

@@ -16,9 +16,13 @@ struct ProgramDetailView: View {
     let channel: Channel
 
     @State private var isScheduling = false
+    @State private var isSchedulingSeries = false
+    @State private var isCancellingSeries = false
     @State private var scheduleError: String?
     @State private var isScheduled: Bool
+    @State private var isSeriesScheduled = false
     @State private var existingRecordingId: Int?
+    @State private var recurringParentId: Int?
     @State private var completedRecording: Recording?
     @State private var didChangeRecording = false
 
@@ -161,7 +165,7 @@ struct ProgramDetailView: View {
                     .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusMD))
 
                     // Description section
-                    if program.desc != nil || program.genres != nil {
+                    if program.desc != nil || program.genres != nil || program.seriesInfo != nil {
                         VStack(alignment: .leading, spacing: Theme.spacingSM) {
                             Text("Description")
                                 .font(.headline)
@@ -171,6 +175,13 @@ struct ProgramDetailView: View {
                             Text(descriptionWithCategories)
                                 .font(.body)
                                 .foregroundStyle(Theme.textSecondary)
+
+                            if let series = program.seriesInfo {
+                                Text(series.displayString)
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundStyle(Theme.accent)
+                            }
                         }
                         .padding()
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -231,9 +242,28 @@ struct ProgramDetailView: View {
                                     }
                                     .frame(maxWidth: .infinity)
                                 }
-                                .buttonStyle(SecondaryButtonStyle())
+                                .buttonStyle(AccentButtonStyle())
                                 .disabled(isScheduling)
                                 .accessibilityIdentifier("cancel-recording-button")
+
+                                if isSeriesScheduled {
+                                    Button {
+                                        cancelSeriesRecording()
+                                    } label: {
+                                        HStack {
+                                            if isCancellingSeries {
+                                                ProgressView()
+                                                    .tint(.white)
+                                            } else {
+                                                Image(systemName: "arrow.2.squarepath")
+                                                Text("Cancel Series")
+                                            }
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(AccentButtonStyle())
+                                    .disabled(isCancellingSeries)
+                                }
                             } else {
                                 Button {
                                     scheduleRecording()
@@ -252,6 +282,44 @@ struct ProgramDetailView: View {
                                 .buttonStyle(AccentButtonStyle())
                                 .disabled(isScheduling)
                                 .accessibilityIdentifier("record-button")
+
+                                if program.seriesInfo != nil {
+                                    if isSeriesScheduled {
+                                        Button {
+                                            cancelSeriesRecording()
+                                        } label: {
+                                            HStack {
+                                                if isCancellingSeries {
+                                                    ProgressView()
+                                                        .tint(.white)
+                                                } else {
+                                                    Image(systemName: "arrow.2.squarepath")
+                                                    Text("Cancel Series")
+                                                }
+                                            }
+                                            .frame(maxWidth: .infinity)
+                                        }
+                                        .buttonStyle(AccentButtonStyle())
+                                        .disabled(isCancellingSeries)
+                                    } else {
+                                        Button {
+                                            scheduleSeriesRecording()
+                                        } label: {
+                                            HStack {
+                                                if isSchedulingSeries {
+                                                    ProgressView()
+                                                        .tint(.white)
+                                                } else {
+                                                    Image(systemName: "arrow.2.squarepath")
+                                                    Text("Record Series")
+                                                }
+                                            }
+                                            .frame(maxWidth: .infinity)
+                                        }
+                                        .buttonStyle(AccentButtonStyle())
+                                        .disabled(isSchedulingSeries)
+                                    }
+                                }
                             }
                         } else if !program.hasEnded && !canRecord {
                             Label("Recording requires admin permissions", systemImage: "lock.fill")
@@ -385,6 +453,13 @@ struct ProgramDetailView: View {
             Text(description)
                 .font(.body)
                 .foregroundStyle(Theme.textSecondary)
+
+            if let series = program.seriesInfo {
+                Text(series.displayString)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundStyle(Theme.accent)
+            }
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -446,9 +521,28 @@ struct ProgramDetailView: View {
                         }
                         .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(SecondaryButtonStyle())
+                    .buttonStyle(AccentButtonStyle())
                     .disabled(isScheduling)
                     .accessibilityIdentifier("cancel-recording-button")
+
+                    if isSeriesScheduled {
+                        Button {
+                            cancelSeriesRecording()
+                        } label: {
+                            HStack {
+                                if isCancellingSeries {
+                                    ProgressView()
+                                        .tint(.white)
+                                } else {
+                                    Image(systemName: "arrow.2.squarepath")
+                                    Text("Cancel Series")
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(AccentButtonStyle())
+                        .disabled(isCancellingSeries)
+                    }
                 } else {
                     Button {
                         scheduleRecording()
@@ -467,6 +561,44 @@ struct ProgramDetailView: View {
                     .buttonStyle(AccentButtonStyle())
                     .disabled(isScheduling)
                     .accessibilityIdentifier("record-button")
+
+                    if program.seriesInfo != nil {
+                        if isSeriesScheduled {
+                            Button {
+                                cancelSeriesRecording()
+                            } label: {
+                                HStack {
+                                    if isCancellingSeries {
+                                        ProgressView()
+                                            .tint(.white)
+                                    } else {
+                                        Image(systemName: "arrow.2.squarepath")
+                                        Text("Cancel Series")
+                                    }
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(AccentButtonStyle())
+                            .disabled(isCancellingSeries)
+                        } else {
+                            Button {
+                                scheduleSeriesRecording()
+                            } label: {
+                                HStack {
+                                    if isSchedulingSeries {
+                                        ProgressView()
+                                            .tint(.white)
+                                    } else {
+                                        Image(systemName: "arrow.2.squarepath")
+                                        Text("Record Series")
+                                    }
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(AccentButtonStyle())
+                            .disabled(isSchedulingSeries)
+                        }
+                    }
                 }
             } else if !program.hasEnded && !canRecord {
                 Label("Recording requires admin permissions", systemImage: "lock.fill")
@@ -513,9 +645,37 @@ struct ProgramDetailView: View {
             let (completed, recording, scheduled) = try await client.getAllRecordings()
             let allRecordings = completed + recording + scheduled
 
-            if let recording = allRecordings.first(where: { $0.epgEventId == program.id }) {
+            // Reset state before re-evaluating
+            isScheduled = false
+            existingRecordingId = nil
+            isSeriesScheduled = false
+            recurringParentId = nil
+
+            // Match by epgEventId first, then fallback to name + start time
+            let matched = allRecordings.first(where: { $0.epgEventId == program.id })
+                ?? allRecordings.first(where: {
+                    $0.name.lowercased() == program.name.lowercased() &&
+                    $0.startTime == program.start
+                })
+            if let recording = matched {
                 isScheduled = true
                 existingRecordingId = recording.id
+                isSeriesScheduled = recording.recurringParent != nil || recording.recurring == true
+                recurringParentId = recording.recurringParent
+            }
+
+            // Check if a recurring recording rule exists for this program's series
+            if !isSeriesScheduled, program.seriesInfo != nil {
+                let programName = program.name.lowercased().trimmingCharacters(in: .whitespaces)
+                if let recurrings = try? await client.getRecurringRecordings() {
+                    if let recurring = recurrings.first(where: {
+                        ($0.enabled ?? true) &&
+                        $0.name.lowercased().trimmingCharacters(in: .whitespaces) == programName
+                    }) {
+                        isSeriesScheduled = true
+                        recurringParentId = recurring.id
+                    }
+                }
             }
 
             // Check for a completed recording with the same name
@@ -555,6 +715,50 @@ struct ProgramDetailView: View {
             } catch {
                 scheduleError = error.localizedDescription
                 isScheduling = false
+            }
+        }
+    }
+
+    private func cancelSeriesRecording() {
+        isCancellingSeries = true
+        scheduleError = nil
+
+        Task {
+            do {
+                if let parentId = recurringParentId {
+                    try await client.cancelSeriesRecording(recurringId: parentId)
+                } else if let recordingId = existingRecordingId {
+                    try await client.cancelSeriesRecording(recurringId: recordingId)
+                }
+                isSeriesScheduled = false
+                recurringParentId = nil
+                // Re-check to get accurate state from server
+                await checkIfScheduled()
+                didChangeRecording = true
+                onRecordingChanged?()
+                isCancellingSeries = false
+            } catch {
+                scheduleError = error.localizedDescription
+                isCancellingSeries = false
+            }
+        }
+    }
+
+    private func scheduleSeriesRecording() {
+        isSchedulingSeries = true
+        scheduleError = nil
+
+        Task {
+            do {
+                try await client.scheduleSeriesRecording(eventId: program.id)
+                isScheduled = true
+                await checkIfScheduled()
+                didChangeRecording = true
+                onRecordingChanged?()
+                isSchedulingSeries = false
+            } catch {
+                scheduleError = error.localizedDescription
+                isSchedulingSeries = false
             }
         }
     }

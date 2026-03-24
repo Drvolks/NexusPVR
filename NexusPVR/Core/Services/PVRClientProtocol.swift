@@ -48,7 +48,10 @@ protocol PVRClientProtocol: ObservableObject {
     func getAllListings(for channels: [Channel]) async throws -> [Int: [Program]]
     func getAllRecordings() async throws -> (completed: [Recording], recording: [Recording], scheduled: [Recording])
     func scheduleRecording(eventId: Int) async throws
+    func scheduleSeriesRecording(eventId: Int) async throws
     func cancelRecording(recordingId: Int) async throws
+    func cancelSeriesRecording(recurringId: Int) async throws
+    func getRecurringRecordings() async throws -> [RecurringRecording]
     func setRecordingPosition(recordingId: Int, positionSeconds: Int) async throws
     func liveStreamURL(channelId: Int) async throws -> URL
     func recordingStreamURL(recordingId: Int) async throws -> URL

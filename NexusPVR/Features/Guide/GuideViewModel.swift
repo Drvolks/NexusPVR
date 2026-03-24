@@ -16,6 +16,13 @@ final class GuideViewModel: ObservableObject {
                 recordings.compactMap { r in r.epgEventId.map { ($0, r) } },
                 uniquingKeysWith: { first, _ in first }
             )
+            // Secondary lookup by name + start time for Dispatcharr where epgEventId may not match
+            recordingsByNameAndStart = Dictionary(
+                recordings.compactMap { r in
+                    r.startTime.map { ("\(r.name.lowercased())_\($0)", r) }
+                },
+                uniquingKeysWith: { first, _ in first }
+            )
         }
     }
     @Published var isLoading = false
@@ -32,6 +39,8 @@ final class GuideViewModel: ObservableObject {
 
     // O(1) lookup for recording status by program ID
     private var recordingsByEventId: [Int: Recording] = [:]
+    // Fallback lookup by name + start time
+    private var recordingsByNameAndStart: [String: Recording] = [:]
 
     // Cached sport detection results (avoids re-running regex per render)
     private var sportCache: [Int: Sport?] = [:]
@@ -221,16 +230,21 @@ final class GuideViewModel: ObservableObject {
         selectedDate = Calendar.current.date(byAdding: .day, value: 1, to: selectedDate) ?? selectedDate
     }
 
+    private func findRecording(for program: Program) -> Recording? {
+        recordingsByEventId[program.id]
+            ?? recordingsByNameAndStart["\(program.name.lowercased())_\(program.start)"]
+    }
+
     func isScheduledRecording(_ program: Program) -> Bool {
-        recordingsByEventId[program.id] != nil
+        findRecording(for: program) != nil
     }
 
     func recordingStatus(_ program: Program) -> RecordingStatus? {
-        recordingsByEventId[program.id]?.recordingStatus
+        findRecording(for: program)?.recordingStatus
     }
 
     func recordingId(for program: Program) -> Int? {
-        if let id = recordingsByEventId[program.id]?.id {
+        if let id = findRecording(for: program)?.id {
             return id
         }
         guard let channelId = program.channelId else { return nil }
@@ -238,7 +252,7 @@ final class GuideViewModel: ObservableObject {
     }
 
     func activeRecordingId(for program: Program, channelId: Int) -> Int? {
-        if let id = recordingsByEventId[program.id]?.id {
+        if let id = findRecording(for: program)?.id {
             return id
         }
         return findOverlappingRecording(channelId: channelId, programStart: program.startDate, programEnd: program.endDate)?.id

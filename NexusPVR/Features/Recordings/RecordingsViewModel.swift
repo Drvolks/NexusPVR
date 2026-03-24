@@ -17,6 +17,13 @@ enum RecordingsFilter: String, Identifiable {
     var id: String { rawValue }
 }
 
+struct SeriesGroup: Identifiable {
+    let seriesName: String
+    let recordings: [Recording]
+
+    var id: String { seriesName }
+}
+
 @MainActor
 final class RecordingsViewModel: ObservableObject {
     @Published var completedRecordings: [Recording] = []
@@ -57,6 +64,26 @@ final class RecordingsViewModel: ObservableObject {
                 return d1 < d2
             }
         }
+    }
+
+    /// Recordings that are NOT part of a series (standalone)
+    var standaloneRecordings: [Recording] {
+        filteredRecordings.filter { $0.seriesInfo == nil }
+    }
+
+    /// Series groups for the current filter, sorted by series name
+    var seriesGroups: [SeriesGroup] {
+        let seriesRecordings = filteredRecordings.filter { $0.seriesInfo != nil }
+        let grouped = Dictionary(grouping: seriesRecordings) { $0.seriesInfo!.seriesName }
+        return grouped.map { name, recordings in
+            let sorted = recordings.sorted { r1, r2 in
+                guard let s1 = r1.seriesInfo, let s2 = r2.seriesInfo else { return false }
+                if s1.season != s2.season { return s1.season < s2.season }
+                return s1.episode < s2.episode
+            }
+            return SeriesGroup(seriesName: name, recordings: sorted)
+        }
+        .sorted { $0.seriesName.localizedCaseInsensitiveCompare($1.seriesName) == .orderedAscending }
     }
 
     func loadRecordings() async {

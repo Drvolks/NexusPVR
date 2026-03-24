@@ -7,6 +7,56 @@
 
 import Foundation
 
+// MARK: - Series Info
+
+nonisolated struct SeriesInfo: Hashable, Sendable {
+    let season: Int
+    let episode: Int
+    /// The series name (program name with SXXEXX pattern stripped)
+    let seriesName: String
+
+    var displayString: String {
+        "Season \(season) Episode \(episode)"
+    }
+
+    var shortDisplayString: String {
+        String(format: "S%02dE%02d", season, episode)
+    }
+
+    /// Parse SXXEXX pattern from a string. Returns the match and range if found.
+    private static let pattern = try! NSRegularExpression(pattern: #"[Ss](\d{1,2})[Ee](\d{1,2})"#)
+
+    /// Strip SXXEXX pattern and surrounding separators from a string
+    static func stripPattern(from string: String) -> String {
+        let range = NSRange(string.startIndex..., in: string)
+        let result = pattern.stringByReplacingMatches(in: string, range: range, withTemplate: "")
+        return result
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-–—:"))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Extract SeriesInfo from program/recording fields
+    static func parse(name: String, subtitle: String? = nil, desc: String? = nil) -> SeriesInfo? {
+        // Check subtitle first, then name, then description
+        let candidates = [subtitle, name, desc].compactMap { $0 }
+        for candidate in candidates {
+            let range = NSRange(candidate.startIndex..., in: candidate)
+            if let match = pattern.firstMatch(in: candidate, range: range),
+               let seasonRange = Range(match.range(at: 1), in: candidate),
+               let episodeRange = Range(match.range(at: 2), in: candidate),
+               let season = Int(candidate[seasonRange]),
+               let episode = Int(candidate[episodeRange]) {
+                // Series name: strip SXXEXX from name if present, otherwise use name as-is
+                let seriesName = stripPattern(from: name)
+                    .isEmpty ? name : stripPattern(from: name)
+                return SeriesInfo(season: season, episode: episode, seriesName: seriesName)
+            }
+        }
+        return nil
+    }
+}
+
 nonisolated struct Program: Identifiable, Decodable, Hashable, Sendable {
     let id: Int
     let name: String
@@ -16,6 +66,8 @@ nonisolated struct Program: Identifiable, Decodable, Hashable, Sendable {
     let end: Int   // Unix timestamp
     let genres: [String]?
     let channelId: Int?
+    let season: Int?
+    let episode: Int?
 
     var startDate: Date {
         Date(timeIntervalSince1970: TimeInterval(start))
@@ -42,6 +94,13 @@ nonisolated struct Program: Identifiable, Decodable, Hashable, Sendable {
         Date() > endDate
     }
 
+    var seriesInfo: SeriesInfo? {
+        if let season, let episode, season > 0, episode > 0 {
+            return SeriesInfo(season: season, episode: episode, seriesName: name)
+        }
+        return SeriesInfo.parse(name: name, subtitle: subtitle, desc: desc)
+    }
+
     func progress(at date: Date = Date()) -> Double {
         guard isCurrentlyAiring else { return hasEnded ? 1.0 : 0.0 }
         guard duration > 0 else { return 0 }
@@ -58,9 +117,11 @@ nonisolated struct Program: Identifiable, Decodable, Hashable, Sendable {
         case end, endTime = "end_time"
         case genres
         case channelId, channel_id
+        case season
+        case episode
     }
 
-    init(id: Int, name: String, subtitle: String?, desc: String?, start: Int, end: Int, genres: [String]?, channelId: Int?) {
+    init(id: Int, name: String, subtitle: String?, desc: String?, start: Int, end: Int, genres: [String]?, channelId: Int?, season: Int? = nil, episode: Int? = nil) {
         self.id = id
         self.name = name
         self.subtitle = subtitle
@@ -69,6 +130,8 @@ nonisolated struct Program: Identifiable, Decodable, Hashable, Sendable {
         self.end = end
         self.genres = genres
         self.channelId = channelId
+        self.season = season
+        self.episode = episode
     }
 
     init(from decoder: Decoder) throws {
@@ -118,6 +181,9 @@ nonisolated struct Program: Identifiable, Decodable, Hashable, Sendable {
         } else {
             channelId = try container.decodeIfPresent(Int.self, forKey: .channelId)
         }
+
+        season = try container.decodeIfPresent(Int.self, forKey: .season)
+        episode = try container.decodeIfPresent(Int.self, forKey: .episode)
     }
 }
 

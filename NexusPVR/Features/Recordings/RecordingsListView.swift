@@ -274,156 +274,89 @@ private struct RecordingsListContentView: View {
         }
     }
 
+    @ViewBuilder
+    private func recordingContextMenu(for recording: Recording) -> some View {
+        if recording.recordingStatus == .recording {
+            #if !DISPATCHERPVR
+            Button {
+                playRecordingFromBeginning(recording)
+            } label: {
+                Label("Play from Beginning", systemImage: "play.fill")
+            }
+            if let position = recording.playbackPosition, position > 10 {
+                Button {
+                    playRecording(recording)
+                } label: {
+                    Label("Resume", systemImage: "arrow.clockwise")
+                }
+            }
+            #endif
+            if recording.channelId != nil {
+                Button {
+                    playRecordingLive(recording)
+                } label: {
+                    Label("Watch Live", systemImage: "dot.radiowaves.left.and.right")
+                }
+            }
+        } else if recording.recordingStatus.isPlayable {
+            Button {
+                playRecording(recording)
+            } label: {
+                Label("Play", systemImage: "play.fill")
+            }
+            if recording.hasResumePosition {
+                Button {
+                    playRecordingFromBeginning(recording)
+                } label: {
+                    Label("Watch from Beginning", systemImage: "arrow.counterclockwise")
+                }
+            }
+        }
+
+        Button {
+            selectedRecording = recording
+        } label: {
+            Label("Details", systemImage: "info.circle")
+        }
+    }
+
     private func recordingsList(_ vm: RecordingsViewModel) -> some View {
         #if os(tvOS)
         ScrollView {
             LazyVStack(spacing: Theme.spacingMD) {
-                ForEach(vm.filteredRecordings) { recording in
-                    RecordingRowTV(
-                        recording: recording,
-                        onPlay: { playRecording(recording) },
-                        onShowDetails: { selectedRecording = recording },
-                        onDelete: {
-                            deleteRecording(recording)
-                        },
-                        durationMismatch: viewModel.durationMismatches[recording.id],
-                        durationVerified: viewModel.durationVerified.contains(recording.id),
-                        durationUnverifiable: viewModel.durationUnverifiable.contains(recording.id)
-                    )
-                    .contextMenu {
-                        if recording.recordingStatus == .recording {
-                            #if !DISPATCHERPVR
-                            Button {
-                                playRecordingFromBeginning(recording)
-                            } label: {
-                                Label("Play from Beginning", systemImage: "play.fill")
-                            }
-                            if let position = recording.playbackPosition, position > 10 {
-                                Button {
-                                    playRecording(recording)
-                                } label: {
-                                    Label("Resume", systemImage: "arrow.clockwise")
-                                }
-                            }
-                            #endif
-                            if recording.channelId != nil {
-                                Button {
-                                    playRecordingLive(recording)
-                                } label: {
-                                    Label("Watch Live", systemImage: "dot.radiowaves.left.and.right")
-                                }
-                            }
-                        } else if recording.recordingStatus.isPlayable {
-                            Button {
-                                playRecording(recording)
-                            } label: {
-                                Label("Play", systemImage: "play.fill")
-                            }
-                            if recording.hasResumePosition {
-                                Button {
-                                    playRecordingFromBeginning(recording)
-                                } label: {
-                                    Label("Watch from Beginning", systemImage: "arrow.counterclockwise")
-                                }
-                            }
-                        }
+                ForEach(vm.standaloneRecordings) { recording in
+                    tvOSRecordingRow(recording)
+                }
 
-                        Button {
-                            selectedRecording = recording
-                        } label: {
-                            Label("Details", systemImage: "info.circle")
-                        }
-
-                        Button(role: .destructive) {
-                            deleteRecording(recording)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
+                ForEach(vm.seriesGroups) { group in
+                    seriesSectionTV(group)
                 }
             }
             .padding()
         }
         #else
         List {
-            ForEach(vm.filteredRecordings) { recording in
-                RecordingRow(
-                    recording: recording,
-                    durationMismatch: viewModel.durationMismatches[recording.id],
-                    durationVerified: viewModel.durationVerified.contains(recording.id),
-                    durationUnverifiable: viewModel.durationUnverifiable.contains(recording.id)
-                )
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        if recording.recordingStatus == .recording {
-                            inProgressRecording = recording
-                        } else if recording.recordingStatus.isPlayable {
-                            playRecording(recording)
-                        } else {
-                            selectedRecording = recording
-                        }
-                    }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        Button(role: .destructive) {
-                            deleteRecording(recording)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
-                    .contextMenu {
-                        if recording.recordingStatus == .recording {
-                            #if !DISPATCHERPVR
-                            Button {
-                                playRecordingFromBeginning(recording)
-                            } label: {
-                                Label("Play from Beginning", systemImage: "play.fill")
-                            }
-                            if let position = recording.playbackPosition, position > 10 {
-                                Button {
-                                    playRecording(recording)
-                                } label: {
-                                    Label("Resume", systemImage: "arrow.clockwise")
-                                }
-                            }
-                            #endif
-                            if recording.channelId != nil {
-                                Button {
-                                    playRecordingLive(recording)
-                                } label: {
-                                    Label("Watch Live", systemImage: "dot.radiowaves.left.and.right")
-                                }
-                            }
-                        } else if recording.recordingStatus.isPlayable {
-                            Button {
-                                playRecording(recording)
-                            } label: {
-                                Label("Play", systemImage: "play.fill")
-                            }
-                            if recording.hasResumePosition {
-                                Button {
-                                    playRecordingFromBeginning(recording)
-                                } label: {
-                                    Label("Watch from Beginning", systemImage: "arrow.counterclockwise")
-                                }
-                            }
-                        }
-
-                        Button {
-                            selectedRecording = recording
-                        } label: {
-                            Label("Details", systemImage: "info.circle")
-                        }
-
-                        Divider()
-
-                        Button(role: .destructive) {
-                            deleteRecording(recording)
-                        } label: {
-                            Label(recording.recordingStatus.isScheduled ? "Cancel Recording" : "Delete", systemImage: "trash")
-                        }
-                    }
-                    .listRowBackground(Theme.surface)
+            ForEach(vm.standaloneRecordings) { recording in
+                iOSRecordingRow(recording)
             }
+
+            ForEach(vm.seriesGroups) { group in
+                HStack(spacing: Theme.spacingSM) {
+                    Image(systemName: "arrow.2.squarepath")
+                        .foregroundStyle(Theme.accent)
+                    Text(group.seriesName)
+                        .foregroundStyle(Theme.textPrimary)
+                }
+                .font(.headline)
+                .padding(.top, Theme.spacingSM)
+                .listRowBackground(Theme.surface)
+                .listRowSeparator(.hidden)
+
+                ForEach(group.recordings) { recording in
+                    seriesRecordingRow(recording)
+                }
+            }
+
             #if os(iOS)
             Color.clear
                 .frame(height: 96)
@@ -438,6 +371,200 @@ private struct RecordingsListContentView: View {
         }
         #endif
     }
+
+    #if os(tvOS)
+    private func tvOSRecordingRow(_ recording: Recording) -> some View {
+        RecordingRowTV(
+            recording: recording,
+            onPlay: { playRecording(recording) },
+            onShowDetails: { selectedRecording = recording },
+            onDelete: { deleteRecording(recording) },
+            durationMismatch: viewModel.durationMismatches[recording.id],
+            durationVerified: viewModel.durationVerified.contains(recording.id),
+            durationUnverifiable: viewModel.durationUnverifiable.contains(recording.id)
+        )
+        .contextMenu {
+            recordingContextMenu(for: recording)
+            Button(role: .destructive) {
+                deleteRecording(recording)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+    }
+
+    private func seriesSectionTV(_ group: SeriesGroup) -> some View {
+        VStack(alignment: .leading, spacing: Theme.spacingSM) {
+            HStack(spacing: Theme.spacingSM) {
+                Image(systemName: "arrow.2.squarepath")
+                Text(group.seriesName)
+                    .font(.title3)
+                    .fontWeight(.bold)
+            }
+            .foregroundStyle(Theme.textPrimary)
+            .padding(.top, Theme.spacingMD)
+
+            ForEach(group.recordings) { recording in
+                tvOSRecordingRow(recording)
+            }
+        }
+    }
+    #else
+    private func iOSRecordingRow(_ recording: Recording) -> some View {
+        RecordingRow(
+            recording: recording,
+            durationMismatch: viewModel.durationMismatches[recording.id],
+            durationVerified: viewModel.durationVerified.contains(recording.id),
+            durationUnverifiable: viewModel.durationUnverifiable.contains(recording.id)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if recording.recordingStatus == .recording {
+                inProgressRecording = recording
+            } else if recording.recordingStatus.isPlayable {
+                playRecording(recording)
+            } else {
+                selectedRecording = recording
+            }
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive) {
+                deleteRecording(recording)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .contextMenu {
+            recordingContextMenu(for: recording)
+            Divider()
+            Button(role: .destructive) {
+                deleteRecording(recording)
+            } label: {
+                Label(recording.recordingStatus.isScheduled ? "Cancel Recording" : "Delete", systemImage: "trash")
+            }
+        }
+        .listRowBackground(Theme.surface)
+    }
+
+    private func seriesRecordingRow(_ recording: Recording) -> some View {
+        HStack(alignment: .center, spacing: Theme.spacingMD) {
+            seriesStatusIcon(recording)
+
+            VStack(alignment: .leading, spacing: Theme.spacingXS) {
+                HStack {
+                    if let series = recording.seriesInfo {
+                        Text(series.shortDisplayString)
+                            .font(.headline)
+                            .foregroundStyle(Theme.accent)
+                    }
+
+                    if let subtitle = recording.subtitle, !subtitle.isEmpty {
+                        let cleaned = SeriesInfo.stripPattern(from: subtitle)
+                        if !cleaned.isEmpty {
+                            Text(cleaned)
+                                .font(.headline)
+                                .foregroundStyle(Theme.textPrimary)
+                                .lineLimit(1)
+                        }
+                    }
+
+                    Spacer()
+
+                    if let date = recording.startDate {
+                        Text(date, style: .date)
+                            .font(.caption)
+                            .foregroundStyle(Theme.textTertiary)
+                    }
+                }
+
+                if let desc = recording.desc, !desc.isEmpty {
+                    Text(desc)
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.textSecondary)
+                        .lineLimit(2)
+                }
+            }
+        }
+        .padding(.vertical, Theme.spacingXS)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if recording.recordingStatus == .recording {
+                inProgressRecording = recording
+            } else if recording.recordingStatus.isPlayable {
+                playRecording(recording)
+            } else {
+                selectedRecording = recording
+            }
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive) {
+                deleteRecording(recording)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .contextMenu {
+            recordingContextMenu(for: recording)
+            Divider()
+            Button(role: .destructive) {
+                deleteRecording(recording)
+            } label: {
+                Label(recording.recordingStatus.isScheduled ? "Cancel Recording" : "Delete", systemImage: "trash")
+            }
+        }
+        .listRowBackground(Theme.surface)
+    }
+    @ViewBuilder
+    private func seriesStatusIcon(_ recording: Recording) -> some View {
+        let sport = SportDetector.detect(from: recording)
+        let watchProgress: Double? = {
+            guard let position = recording.playbackPosition,
+                  let duration = recording.duration,
+                  duration > 0, position > 0 else { return nil }
+            return min(1.0, Double(position) / Double(duration))
+        }()
+
+        if recording.recordingStatus.isCompleted, let progress = watchProgress {
+            WatchProgressCircle(progress: progress, size: 44, sport: sport)
+        } else if recording.recordingStatus.isCompleted {
+            ZStack {
+                Circle()
+                    .fill(Theme.accent.opacity(0.2))
+                    .frame(width: 44, height: 44)
+                Image(systemName: sport?.sfSymbol ?? "play.fill")
+                    .font(.system(size: 44 * 0.38))
+                    .foregroundStyle(Theme.accent)
+            }
+        } else {
+            let statusColor: Color = {
+                switch recording.recordingStatus {
+                case .pending, .conflict: return Theme.warning
+                case .recording: return Theme.recording
+                case .ready: return Theme.success
+                case .failed, .deleted: return Theme.error
+                }
+            }()
+            let statusIcon: String = {
+                switch recording.recordingStatus {
+                case .pending: return "clock"
+                case .recording: return "record.circle"
+                case .ready: return "checkmark.circle"
+                case .failed: return "exclamationmark.triangle"
+                case .conflict: return "exclamationmark.triangle"
+                case .deleted: return "trash"
+                }
+            }()
+            ZStack {
+                Circle()
+                    .fill(statusColor.opacity(0.2))
+                    .frame(width: 44, height: 44)
+                Image(systemName: sport?.sfSymbol ?? statusIcon)
+                    .font(.system(size: 44 * 0.38))
+                    .foregroundStyle(statusColor)
+            }
+        }
+    }
+    #endif
 
     private func playRecording(_ recording: Recording) {
         if recording.isWatched {
