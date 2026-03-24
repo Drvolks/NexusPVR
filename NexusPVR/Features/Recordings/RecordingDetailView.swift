@@ -458,6 +458,10 @@ struct RecordingDetailView: View {
     }
 
     private func playRecording() {
+        if recording.isWatched {
+            playFromBeginning()
+            return
+        }
         Task {
             do {
                 let url = try await client.recordingStreamURL(recordingId: recording.id)
@@ -487,6 +491,7 @@ struct RecordingDetailView: View {
                     resumePosition: 0,
                     isRecordingInProgress: recording.recordingStatus == .recording
                 )
+                NotificationCenter.default.post(name: .recordingsDidChange, object: nil)
                 dismiss()
             } catch {
                 deleteError = error.localizedDescription

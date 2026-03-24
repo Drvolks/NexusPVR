@@ -440,6 +440,10 @@ private struct RecordingsListContentView: View {
     }
 
     private func playRecording(_ recording: Recording) {
+        if recording.isWatched {
+            playRecordingFromBeginning(recording)
+            return
+        }
         Task {
             do {
                 let url = try await viewModel.playRecording(recording)
@@ -457,6 +461,7 @@ private struct RecordingsListContentView: View {
     }
 
     private func playRecordingFromBeginning(_ recording: Recording) {
+        viewModel.resetPlaybackPosition(for: recording.id)
         Task {
             do {
                 try await client.setRecordingPosition(recordingId: recording.id, positionSeconds: 0)
@@ -468,6 +473,7 @@ private struct RecordingsListContentView: View {
                     resumePosition: 0,
                     isRecordingInProgress: recording.recordingStatus == .recording
                 )
+                NotificationCenter.default.post(name: .recordingsDidChange, object: nil)
             } catch {
                 deleteError = error.localizedDescription
             }
