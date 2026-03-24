@@ -56,7 +56,7 @@ nonisolated struct Recording: Identifiable, Codable, Hashable {
     let size: Int64?
     let quality: String?
     let genres: [String]?
-    let playbackPosition: Int?  // Resume position in seconds
+    var playbackPosition: Int?  // Resume position in seconds
     let prePadding: Int?   // Minutes before program start
     let postPadding: Int?  // Minutes after program end
 

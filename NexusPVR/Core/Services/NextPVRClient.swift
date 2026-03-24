@@ -506,11 +506,12 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
 
     func setRecordingPosition(recordingId: Int, positionSeconds: Int) async throws {
         guard !config.isDemoMode else { return }
+        // NextPVR ignores position=0, so use 1 to effectively reset to beginning
+        let position = max(positionSeconds, 1)
         let _: APIResponse = try await request("recording.watched.set", params: [
             "recording_id": String(recordingId),
-            "position": String(positionSeconds)
+            "position": String(position)
         ])
-        // Non-fatal — ignore failures
     }
 
     // MARK: - Streaming URLs
