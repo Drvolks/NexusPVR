@@ -523,7 +523,7 @@ struct CalendarView: View {
         } label: {
             ZStack(alignment: .topLeading) {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(item.program.name)
+                    Text(item.program.cleanName)
                         .font(.caption)
                         .fontWeight(.medium)
                         .foregroundStyle(blockTextColor)
@@ -552,12 +552,40 @@ struct CalendarView: View {
                     .fill(colorForKeyword(item.matchedKeyword).opacity(item.program.isCurrentlyAiring ? 0.6 : 0.4))
             )
             .clipShape(RoundedRectangle(cornerRadius: 4))
-            .overlay(alignment: .topTrailing) {
+            .overlay {
+                // "New" green band on top-right
+                if item.program.isNew {
+                    VStack {
+                        HStack {
+                            Spacer()
+                            Theme.success
+                                .frame(width: 4, height: 14)
+                                .clipShape(UnevenRoundedRectangle(
+                                    topLeadingRadius: 0,
+                                    bottomLeadingRadius: 2,
+                                    bottomTrailingRadius: 0,
+                                    topTrailingRadius: 4
+                                ))
+                        }
+                        Spacer()
+                    }
+                }
+                // Scheduled recording red band on bottom-right
                 if scheduledProgramIds.contains(item.program.id) {
-                    Circle()
-                        .fill(Color.red)
-                        .frame(width: 8, height: 8)
-                        .padding(3)
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            Theme.recording
+                                .frame(width: 4, height: 14)
+                                .clipShape(UnevenRoundedRectangle(
+                                    topLeadingRadius: 2,
+                                    bottomLeadingRadius: 0,
+                                    bottomTrailingRadius: 4,
+                                    topTrailingRadius: 0
+                                ))
+                        }
+                    }
                 }
             }
         }

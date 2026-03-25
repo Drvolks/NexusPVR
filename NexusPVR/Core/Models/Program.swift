@@ -94,6 +94,18 @@ nonisolated struct Program: Identifiable, Decodable, Hashable, Sendable {
         Date() > endDate
     }
 
+    /// Whether the program name contains the "ᴺᵉʷ" marker
+    var isNew: Bool {
+        name.contains("\u{1D3A}\u{1D49}\u{02B7}")
+    }
+
+    /// Program name with the "ᴺᵉʷ" marker and any surrounding line break stripped
+    var cleanName: String {
+        name.replacingOccurrences(of: "\\s*ᴺᵉʷ\\s*", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "  ", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     var seriesInfo: SeriesInfo? {
         if let season, let episode, season > 0, episode > 0 {
             return SeriesInfo(season: season, episode: episode, seriesName: name)

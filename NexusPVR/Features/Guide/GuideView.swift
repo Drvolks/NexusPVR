@@ -910,36 +910,68 @@ struct GuideView: View {
         let showSport = cellWidth > 200
         let sportIconSize = rowHeight - 10 - 16 // cell height minus padding
 
-        return HStack(spacing: 6) {
-            if showSport, let sport = SportDetector.detect(from: program) {
-                SportIconView(sport: sport, size: sportIconSize)
-            }
+        return ZStack {
+            HStack(spacing: 6) {
+                if showSport, let sport = SportDetector.detect(from: program) {
+                    SportIconView(sport: sport, size: sportIconSize)
+                }
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Text(program.name)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(program.cleanName)
                         .font(.system(size: 20, weight: .semibold))
                         .foregroundStyle(isFocused ? .white : Theme.textPrimary)
                         .lineLimit(1)
 
-                    Spacer(minLength: 0)
-
-                    if isScheduled {
-                        Image(systemName: "record.circle.fill")
-                            .font(.caption)
-                            .foregroundStyle(Theme.recording)
-                    }
+                    Text("\(program.startDate, format: .dateTime.hour().minute()) - \(program.endDate, format: .dateTime.hour().minute())")
+                        .font(.system(size: 14))
+                        .foregroundStyle(isFocused ? .white.opacity(0.8) : Theme.textSecondary)
                 }
 
-                Text("\(program.startDate, format: .dateTime.hour().minute()) - \(program.endDate, format: .dateTime.hour().minute())")
-                    .font(.system(size: 14))
-                    .foregroundStyle(isFocused ? .white.opacity(0.8) : Theme.textSecondary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+
+            // "New" green band on top-right
+            if program.isNew {
+                VStack {
+                    HStack {
+                        Spacer()
+                        Theme.success
+                            .frame(width: 8, height: 24)
+                            .clipShape(UnevenRoundedRectangle(
+                                topLeadingRadius: 0,
+                                bottomLeadingRadius: 4,
+                                bottomTrailingRadius: 0,
+                                topTrailingRadius: 10
+                            ))
+                    }
+                    Spacer()
+                }
+            }
+
+            // Scheduled/recording red band on bottom-right
+            if isScheduled {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Theme.recording
+                            .frame(width: 8, height: 24)
+                            .clipShape(UnevenRoundedRectangle(
+                                topLeadingRadius: 4,
+                                bottomLeadingRadius: 0,
+                                bottomTrailingRadius: 10,
+                                topTrailingRadius: 0
+                            ))
+                            .opacity(isRecording ? 1.0 : 0.6)
+                    }
+                }
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
         .frame(width: max(cellWidth - 4, 80), height: rowHeight - 10, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 10).fill(bgColor))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
         .shadow(color: isFocused ? .black.opacity(0.5) : .clear, radius: 10, x: 0, y: 4)
         .scaleEffect(isFocused ? 1.02 : 1.0, anchor: .leading)
         .zIndex(isFocused ? 1 : 0)

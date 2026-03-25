@@ -193,10 +193,14 @@ struct ChannelCard: View {
             // Current program
             if let program = currentProgram {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(program.name)
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.textSecondary)
-                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(program.cleanName)
+                            .font(.subheadline)
+                            .foregroundStyle(Theme.textSecondary)
+                            .lineLimit(1)
+                        Spacer()
+                        if program.isNew { NewBadge() }
+                    }
 
                     // Progress bar
                     GeometryReader { geo in

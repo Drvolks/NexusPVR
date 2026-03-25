@@ -152,10 +152,14 @@ struct RecordingRow: View {
             // Content area
             VStack(alignment: .leading, spacing: Theme.spacingXS) {
                 // Row 1: Program title
-                Text(recording.name)
-                    .font(.headline)
-                    .foregroundStyle(Theme.textPrimary)
-                    .lineLimit(2)
+                HStack(alignment: .top, spacing: 6) {
+                    Text(recording.cleanName)
+                        .font(.headline)
+                        .foregroundStyle(Theme.textPrimary)
+                        .lineLimit(2)
+                    Spacer()
+                    if recording.isNew { NewBadge() }
+                }
 
                 // Row 2: Channel name | File size
                 HStack {
@@ -286,7 +290,7 @@ struct RecordingRowTV: View {
 
                 // Recording info
                 VStack(alignment: .leading, spacing: Theme.spacingXS) {
-                    Text(recording.name)
+                    Text(recording.cleanName)
                         .font(.headline)
                         .foregroundStyle(Theme.textPrimary)
                         .lineLimit(2)
@@ -316,6 +320,7 @@ struct RecordingRowTV: View {
                             }
                         }
 
+                        if recording.isNew { NewBadge() }
                     }
                     .font(.caption)
                     .foregroundStyle(Theme.textTertiary)

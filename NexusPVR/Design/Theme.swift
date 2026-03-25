@@ -121,6 +121,20 @@ enum Theme {
     #endif
 }
 
+// MARK: - New Badge
+
+struct NewBadge: View {
+    var body: some View {
+        Text("NEW")
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(Theme.success)
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+    }
+}
+
 // MARK: - View Modifiers
 
 struct CardStyle: ViewModifier {

@@ -134,10 +134,14 @@ struct TopicProgramRow: View {
                         .foregroundStyle(Theme.accent)
                 }
 
-                Text(program.name)
-                    .font(.headline)
-                    .foregroundStyle(Theme.textPrimary)
-                    .lineLimit(2)
+                HStack(alignment: .top, spacing: 6) {
+                    Text(program.cleanName)
+                        .font(.headline)
+                        .foregroundStyle(Theme.textPrimary)
+                        .lineLimit(2)
+                    Spacer()
+                    if program.isNew { NewBadge() }
+                }
 
                 HStack {
                     Text(channel.name)
@@ -274,7 +278,7 @@ struct TopicProgramRowTV: View {
                             .foregroundStyle(Theme.accent)
                     }
 
-                    Text(program.name)
+                    Text(program.cleanName)
                         .font(.headline)
                         .foregroundStyle(Theme.textPrimary)
                         .lineLimit(2)
@@ -299,6 +303,8 @@ struct TopicProgramRowTV: View {
                         }
                         .font(.caption)
                         .foregroundStyle(Theme.textTertiary)
+
+                        if program.isNew { NewBadge() }
                     }
 
                     if let existing = vm.existingRecording {

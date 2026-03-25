@@ -60,10 +60,14 @@ struct SearchResultRow: View {
                 }
 
                 // Program title
-                Text(program.name)
-                    .font(.headline)
-                    .foregroundStyle(Theme.textPrimary)
-                    .lineLimit(2)
+                HStack(spacing: 6) {
+                    Text(program.cleanName)
+                        .font(.headline)
+                        .foregroundStyle(Theme.textPrimary)
+                        .lineLimit(2)
+                    Spacer()
+                    if program.isNew { NewBadge() }
+                }
 
                 // Description snippet
                 if let desc = program.desc, !desc.isEmpty {
@@ -298,11 +302,15 @@ struct SearchResultRowTV: View {
                             .foregroundStyle(Theme.accent)
                     }
 
-                    Text(program.name)
-                        .font(.headline)
-                        .foregroundStyle(Theme.textPrimary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
+                    HStack(spacing: 6) {
+                        Text(program.cleanName)
+                            .font(.headline)
+                            .foregroundStyle(Theme.textPrimary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                        Spacer()
+                        if program.isNew { NewBadge() }
+                    }
 
                     if let desc = program.desc, !desc.isEmpty {
                         Text(desc)

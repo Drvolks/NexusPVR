@@ -133,11 +133,15 @@ struct ProgramDetailView: View {
                     }
 
                     // Row 2: Program name (full width)
-                    Text(program.name)
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundStyle(Theme.textPrimary)
-                        .accessibilityIdentifier("program-detail-name")
+                    HStack(alignment: .top, spacing: 8) {
+                        Text(program.cleanName)
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundStyle(Theme.textPrimary)
+                            .accessibilityIdentifier("program-detail-name")
+                        Spacer()
+                        if program.isNew { NewBadge() }
+                    }
 
                     // Row 3: Date | Start time - End time | Duration
                     HStack {
@@ -249,15 +253,19 @@ struct ProgramDetailView: View {
                     }
                 }
 
-                Text(program.name)
-                    #if os(tvOS)
-                    .font(.title3)
-                    #else
-                    .font(.title2)
-                    #endif
-                    .fontWeight(.bold)
-                    .foregroundStyle(Theme.textPrimary)
-                    .accessibilityIdentifier("program-detail-name")
+                HStack(alignment: .top, spacing: 8) {
+                    Text(program.cleanName)
+                        #if os(tvOS)
+                        .font(.title3)
+                        #else
+                        .font(.title2)
+                        #endif
+                        .fontWeight(.bold)
+                        .foregroundStyle(Theme.textPrimary)
+                        .accessibilityIdentifier("program-detail-name")
+                    Spacer()
+                    if program.isNew { NewBadge() }
+                }
 
                 if let subtitle = program.subtitle, !subtitle.isEmpty {
                     Text(subtitle)

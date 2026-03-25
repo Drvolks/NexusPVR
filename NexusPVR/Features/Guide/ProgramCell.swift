@@ -43,7 +43,7 @@ struct ProgramCell: View {
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(program.name.replacingOccurrences(of: "\n", with: " "))
+                    Text(program.cleanName)
                         .font(.caption)
                         .fontWeight(.medium)
                         .foregroundStyle(Theme.textPrimary)
@@ -56,19 +56,47 @@ struct ProgramCell: View {
 
                 Spacer(minLength: 0)
 
-                if isCurrentlyRecording {
-                    Image(systemName: "record.circle.fill")
-                        .font(.caption2)
-                        .foregroundStyle(Theme.recording)
-                } else if isScheduledRecording {
-                    Image(systemName: "record.circle")
-                        .font(.caption2)
-                        .foregroundStyle(Theme.recording)
-                }
             }
             .padding(.leading, Theme.spacingSM + (program.isCurrentlyAiring ? leadingPadding : 0))
             .padding(.trailing, Theme.spacingSM)
             .padding(.vertical, Theme.spacingXS)
+
+            // "New" green band on top-right corner
+            if program.isNew {
+                VStack {
+                    HStack {
+                        Spacer()
+                        Theme.success
+                            .frame(width: 6, height: 20)
+                            .clipShape(UnevenRoundedRectangle(
+                                topLeadingRadius: 0,
+                                bottomLeadingRadius: 3,
+                                bottomTrailingRadius: 0,
+                                topTrailingRadius: Theme.cornerRadiusSM
+                            ))
+                    }
+                    Spacer()
+                }
+            }
+
+            // Recording red band on bottom-right corner
+            if isCurrentlyRecording || isScheduledRecording {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Theme.recording
+                            .frame(width: 6, height: 20)
+                            .clipShape(UnevenRoundedRectangle(
+                                topLeadingRadius: 3,
+                                bottomLeadingRadius: 0,
+                                bottomTrailingRadius: Theme.cornerRadiusSM,
+                                topTrailingRadius: 0
+                            ))
+                            .opacity(isCurrentlyRecording ? 1.0 : 0.6)
+                    }
+                }
+            }
 
             // Progress indicator for currently airing
             if program.isCurrentlyAiring {

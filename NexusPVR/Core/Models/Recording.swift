@@ -62,6 +62,16 @@ nonisolated struct Recording: Identifiable, Codable, Hashable {
     let season: Int?
     let episode: Int?
 
+    var isNew: Bool {
+        name.contains("\u{1D3A}\u{1D49}\u{02B7}")
+    }
+
+    var cleanName: String {
+        name.replacingOccurrences(of: "\\s*ᴺᵉʷ\\s*", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "  ", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     var startDate: Date? {
         guard let startTime else { return nil }
         return Date(timeIntervalSince1970: TimeInterval(startTime))

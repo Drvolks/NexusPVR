@@ -90,10 +90,14 @@ struct RecordingDetailView: View {
                     }
 
                     // Recording name
-                    Text(recording.name)
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundStyle(Theme.textPrimary)
+                    HStack(alignment: .top, spacing: 8) {
+                        Text(recording.cleanName)
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundStyle(Theme.textPrimary)
+                        Spacer()
+                        if recording.isNew { NewBadge() }
+                    }
 
                     // Date | Time | Duration
                     HStack {
@@ -283,10 +287,14 @@ struct RecordingDetailView: View {
                 }
             }
 
-            Text(recording.name)
-                .font(.title2)
-                .fontWeight(.bold)
-                .foregroundStyle(Theme.textPrimary)
+            HStack(alignment: .top, spacing: 8) {
+                Text(recording.cleanName)
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundStyle(Theme.textPrimary)
+                Spacer()
+                if recording.isNew { NewBadge() }
+            }
 
             if let subtitle = recording.subtitle, !subtitle.isEmpty {
                 Text(subtitle)
