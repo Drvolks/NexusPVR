@@ -200,6 +200,14 @@ nonisolated struct RecurringRecording: Identifiable, Decodable {
         case epgTitle
     }
 
+    init(id: Int, name: String, channelID: Int?, channel: String?, enabled: Bool?) {
+        self.id = id
+        self.name = name
+        self.channelID = channelID
+        self.channel = channel
+        self.enabled = enabled
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(Int.self, forKey: .id)

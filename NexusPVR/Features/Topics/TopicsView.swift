@@ -31,6 +31,16 @@ struct TopicsView: View {
         return nonScheduled.filter { $0.matchedKeyword == selectedKeyword }
     }
 
+    #if os(iOS)
+    private func updateKeywordsWithMatches() {
+        var counts: [String: Int] = [:]
+        for program in viewModel.matchingPrograms where program.matchedKeyword != MatchingProgram.scheduledKeyword {
+            counts[program.matchedKeyword, default: 0] += 1
+        }
+        appState.topicKeywordMatchCounts = counts
+    }
+    #endif
+
     private func syncTopicSelection(with keywords: [String], preferFirst: Bool = false) {
         appState.topicKeywords = keywords
 
@@ -107,6 +117,11 @@ struct TopicsView: View {
                 }
             }
             .accessibilityIdentifier("topics-view")
+            #if os(iOS)
+            .sidebarMenuToolbar()
+            .navigationTitle(appState.selectedTopicKeyword.isEmpty ? "Topics" : appState.selectedTopicKeyword)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
             .sheet(item: $selectedProgramDetail) { detail in
                 ProgramDetailView(
                     program: detail.program,
@@ -133,7 +148,7 @@ struct TopicsView: View {
             }
         }
         .background(Theme.background)
-        #if !os(tvOS)
+        #if os(macOS)
         .sheet(isPresented: $appState.showingKeywordsEditor) {
             KeywordsEditorView()
                 .onDisappear {
@@ -141,9 +156,7 @@ struct TopicsView: View {
                         await viewModel.loadData()
                     }
                 }
-                #if os(macOS)
                 .frame(minWidth: 500, minHeight: 400)
-                #endif
         }
         .onChange(of: appState.showingCalendar) {
             if appState.showingCalendar {
@@ -156,9 +169,7 @@ struct TopicsView: View {
             CalendarView(programs: viewModel.matchingPrograms)
                 .environmentObject(client)
                 .environmentObject(appState)
-                #if os(macOS)
                 .frame(minWidth: 700, minHeight: 500)
-                #endif
         }
         #endif
         .task {
@@ -166,37 +177,52 @@ struct TopicsView: View {
             viewModel.client = client
             await viewModel.loadData()
             #if os(iOS)
-            syncTopicSelection(with: viewModel.keywords, preferFirst: true)
+            let hasValidSelection = !appState.selectedTopicKeyword.isEmpty &&
+                viewModel.keywords.contains(appState.selectedTopicKeyword)
+            syncTopicSelection(with: viewModel.keywords, preferFirst: !hasValidSelection)
+            updateKeywordsWithMatches()
             #elseif !os(tvOS)
             syncTopicSelection(with: viewModel.keywords)
             #endif
         }
         #if os(iOS)
         .onAppear {
-            syncTopicSelection(with: viewModel.keywords, preferFirst: true)
+            // Only sync if keywords are already loaded; otherwise .task will handle it
+            guard !viewModel.keywords.isEmpty else { return }
+            let hasValidSelection = !appState.selectedTopicKeyword.isEmpty &&
+                viewModel.keywords.contains(appState.selectedTopicKeyword)
+            syncTopicSelection(with: viewModel.keywords, preferFirst: !hasValidSelection)
         }
         #endif
         .onChange(of: appState.selectedTopicKeyword) {
-            #if !os(tvOS)
-            syncTopicSelection(with: viewModel.keywords)
-            #else
             if selectedKeyword != appState.selectedTopicKeyword {
                 selectedKeyword = appState.selectedTopicKeyword
             }
-            #endif
         }
         .onChange(of: scenePhase) {
             if scenePhase == .active {
-                Task { await viewModel.loadData() }
+                Task {
+                    await viewModel.loadData()
+                    #if os(iOS)
+                    updateKeywordsWithMatches()
+                    #endif
+                }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .recordingsDidChange)) { _ in
-            Task { await viewModel.loadData() }
+            Task {
+                await viewModel.loadData()
+                #if os(iOS)
+                updateKeywordsWithMatches()
+                #endif
+            }
         }
         #if os(iOS)
         .onChange(of: appState.selectedTab) {
             guard appState.selectedTab == .topics else { return }
-            syncTopicSelection(with: viewModel.keywords, preferFirst: true)
+            let hasValidSelection = !appState.selectedTopicKeyword.isEmpty &&
+                viewModel.keywords.contains(appState.selectedTopicKeyword)
+            syncTopicSelection(with: viewModel.keywords, preferFirst: !hasValidSelection)
         }
         #endif
     }

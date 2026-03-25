@@ -74,13 +74,13 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		6E74158C2F315368001FE083 /* NextPVR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NextPVR.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6E74158C2F315368001FE083 /* StreamClient for NextPVR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "StreamClient for NextPVR.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		6E74159B2F315369001FE083 /* NexusPVRTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NexusPVRTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6E7415A52F315369001FE083 /* NexusPVRUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NexusPVRUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6EA347F32F48EF9C00E0A324 /* NexusPVR TopShelf.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "NexusPVR TopShelf.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		6EA347F52F48EF9C00E0A324 /* TVServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = TVServices.framework; path = Library/Frameworks/TVServices.framework; sourceTree = DEVELOPER_DIR; };
 		6EA348072F48EFB600E0A324 /* DispatcherPVR TopShelf.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "DispatcherPVR TopShelf.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
-		D1AAAA012F31559900D2B8DF /* Dispatcharr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dispatcharr.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D1AAAA012F31559900D2B8DF /* StreamClient.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StreamClient.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -259,8 +259,8 @@
 		6E74158D2F315368001FE083 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				6E74158C2F315368001FE083 /* NextPVR.app */,
-				D1AAAA012F31559900D2B8DF /* Dispatcharr.app */,
+				6E74158C2F315368001FE083 /* StreamClient for NextPVR.app */,
+				D1AAAA012F31559900D2B8DF /* StreamClient.app */,
 				6E74159B2F315369001FE083 /* NexusPVRTests.xctest */,
 				6E7415A52F315369001FE083 /* NexusPVRUITests.xctest */,
 				6EA347F32F48EF9C00E0A324 /* NexusPVR TopShelf.appex */,
@@ -303,7 +303,7 @@
 				6E9E3CF12F31559900D2B8E0 /* MPVPixelBufferBridge */,
 			);
 			productName = NextPVR;
-			productReference = 6E74158C2F315368001FE083 /* NextPVR.app */;
+			productReference = 6E74158C2F315368001FE083 /* StreamClient for NextPVR.app */;
 			productType = "com.apple.product-type.application";
 		};
 		6E74159A2F315369001FE083 /* NexusPVRTests */ = {
@@ -420,7 +420,7 @@
 				D1AAAA0C2F31559900D2B8E1 /* MPVPixelBufferBridge */,
 			);
 			productName = Dispatcharr;
-			productReference = D1AAAA012F31559900D2B8DF /* Dispatcharr.app */;
+			productReference = D1AAAA012F31559900D2B8DF /* StreamClient.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -772,7 +772,7 @@
 				"INFOPLIST_KEY_UILaunchStoryboardName[sdk=iphonesimulator*]" = LaunchScreen;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
@@ -849,7 +849,7 @@
 				"INFOPLIST_KEY_UILaunchStoryboardName[sdk=iphonesimulator*]" = LaunchScreen;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";

@@ -497,7 +497,7 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
     }
 
     func scheduleSeriesRecording(eventId: Int) async throws {
-        guard !config.isDemoMode else { DemoDataProvider.scheduleRecording(eventId: eventId); return }
+        guard !config.isDemoMode else { DemoDataProvider.scheduleSeriesRecording(eventId: eventId); return }
         let response: APIResponse = try await request("recording.recurring.save", params: ["event_id": String(eventId)])
         if !response.isSuccess {
             throw NextPVRError.apiError("Failed to schedule series recording")
@@ -513,13 +513,13 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
     }
 
     func getRecurringRecordings() async throws -> [RecurringRecording] {
-        guard !config.isDemoMode else { return [] }
+        guard !config.isDemoMode else { return DemoDataProvider.recurringRecordings() }
         let response: RecurringRecordingListResponse = try await request("recording.recurring.list")
         return response.recurrings ?? []
     }
 
     func cancelSeriesRecording(recurringId: Int) async throws {
-        guard !config.isDemoMode else { return }
+        guard !config.isDemoMode else { DemoDataProvider.cancelSeriesRecording(recurringId: recurringId); return }
         let response: APIResponse = try await request("recording.recurring.delete", params: ["recurring_id": String(recurringId)])
         if !response.isSuccess {
             throw NextPVRError.apiError("Failed to cancel series recording")

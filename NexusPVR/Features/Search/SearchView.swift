@@ -34,7 +34,9 @@ struct SearchView: View {
                 }
             }
             .accessibilityIdentifier("search-view")
-            #if os(tvOS)
+            #if os(iOS)
+            .sidebarMenuToolbar()
+            #elseif os(tvOS)
             .safeAreaInset(edge: .top) {
                 tvSearchBar
             }

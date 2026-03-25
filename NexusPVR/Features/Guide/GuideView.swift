@@ -22,7 +22,11 @@ struct GuideView: View {
     @EnvironmentObject private var client: PVRClient
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var epgCache: EPGCache
+    #if os(iOS)
+    @EnvironmentObject var viewModel: GuideViewModel
+    #else
     @StateObject private var viewModel = GuideViewModel()
+    #endif
 
     #if os(tvOS)
     /// Callback to request focus move to nav bar (called when pressing up at top row)
@@ -97,7 +101,7 @@ struct GuideView: View {
             } message: {
                 streamErrorMessage
             }
-            #if !os(tvOS)
+            #if os(macOS)
             .onChange(of: appState.showingCalendar) {
                 if appState.showingCalendar {
                     calendarViewModel.epgCache = epgCache
@@ -109,9 +113,7 @@ struct GuideView: View {
                 CalendarView(programs: calendarViewModel.matchingPrograms)
                     .environmentObject(client)
                     .environmentObject(appState)
-                    #if os(macOS)
                     .frame(minWidth: 700, minHeight: 500)
-                    #endif
             }
             .sheet(isPresented: $appState.showingKeywordsEditor) {
                 KeywordsEditorView()
@@ -119,9 +121,7 @@ struct GuideView: View {
                         keywords = UserPreferences.load().keywords
                         viewModel.updateKeywordMatches(keywords: keywords)
                     }
-                    #if os(macOS)
                     .frame(minWidth: 500, minHeight: 400)
-                    #endif
             }
             #endif
             .task {
@@ -194,12 +194,17 @@ struct GuideView: View {
                 }
             }
         }
-        #if !os(tvOS)
+        #if os(macOS)
         .overlay(alignment: .top) {
-            iOSNavigationBar
-                #if os(iOS)
-                .padding(.top, phoneTopOverlayPadding)
-                #endif
+            macOSGuideNavBar
+        }
+        #endif
+        #if os(iOS) && DISPATCHERPVR
+        .overlay(alignment: .top) {
+            if viewModel.showFilters && hasFilterData {
+                filterPanel
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
         }
         #endif
         .background(GeometryReader { geo in
@@ -318,87 +323,9 @@ struct GuideView: View {
     }
     #endif
 
-    #if !os(tvOS)
-    private var iOSNavigationBar: some View {
+    #if os(macOS)
+    private var macOSGuideNavBar: some View {
         VStack(spacing: 0) {
-            #if os(iOS)
-            HStack {
-                HStack(spacing: 8) {
-                    Button {
-                        viewModel.previousDay()
-                        Task { await viewModel.navigateToDate(using: client) }
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(viewModel.isOnToday ? Theme.textTertiary : Theme.accent)
-                            .frame(width: 32, height: 32)
-                    }
-                    .disabled(viewModel.isOnToday)
-
-                    Text(viewModel.selectedDate, format: .dateTime.month(.abbreviated).day())
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(Theme.textPrimary)
-
-                    Button {
-                        viewModel.nextDay()
-                        Task { await viewModel.navigateToDate(using: client) }
-                    } label: {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(Theme.accent)
-                            .frame(width: 32, height: 32)
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-                .background(.ultraThinMaterial)
-                .clipShape(Capsule())
-                .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 2)
-
-                Button {
-                    appState.showingCalendar = true
-                } label: {
-                    Image(systemName: "calendar")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Theme.accent)
-                        .frame(width: 32, height: 32)
-                }
-                .background(.ultraThinMaterial)
-                .clipShape(Circle())
-                .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 2)
-
-                Spacer()
-
-                #if DISPATCHERPVR
-                if hasFilterData {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            viewModel.showFilters.toggle()
-                        }
-                    } label: {
-                        Image(systemName: viewModel.hasActiveFilters
-                              ? "line.3.horizontal.decrease.circle.fill"
-                              : "line.3.horizontal.decrease")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(viewModel.hasActiveFilters ? Theme.accent : Theme.textPrimary)
-                            .frame(width: 32, height: 32)
-                            .background(.ultraThinMaterial)
-                            .clipShape(Capsule())
-                            .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 2)
-                    }
-                }
-                #endif
-            }
-            .padding(.horizontal, Theme.spacingMD)
-            .padding(.vertical, Theme.spacingSM)
-
-            #if DISPATCHERPVR
-            if viewModel.showFilters && hasFilterData {
-                filterPanel
-                    .transition(.move(edge: .top).combined(with: .opacity))
-            }
-            #endif
-            #else
             HStack {
                 Spacer()
                 HStack(spacing: 8) {
@@ -469,31 +396,16 @@ struct GuideView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
             #endif
-            #endif
         }
     }
     #endif
 
     #if !os(tvOS)
-    #if os(iOS)
-    private var phoneTopOverlayPadding: CGFloat {
-        guard UIDevice.current.userInterfaceIdiom == .phone else { return 0 }
-        // Landscape on iPhone: keep controls near the top with a small inset.
-        if verticalSizeClass == .compact { return 8 }
-        // Portrait: respect the top safe area (Dynamic Island/notch).
-        return rootTopSafeArea
-    }
-    #endif
 
     private var guideTopPadding: CGFloat {
         #if os(iOS)
-        let base: CGFloat = {
-            if UIDevice.current.userInterfaceIdiom != .phone { return 55 }
-            // Landscape on iPhone uses a tighter header offset.
-            if verticalSizeClass == .compact { return 72 }
-            // Portrait keeps extra room for top controls below the Dynamic Island/notch.
-            return rootTopSafeArea + 50
-        }()
+        // Top bar is now a safeAreaInset in IOSNavigation, no extra offset needed
+        let base: CGFloat = 0
         #else
         let base: CGFloat = 50
         #endif
@@ -637,6 +549,9 @@ struct GuideView: View {
     @State private var currentTimelineHour: Date?
     @State private var scrollTargetId: String?
     @State private var gridHorizontalOffset: CGFloat = 0
+    #if os(iOS)
+    @State private var lastScrollDirectionChangeY: CGFloat = 0
+    #endif
     @Environment(\.scenePhase) private var scenePhase
 
     #if os(tvOS)
@@ -753,6 +668,32 @@ struct GuideView: View {
             } action: { _, new in
                 gridHorizontalOffset = new
             }
+            #if os(iOS)
+            .onScrollGeometryChange(for: CGFloat.self) { geo in
+                geo.contentOffset.y
+            } action: { old, new in
+                let delta = new - old
+                if delta > 5 && !appState.isBottomBarHidden {
+                    // Scrolling down — hide immediately
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        appState.isBottomBarHidden = true
+                    }
+                    lastScrollDirectionChangeY = new
+                } else if delta < -5 && appState.isBottomBarHidden {
+                    // Scrolling up — only show after sustained upward scroll
+                    let upDistance = lastScrollDirectionChangeY - new
+                    if upDistance > 80 {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            appState.isBottomBarHidden = false
+                        }
+                    }
+                }
+                // Track where direction last changed to down
+                if delta > 5 {
+                    lastScrollDirectionChangeY = new
+                }
+            }
+            #endif
             .onAppear {
                 updateScrollTarget()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
@@ -1737,5 +1678,8 @@ struct GuideView: View {
         .environmentObject(PVRClient())
         .environmentObject(AppState())
         .environmentObject(EPGCache())
+        #if os(iOS)
+        .environmentObject(GuideViewModel())
+        #endif
         .preferredColorScheme(.dark)
 }
