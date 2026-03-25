@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "D1AAAA062F31559900D2B8DF"
-               BuildableName = "Dispatcharr.app"
+               BuildableName = "StreamClient.app"
                BlueprintName = "Dispatcharr"
                ReferencedContainer = "container:NexusPVR.xcodeproj">
             </BuildableReference>
@@ -57,7 +57,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "D1AAAA062F31559900D2B8DF"
-            BuildableName = "Dispatcharr.app"
+            BuildableName = "StreamClient.app"
             BlueprintName = "Dispatcharr"
             ReferencedContainer = "container:NexusPVR.xcodeproj">
          </BuildableReference>
@@ -74,7 +74,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "D1AAAA062F31559900D2B8DF"
-            BuildableName = "Dispatcharr.app"
+            BuildableName = "StreamClient.app"
             BlueprintName = "Dispatcharr"
             ReferencedContainer = "container:NexusPVR.xcodeproj">
          </BuildableReference>
