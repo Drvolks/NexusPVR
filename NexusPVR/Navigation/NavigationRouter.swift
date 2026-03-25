@@ -229,6 +229,18 @@ struct IOSNavigation: View {
             })
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
+            // Dismiss search dropdown (below the bar so it doesn't intercept bar taps)
+            if showSearchDropdown {
+                Color.black.opacity(0.01)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showSearchDropdown = false
+                            isSearchFocused = false
+                        }
+                    }
+            }
+
             // Floating bottom bar: search / topic picker / recordings filter
             if !appState.isBottomBarHidden || appState.selectedTab != .guide {
                 VStack(spacing: 6) {
@@ -254,18 +266,6 @@ struct IOSNavigation: View {
                 .padding(.bottom, 16)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .animation(.spring(response: 0.3, dampingFraction: 0.85), value: showSearchDropdown)
-            }
-
-            // Dismiss search dropdown
-            if showSearchDropdown {
-                Color.black.opacity(0.01)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            showSearchDropdown = false
-                            isSearchFocused = false
-                        }
-                    }
             }
         }
         .background(Theme.background)
@@ -348,7 +348,13 @@ struct IOSNavigation: View {
         .onChange(of: searchText) { oldValue, newValue in
             searchDebounceTask?.cancel()
             if appState.selectedTab == .search {
-                Task { appState.searchQuery = newValue }
+                if newValue.isEmpty {
+                    // Cleared search — go back to guide
+                    appState.searchQuery = ""
+                    appState.selectedTab = .guide
+                } else {
+                    Task { appState.searchQuery = newValue }
+                }
                 showSearchDropdown = false
                 return
             }
@@ -513,7 +519,7 @@ struct IOSNavigation: View {
                                 icon: tab.icon,
                                 label: tab.label,
                                 isSelected: false,
-                                badge: { sidebarTabBadge(for: tab) }
+                                badge: { EmptyView() }
                             )
                             .foregroundStyle(Theme.textSecondary)
 
