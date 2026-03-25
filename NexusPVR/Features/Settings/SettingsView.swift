@@ -58,6 +58,7 @@ struct SettingsView: View {
             .background(Color(nsColor: .windowBackgroundColor))
             #elseif os(iOS)
             .listStyle(.insetGrouped)
+            .sidebarMenuToolbar()
             #endif
             #endif
         }

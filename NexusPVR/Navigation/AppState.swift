@@ -57,7 +57,7 @@ enum Tab: String, Identifiable {
     static func iOSTabs(userLevel: Int) -> [Tab] {
         var cases: [Tab] = [.guide]
         if userLevel >= 1 { cases.append(.recordings) }
-        cases.append(.topics)
+        cases.append(contentsOf: [.topics, .calendar])
         #if DISPATCHERPVR
         if userLevel >= 1 { cases.append(.stats) }
         #endif
@@ -103,8 +103,14 @@ final class AppState: ObservableObject {
     @Published var guideGroupFilter: Int? = nil
     @Published var isShowingPlayer = false
 
+    #if os(iOS)
+    /// Whether the floating bottom bar should be hidden (e.g. while scrolling down in the guide)
+    @Published var isBottomBarHidden = false
+    #endif
+
     // Topic picker state (shared between TopicsView and iOS nav bar)
     @Published var topicKeywords: [String] = []
+    @Published var topicKeywordMatchCounts: [String: Int] = [:]
     @Published var selectedTopicKeyword: String = ""
     @Published var showingKeywordsEditor = false
     @Published var showingCalendar = false
@@ -112,7 +118,8 @@ final class AppState: ObservableObject {
     // Recordings filter state (shared between RecordingsListView and iOS nav bar)
     @Published var recordingsFilter: RecordingsFilter = .completed
     @Published var recordingsFilterUserOverride = false
-    @Published var recordingsHasActive = false
+    @Published var activeRecordingCount = 0
+    var recordingsHasActive: Bool { activeRecordingCount > 0 }
     @Published var currentlyPlayingURL: URL?
     @Published var currentlyPlayingTitle: String?
     @Published var currentlyPlayingRecordingId: Int?
@@ -204,7 +211,7 @@ final class AppState: ObservableObject {
 
     func refreshRecordingsActivity(client: PVRClient) async {
         if !client.isConfigured {
-            recordingsHasActive = false
+            activeRecordingCount = 0
             return
         }
         do {
@@ -212,7 +219,7 @@ final class AppState: ObservableObject {
                 try await client.authenticate()
             }
             let (_, recording, _) = try await client.getAllRecordings()
-            recordingsHasActive = !recording.isEmpty
+            activeRecordingCount = recording.count
         } catch {
             // Silently ignore transient errors; keep last known badge state.
         }

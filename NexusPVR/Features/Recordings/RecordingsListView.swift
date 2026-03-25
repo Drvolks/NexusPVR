@@ -127,6 +127,11 @@ private struct RecordingsListContentView: View {
                 }
             }
             .accessibilityIdentifier("recordings-view")
+            #if os(iOS)
+            .sidebarMenuToolbar()
+            .navigationTitle(appState.recordingsFilter.rawValue)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
             .sheet(item: $selectedRecording) { recording in
                 RecordingDetailView(recording: recording)
                     .environmentObject(client)
@@ -167,6 +172,10 @@ private struct RecordingsListContentView: View {
         }
         .background(Theme.background)
         .task {
+            // Apply user-selected filter before loading so the view shows the correct tab
+            if appState.recordingsFilterUserOverride {
+                viewModel.filter = appState.recordingsFilter
+            }
             await viewModel.loadRecordings()
             if !appState.recordingsFilterUserOverride {
                 let initialFilter: RecordingsFilter = viewModel.hasActiveRecordings ? .recording : .completed
@@ -177,7 +186,7 @@ private struct RecordingsListContentView: View {
                     appState.recordingsFilter = initialFilter
                 }
             }
-            appState.recordingsHasActive = viewModel.hasActiveRecordings
+            appState.activeRecordingCount = viewModel.activeRecordings.count
             if appState.recordingsFilter != viewModel.filter {
                 appState.recordingsFilter = viewModel.filter
             }
@@ -201,7 +210,7 @@ private struct RecordingsListContentView: View {
             }
         }
         .onChange(of: viewModel.hasActiveRecordings) {
-            Task { appState.recordingsHasActive = viewModel.hasActiveRecordings }
+            Task { appState.activeRecordingCount = viewModel.activeRecordings.count }
         }
         .onReceive(NotificationCenter.default.publisher(for: .recordingsDidChange)) { _ in
             Task {

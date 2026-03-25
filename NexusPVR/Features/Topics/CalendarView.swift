@@ -128,8 +128,10 @@ struct CalendarView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                #if !os(iOS)
                 navigationBar
                 Divider()
+                #endif
 
                 switch viewMode {
                 case .day:
@@ -148,11 +150,66 @@ struct CalendarView: View {
             }
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
-            #endif
-            #if os(iOS)
+            .sidebarMenuToolbar()
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
+                ToolbarItem(placement: .principal) {
+                    HStack(spacing: 8) {
+                        Button { navigateBack() } label: {
+                            Image(systemName: "chevron.left")
+                                .fontWeight(.semibold)
+                        }
+                        .disabled(!canNavigateBack)
+
+                        Text(dateRangeLabel)
+                            .font(.subheadline.weight(.medium))
+                            .lineLimit(1)
+
+                        Button { navigateForward() } label: {
+                            Image(systemName: "chevron.right")
+                                .fontWeight(.semibold)
+                        }
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button { selectedKeyword = "" } label: {
+                            if selectedKeyword.isEmpty {
+                                Label("All", systemImage: "checkmark")
+                            } else {
+                                Text("All")
+                            }
+                        }
+                        ForEach(keywords, id: \.self) { keyword in
+                            Button {
+                                selectedKeyword = keyword
+                            } label: {
+                                Label(keyword, systemImage: keyword == selectedKeyword ? "checkmark.circle.fill" : "circle.fill")
+                            }
+                            .tint(colorForKeyword(keyword))
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            if !selectedKeyword.isEmpty {
+                                Circle()
+                                    .fill(colorForKeyword(selectedKeyword))
+                                    .frame(width: 8, height: 8)
+                            }
+                            Text(selectedKeyword.isEmpty ? "All" : selectedKeyword)
+                                .font(.caption)
+                                .lineLimit(1)
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.system(size: 10))
+                        }
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Picker("", selection: $viewMode) {
+                        ForEach(ViewMode.allCases, id: \.self) { mode in
+                            Text(mode.rawValue).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .fixedSize()
                 }
             }
             #endif

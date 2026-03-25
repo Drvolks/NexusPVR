@@ -835,16 +835,19 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
     }
 
     func scheduleSeriesRecording(eventId: Int) async throws {
+        guard !config.isDemoMode else { DemoDataProvider.scheduleSeriesRecording(eventId: eventId); return }
         // Dispatcharr doesn't have native series recording — schedule as a single recording
         try await scheduleRecording(eventId: eventId)
     }
 
     func cancelSeriesRecording(recurringId: Int) async throws {
+        guard !config.isDemoMode else { DemoDataProvider.cancelSeriesRecording(recurringId: recurringId); return }
         // Dispatcharr doesn't have native series recording — cancel as a single recording
         try await cancelRecording(recordingId: recurringId)
     }
 
     func getRecurringRecordings() async throws -> [RecurringRecording] {
+        guard !config.isDemoMode else { return DemoDataProvider.recurringRecordings() }
         // Dispatcharr doesn't have native recurring recordings
         return []
     }
