@@ -15,8 +15,27 @@ struct DemoDataProvider {
     private static var userScheduledEventIds = Set<Int>()
     /// Recording IDs cancelled by the user during this session (includes pre-seeded ones)
     private static var cancelledRecordingIds = Set<Int>()
+    /// Series names scheduled for recurring recording (lowercased)
+    private static var userScheduledSeriesNames = Set<String>()
+    /// Cancelled recurring recording IDs
+    private static var cancelledRecurringIds = Set<Int>()
+
+    /// Pre-seeded recurring recording: The Quantum Detective on Sci-Fi Universe
+    private static let preSeededRecurrings: [(id: Int, name: String, channelId: Int, channel: String)] = [
+        (id: 8001, name: "The Quantum Detective", channelId: 1009, channel: "Sci-Fi Universe"),
+    ]
 
     static func scheduleRecording(eventId: Int) {
+        userScheduledEventIds.insert(eventId)
+    }
+
+    static func scheduleSeriesRecording(eventId: Int) {
+        // Find the program and register its series name for recurring recording
+        if let match = findProgram(eventId: eventId) {
+            let seriesName = match.program.seriesInfo?.seriesName ?? match.program.name
+            userScheduledSeriesNames.insert(seriesName.lowercased())
+        }
+        // Also schedule this specific episode
         userScheduledEventIds.insert(eventId)
     }
 
@@ -30,6 +49,25 @@ struct DemoDataProvider {
             // It's a pre-seeded recording — mark as cancelled
             cancelledRecordingIds.insert(recordingId)
         }
+    }
+
+    static func cancelSeriesRecording(recurringId: Int) {
+        // Check if it's a pre-seeded recurring
+        if let preSeeded = preSeededRecurrings.first(where: { $0.id == recurringId }) {
+            cancelledRecurringIds.insert(recurringId)
+            // Also cancel all scheduled episodes for this series
+            let seriesName = preSeeded.name.lowercased()
+            cancelScheduledEpisodesForSeries(named: seriesName)
+        } else {
+            // User-scheduled series — remove from set
+            // recurringId for user series = hash-based, find by name
+            userScheduledSeriesNames.remove(String(recurringId))
+        }
+    }
+
+    private static func cancelScheduledEpisodesForSeries(named seriesName: String) {
+        // Cancel any pre-seeded scheduled recordings matching this series
+        // The recordings() method will filter them out via cancelledRecurringIds
     }
 
     // MARK: - Channels
@@ -122,11 +160,11 @@ struct DemoDataProvider {
         ],
         1005: [
             ("Underwater Basket Weaving Finals", nil, "The pinnacle of aquatic craftsmanship competition.", ["Comedy", "Sports"], 60),
-            ("Stand-Up Spotlight", "Season 3", "The funniest comedians perform their best sets.", ["Comedy"], 60),
+            ("Stand-Up Spotlight", "S03E14 - The Heckler Whisperer", "A comedian discovers she can tame any heckler with interpretive dance.", ["Comedy"], 60),
             ("Sitcom Marathon: Office Antics", nil, "Back-to-back episodes of workplace comedy gold.", ["Comedy"], 120),
             ("Improv Hour", nil, "Unscripted comedy at its finest. Anything can happen.", ["Comedy"], 60),
             ("Pets Do the Darndest Things", nil, "Hilarious home videos of animals being animals.", ["Comedy", "Family"], 30),
-            ("Roast Battle Championship", nil, "Comedians trade their best insults on stage.", ["Comedy"], 90),
+            ("Stand-Up Spotlight", "S03E15 - Mic Drop Moments", "The season's best punchlines, ranked by audience applause meters.", ["Comedy"], 60),
             ("Comedy Documentary: The History of Laughter", nil, "From ancient jesters to modern memes.", ["Comedy", "Documentary"], 60),
             ("Late Night Laughs", nil, "The best monologues and sketches from late night.", ["Comedy", "Entertainment"], 90),
             ("Blooper Reel Bonanza", nil, "When filming goes hilariously wrong.", ["Comedy"], 60),
@@ -164,13 +202,16 @@ struct DemoDataProvider {
         ],
         1009: [
             ("Galactic Senate Hearings", nil, "Bureaucracy in space is still bureaucracy.", ["Sci-Fi", "Drama"], 60),
-            ("Robot Roommate", "Season 2", "When your flatmate is an AI with strong opinions about dishes.", ["Sci-Fi", "Comedy"], 30),
+            ("Robot Roommate", "S02E05 - The Dishwasher Dispute", "The AI refuses to load the dishwasher incorrectly and threatens to unionize.", ["Sci-Fi", "Comedy"], 30),
             ("Time Traveler's Warranty", nil, "He went back to fix his toaster. He broke the timeline.", ["Sci-Fi", "Movie"], 120),
-            ("Alien Cooking Show", nil, "Interstellar cuisine with ingredients from 12 star systems.", ["Sci-Fi", "Entertainment"], 60),
-            ("The Quantum Detective", "Episode 8", "She solves crimes in multiple dimensions simultaneously.", ["Sci-Fi", "Mystery"], 60),
+            ("The Quantum Detective", "S03E09 - The Collapsed Alibi", "A suspect exists in two places at once. Detective Marsh must determine which version is the killer.", ["Sci-Fi", "Mystery"], 60),
             ("Mars Colony News", nil, "Traffic, weather, and dust storm warnings for the red planet.", ["Sci-Fi", "Comedy"], 30),
-            ("Space Truckers", "Season 5", "Long haul freight across the asteroid belt.", ["Sci-Fi", "Drama"], 60),
+            ("Space Truckers", "S05E12 - Cargo Hold Roulette", "A mysterious crate starts humming near Jupiter. Nobody wants to open it.", ["Sci-Fi", "Drama"], 60),
+            ("The Quantum Detective", "S03E10 - Schrödinger's Witness", "The only witness is in a superposition of having seen everything and nothing.", ["Sci-Fi", "Mystery"], 60),
+            ("Robot Roommate", "S02E06 - Software Update Blues", "A mandatory firmware update gives the AI an existential crisis.", ["Sci-Fi", "Comedy"], 30),
             ("B-Movie Marathon: Attack of the Giant Hamsters", nil, "They're fluffy. They're enormous. They're hungry.", ["Sci-Fi", "Movie"], 90),
+            ("The Quantum Detective", "S03E11 - Entangled Evidence", "Two crime scenes 1,000 miles apart are mysteriously linked at the subatomic level.", ["Sci-Fi", "Mystery"], 60),
+            ("Space Truckers", "S05E13 - The Toll Booth at Saturn", "Someone has set up an illegal toll station in the rings of Saturn.", ["Sci-Fi", "Drama"], 60),
             ("Starship Mechanic", nil, "Fixing hyperdrives on a budget.", ["Sci-Fi"], 60),
         ],
         1010: [
@@ -215,11 +256,11 @@ struct DemoDataProvider {
             ("Songwriter's Circle", nil, "Hit writers reveal the inspirations behind chart-toppers.", ["Music", "Documentary"], 60),
         ],
         1014: [
-            ("Cold Case Files", "Season 7", "Decades-old mysteries finally solved by modern forensics.", ["True Crime", "Documentary"], 60),
+            ("Cold Case Files", "S07E03 - The Vanishing Gardener", "A missing landscaper's tools hold the key to a 30-year-old mystery.", ["True Crime", "Documentary"], 60),
             ("The Evidence Room", nil, "Forensic experts re-examine infamous crime scene evidence.", ["True Crime"], 60),
             ("Heist: The Art Thieves", nil, "Inside the most audacious museum robberies in history.", ["True Crime", "Documentary"], 90),
-            ("Interrogation Tapes", nil, "Real footage from the most revealing suspect interviews.", ["True Crime"], 60),
-            ("Missing Persons Unit", "Episode 15", "Investigators race against time to bring people home.", ["True Crime", "Drama"], 60),
+            ("Cold Case Files", "S07E04 - The Lighthouse Keeper", "A journal found in a sealed lighthouse room reopens a coastal disappearance.", ["True Crime", "Documentary"], 60),
+            ("Missing Persons Unit", "S02E15 - The Bus Stop", "Investigators race against time after a commuter vanishes from a busy transit hub.", ["True Crime", "Drama"], 60),
             ("Fraud Squad", nil, "Con artists, scammers, and the detectives who catch them.", ["True Crime"], 60),
             ("Forensic Files Revisited", nil, "Science meets detective work in baffling cases.", ["True Crime", "Science"], 30),
             ("Crime Scene to Courtroom", nil, "Following cases from initial evidence to final verdict.", ["True Crime"], 90),
@@ -389,6 +430,26 @@ struct DemoDataProvider {
                 quality: "HD",
                 genres: ["Documentary", "Technology"]
             ),
+            Recording(
+                id: 9006,
+                name: "The Quantum Detective",
+                subtitle: "S03E08 - The Parallel Alibi",
+                desc: "Detective Marsh investigates a murder where the suspect was provably in two cities at the same time.",
+                startTime: Int(now.addingTimeInterval(-10800).timeIntervalSince1970),
+                duration: 3600,
+                channel: "Sci-Fi Universe",
+                channelId: 1009,
+                status: "ready",
+                file: "/recordings/quantum_detective_s03e08.ts",
+                recurring: true,
+                recurringParent: 8001,
+                epgEventId: nil,
+                size: 1_800_000_000,
+                quality: "HD",
+                genres: ["Sci-Fi", "Mystery"],
+                season: 3,
+                episode: 8
+            ),
         ]
 
         var scheduled: [Recording] = [
@@ -422,6 +483,79 @@ struct DemoDataProvider {
             ),
         ]
 
+        // Add scheduled episodes from pre-seeded series recordings (first airing only)
+        for preSeeded in preSeededRecurrings where !cancelledRecurringIds.contains(preSeeded.id) {
+            let seriesName = preSeeded.name.lowercased()
+            let channelPrograms = listings(for: preSeeded.channelId)
+            let futureEpisodes = channelPrograms.filter { program in
+                program.startDate > now &&
+                program.name.lowercased() == seriesName &&
+                program.seriesInfo != nil
+            }
+            // Only schedule the first airing of each episode (by season+episode)
+            var seenEpisodes = Set<String>()
+            for episode in futureEpisodes.sorted(by: { $0.start < $1.start }) {
+                guard let info = episode.seriesInfo else { continue }
+                let key = info.shortDisplayString
+                guard seenEpisodes.insert(key).inserted else { continue }
+                let recId = episode.id + 200_000
+                if !cancelledRecordingIds.contains(recId) {
+                    scheduled.append(Recording(
+                        id: recId,
+                        name: episode.name,
+                        subtitle: episode.subtitle,
+                        desc: episode.desc,
+                        startTime: episode.start,
+                        duration: episode.end - episode.start,
+                        channel: preSeeded.channel,
+                        channelId: preSeeded.channelId,
+                        status: "pending",
+                        recurring: true,
+                        recurringParent: preSeeded.id,
+                        epgEventId: episode.id,
+                        genres: episode.genres
+                    ))
+                }
+            }
+        }
+
+        // Add scheduled episodes from user-scheduled series recordings (first airing only)
+        for seriesName in userScheduledSeriesNames {
+            var seenEpisodes = Set<String>()
+            for channel in channels {
+                let channelPrograms = listings(for: channel.id)
+                let futureEpisodes = channelPrograms.filter { program in
+                    program.startDate > now &&
+                    (program.seriesInfo?.seriesName.lowercased() ?? program.name.lowercased()) == seriesName &&
+                    program.seriesInfo != nil &&
+                    !userScheduledEventIds.contains(program.id) // avoid duplicates
+                }
+                for episode in futureEpisodes.sorted(by: { $0.start < $1.start }) {
+                    guard let info = episode.seriesInfo else { continue }
+                    let key = info.shortDisplayString
+                    guard seenEpisodes.insert(key).inserted else { continue }
+                    let recId = episode.id + 300_000
+                    if !cancelledRecordingIds.contains(recId) {
+                        scheduled.append(Recording(
+                            id: recId,
+                            name: episode.name,
+                            subtitle: episode.subtitle,
+                            desc: episode.desc,
+                            startTime: episode.start,
+                            duration: episode.end - episode.start,
+                            channel: channel.name,
+                            channelId: channel.id,
+                            status: "pending",
+                            recurring: true,
+                            recurringParent: recId,
+                            epgEventId: episode.id,
+                            genres: episode.genres
+                        ))
+                    }
+                }
+            }
+        }
+
         // Filter out cancelled pre-seeded recordings
         completed = completed.filter { !cancelledRecordingIds.contains($0.id) }
         scheduled = scheduled.filter { !cancelledRecordingIds.contains($0.id) }
@@ -449,6 +583,38 @@ struct DemoDataProvider {
         }
 
         return (completed: completed, recording: [], scheduled: scheduled)
+    }
+
+    // MARK: - Recurring Recordings
+
+    static func recurringRecordings() -> [RecurringRecording] {
+        var result: [RecurringRecording] = []
+
+        // Pre-seeded recurring recordings (not cancelled)
+        for preSeeded in preSeededRecurrings where !cancelledRecurringIds.contains(preSeeded.id) {
+            result.append(RecurringRecording(
+                id: preSeeded.id,
+                name: preSeeded.name,
+                channelID: preSeeded.channelId,
+                channel: preSeeded.channel,
+                enabled: true
+            ))
+        }
+
+        // User-scheduled series
+        var seriesId = 8100
+        for seriesName in userScheduledSeriesNames {
+            result.append(RecurringRecording(
+                id: seriesId,
+                name: seriesName.capitalized,
+                channelID: nil,
+                channel: nil,
+                enabled: true
+            ))
+            seriesId += 1
+        }
+
+        return result
     }
 
     // MARK: - Demo Keywords
