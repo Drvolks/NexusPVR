@@ -58,6 +58,7 @@ nonisolated struct ServerConfig: Codable, Equatable {
     var isDemoMode: Bool {
         host.lowercased() == "demo"
             || (username.lowercased() == "demo" && password == "demo")
+            || apiKey.lowercased() == "demo"
     }
 
     var isConfigured: Bool {

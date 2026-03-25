@@ -34,7 +34,7 @@ class ServerDiscoveryService: ObservableObject {
         self.apiKey = !apiKey.isEmpty ? apiKey : nil
 
         // Demo credentials: show a fake server immediately, skip real network scan
-        if username.lowercased() == "demo" && password == "demo" {
+        if (username.lowercased() == "demo" && password == "demo") || apiKey.lowercased() == "demo" {
             discoveredServers = [
                 DiscoveredServer(id: "demo", host: "demo", port: Brand.defaultPort, serverName: "Demo Server", requiresAuth: false)
             ]
