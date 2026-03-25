@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "6E74158B2F315368001FE083"
-               BuildableName = "NextPVR.app"
+               BuildableName = "StreamClient for NextPVR.app"
                BlueprintName = "NextPVR"
                ReferencedContainer = "container:NexusPVR.xcodeproj">
             </BuildableReference>
@@ -57,7 +57,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "6E74158B2F315368001FE083"
-            BuildableName = "NextPVR.app"
+            BuildableName = "StreamClient for NextPVR.app"
             BlueprintName = "NextPVR"
             ReferencedContainer = "container:NexusPVR.xcodeproj">
          </BuildableReference>
@@ -74,7 +74,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "6E74158B2F315368001FE083"
-            BuildableName = "NextPVR.app"
+            BuildableName = "StreamClient for NextPVR.app"
             BlueprintName = "NextPVR"
             ReferencedContainer = "container:NexusPVR.xcodeproj">
          </BuildableReference>
