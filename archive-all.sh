@@ -56,7 +56,14 @@ for SCHEME in "${SCHEMES[@]}"; do
   for PLATFORM in "${PLATFORMS[@]}"; do
     ARCHIVE="$ARCHIVE_DIR/$SCHEME-$PLATFORM.xcarchive"
     case "$PLATFORM" in
-      macOS) APP_PLIST="$ARCHIVE/Products/Applications/$SCHEME.app/Contents/Info.plist" ;;
+      macOS)
+        # macOS PRODUCT_NAME differs from scheme name
+        case "$SCHEME" in
+          NextPVR)     MAC_APP="StreamClient for NextPVR" ;;
+          Dispatcharr) MAC_APP="StreamClient" ;;
+          *)           MAC_APP="$SCHEME" ;;
+        esac
+        APP_PLIST="$ARCHIVE/Products/Applications/$MAC_APP.app/Contents/Info.plist" ;;
       *)     APP_PLIST="$ARCHIVE/Products/Applications/$SCHEME.app/Info.plist" ;;
     esac
     ARCHIVE_PLIST="$ARCHIVE/Info.plist"
