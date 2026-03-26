@@ -756,7 +756,7 @@
 				"EXCLUDED_SOURCE_FILE_NAMES[sdk=macosx*]" = LaunchScreen.storyboard;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "StreamClient for NextPVR";
+				INFOPLIST_KEY_CFBundleDisplayName = StreamClient;
 				INFOPLIST_KEY_CFBundleName = "StreamClient for NextPVR";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
@@ -833,7 +833,7 @@
 				"EXCLUDED_SOURCE_FILE_NAMES[sdk=macosx*]" = LaunchScreen.storyboard;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "StreamClient for NextPVR";
+				INFOPLIST_KEY_CFBundleDisplayName = StreamClient;
 				INFOPLIST_KEY_CFBundleName = "StreamClient for NextPVR";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
