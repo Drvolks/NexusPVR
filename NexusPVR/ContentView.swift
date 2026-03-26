@@ -236,7 +236,6 @@ struct ContentView: View {
                 #if DISPATCHERPVR
                 sheetConfig = SetupSheetConfig(prefill: ServerConfig(
                     host: "",
-                    port: Brand.defaultPort,
                     pin: "",
                     username: discoveryUsername,
                     password: discoveryPassword,

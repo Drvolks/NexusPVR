@@ -35,20 +35,32 @@ nonisolated struct APIResponse: Codable {
 
 nonisolated struct ServerConfig: Codable, Equatable {
     var host: String
-    var port: Int
+    var port: Int?
     var pin: String
     var username: String
     var password: String
     var apiKey: String
     var useHTTPS: Bool
 
+    var effectivePort: Int {
+        port ?? (useHTTPS ? 443 : 80)
+    }
+
     var baseURL: String {
         let scheme = useHTTPS ? "https" : "http"
         let defaultPort = useHTTPS ? 443 : 80
-        if port == defaultPort {
+        if effectivePort == defaultPort {
             return "\(scheme)://\(host)"
         }
-        return "\(scheme)://\(host):\(port)"
+        return "\(scheme)://\(host):\(effectivePort)"
+    }
+
+    /// Display string for the server address (e.g. "192.168.1.100" or "192.168.1.100:8866")
+    var displayAddress: String {
+        if let port {
+            return "\(host):\(port)"
+        }
+        return host
     }
 
     static var `default`: ServerConfig {
@@ -70,7 +82,7 @@ nonisolated struct ServerConfig: Codable, Equatable {
         case host, port, pin, username, password, apiKey, useHTTPS
     }
 
-    init(host: String, port: Int, pin: String, username: String = "", password: String = "", apiKey: String = "", useHTTPS: Bool) {
+    init(host: String, port: Int? = nil, pin: String, username: String = "", password: String = "", apiKey: String = "", useHTTPS: Bool) {
         self.host = host
         self.port = port
         self.pin = pin
@@ -83,7 +95,8 @@ nonisolated struct ServerConfig: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         host = try container.decode(String.self, forKey: .host)
-        port = try container.decode(Int.self, forKey: .port)
+        let decodedPort = try container.decodeIfPresent(Int.self, forKey: .port)
+        port = (decodedPort == 0) ? nil : decodedPort
         pin = try container.decodeIfPresent(String.self, forKey: .pin) ?? ""
         username = try container.decodeIfPresent(String.self, forKey: .username) ?? ""
         password = try container.decodeIfPresent(String.self, forKey: .password) ?? ""
@@ -135,7 +148,7 @@ nonisolated extension ServerConfig {
         if !legacyHost.isEmpty {
             let config = ServerConfig(
                 host: legacyHost,
-                port: defaults.integer(forKey: portKey) == 0 ? Brand.defaultPort : defaults.integer(forKey: portKey),
+                port: defaults.integer(forKey: portKey) == 0 ? nil : defaults.integer(forKey: portKey),
                 pin: defaults.string(forKey: pinKey) ?? "",
                 useHTTPS: defaults.bool(forKey: useHTTPSKey)
             )
@@ -178,7 +191,7 @@ nonisolated extension ServerConfig {
         guard let data = UserDefaults(suiteName: appGroupSuite)?.data(forKey: storageKey),
               let config = try? JSONDecoder().decode(ServerConfig.self, from: data),
               config.isConfigured else {
-            return ServerConfig(host: "", port: 8866, pin: "", username: "", password: "", apiKey: "", useHTTPS: false)
+            return ServerConfig(host: "", pin: "", useHTTPS: false)
         }
         return config
     }

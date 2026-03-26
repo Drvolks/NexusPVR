@@ -17,9 +17,7 @@ struct ServerConfigView: View {
     #if DISPATCHERPVR
     @State private var useApiKey: Bool
     #endif
-    #if os(tvOS)
     @State private var portString: String
-    #endif
 
     init(prefillConfig: ServerConfig? = nil) {
         let c = prefillConfig ?? ServerConfig.load()
@@ -27,9 +25,7 @@ struct ServerConfigView: View {
         #if DISPATCHERPVR
         _useApiKey = State(initialValue: !c.apiKey.isEmpty)
         #endif
-        #if os(tvOS)
-        _portString = State(initialValue: c.port > 0 ? String(c.port) : "")
-        #endif
+        _portString = State(initialValue: c.port.map(String.init) ?? "")
     }
 
     var body: some View {
@@ -122,10 +118,10 @@ struct ServerConfigView: View {
                                 .textContentType(.URL)
                                 .autocorrectionDisabled()
 
-                            TextField("Port (default: \(String(Brand.defaultPort)))", text: $portString)
+                            TextField("Port (default: \(config.useHTTPS ? "443" : "80"))", text: $portString)
                                 .keyboardType(.numberPad)
                                 .onChange(of: portString) { _, newValue in
-                                    config.port = Int(newValue) ?? Brand.defaultPort
+                                    config.port = Int(newValue)
                                 }
 
                             HStack {
@@ -278,9 +274,12 @@ struct ServerConfigView: View {
                                     .font(.system(size: 13))
                                     .foregroundStyle(Theme.textSecondary)
                                     .frame(width: 60, alignment: .trailing)
-                                TextField("\(String(Brand.defaultPort))", value: $config.port, format: .number.grouping(.never))
+                                TextField(config.useHTTPS ? "443" : "80", text: $portString)
                                     .textFieldStyle(.roundedBorder)
                                     .frame(width: 80)
+                                    .onChange(of: portString) { _, newValue in
+                                        config.port = Int(newValue)
+                                    }
                                 Spacer()
                             }
 
@@ -416,9 +415,12 @@ struct ServerConfigView: View {
             }
 
             LabeledContent("Port") {
-                TextField("\(String(Brand.defaultPort))", value: $config.port, format: .number.grouping(.never))
+                TextField(config.useHTTPS ? "443" : "80", text: $portString)
                     .multilineTextAlignment(.trailing)
                     .keyboardType(.numberPad)
+                    .onChange(of: portString) { _, newValue in
+                        config.port = Int(newValue)
+                    }
             }
 
             Toggle("Use HTTPS", isOn: $config.useHTTPS)

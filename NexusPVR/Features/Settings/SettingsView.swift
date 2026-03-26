@@ -91,7 +91,7 @@ struct SettingsView: View {
                                 .foregroundStyle(Theme.textSecondary)
                                 .frame(width: 80, alignment: .trailing)
                             Spacer()
-                            Text(verbatim: "\(client.config.host):\(client.config.port)")
+                            Text(verbatim: client.config.displayAddress)
                                 .foregroundStyle(Theme.textPrimary)
                         }
 
@@ -325,7 +325,7 @@ struct SettingsView: View {
                 Text("Host")
                     .foregroundStyle(Theme.textSecondary)
                 Spacer()
-                Text(verbatim: "\(client.config.host):\(client.config.port)")
+                Text(verbatim: client.config.displayAddress)
                     .foregroundStyle(Theme.textPrimary)
             }
 
