@@ -35,7 +35,6 @@ struct GuideView: View {
 
     @State private var selectedProgramDetail: (program: Program, channel: Channel)?
     @State private var streamError: String?
-    @State private var inProgressProgram: (program: Program, channel: Channel, recordingId: Int)?
 
     // Keywords for pre-computing matches
     @State private var keywords: [String] = []
@@ -69,39 +68,6 @@ struct GuideView: View {
             #endif
             .sheet(item: programDetailBinding, onDismiss: onDismissDetail) { detail in
                 programDetailSheet(detail)
-            }
-            .confirmationDialog("Recording in Progress",
-                                isPresented: .constant(inProgressProgram != nil),
-                                presenting: inProgressProgram) { info in
-                #if !DISPATCHERPVR
-                let canPlay = UserPreferences.load().currentGPUAPI == .pixelbuffer
-                Button(canPlay ? "Watch from Beginning" : "Watch from Beginning (requires PixelBuffer)") {
-                    Task {
-                        do {
-                            let url = try await client.recordingStreamURL(recordingId: info.recordingId)
-                            appState.playStream(url: url, title: info.program.name, recordingId: info.recordingId)
-                        } catch {
-                            streamError = error.localizedDescription
-                        }
-                    }
-                    inProgressProgram = nil
-                }
-                .disabled(!canPlay)
-                #endif
-                Button("Watch Live") {
-                    playLiveChannel(info.channel)
-                    inProgressProgram = nil
-                }
-                Button("Cancel", role: .cancel) {
-                    inProgressProgram = nil
-                }
-            } message: { info in
-                let canPlay = UserPreferences.load().currentGPUAPI == .pixelbuffer
-                if canPlay {
-                    Text("\(info.program.name) is currently recording.")
-                } else {
-                    Text("Watching in-progress recordings requires the PixelBuffer renderer. You can change this in Settings > Playback.")
-                }
             }
             .alert("Error", isPresented: .constant(streamError != nil)) {
                 Button("OK") { streamError = nil }
@@ -784,11 +750,6 @@ struct GuideView: View {
                 .onPlayPauseCommand {
                     selectFocusedProgram()
                 }
-                .contextMenu {
-                    if let info = focusedProgramInfo {
-                        tvOSContextMenuItems(program: info.program, channel: info.channel)
-                    }
-                }
                 .disabled(showTVFilterPanel)
                 .offset(x: gridOffset)
 
@@ -1366,80 +1327,9 @@ struct GuideView: View {
         }
 
         let program = programs[focusedColumn]
-        if program.isCurrentlyAiring {
-            playLiveChannel(channel)
-        } else {
-            selectedProgramDetail = (program: program, channel: channel)
-        }
+        selectedProgramDetail = (program: program, channel: channel)
     }
 
-    private var focusedProgramInfo: (program: Program, channel: Channel)? {
-        let channels = viewModel.channels
-        guard focusedRow < channels.count else { return nil }
-        let channel = channels[focusedRow]
-        let programs = tvOSVisiblePrograms(for: channel)
-        guard focusedColumn < programs.count else { return nil }
-        return (programs[focusedColumn], channel)
-    }
-
-    @ViewBuilder
-    private func tvOSContextMenuItems(program: Program, channel: Channel) -> some View {
-        if program.isCurrentlyAiring, let recId = viewModel.activeRecordingId(for: program, channelId: channel.id) {
-            #if !DISPATCHERPVR
-            let canPlay = UserPreferences.load().currentGPUAPI == .pixelbuffer
-            Button {
-                Task {
-                    do {
-                        let url = try await client.recordingStreamURL(recordingId: recId)
-                        appState.playStream(url: url, title: program.name, recordingId: recId)
-                    } catch {
-                        streamError = error.localizedDescription
-                    }
-                }
-            } label: {
-                Label(canPlay ? "Watch from Beginning" : "Watch from Beginning (requires PixelBuffer)", systemImage: "play.fill")
-            }
-            .disabled(!canPlay)
-            #endif
-            Button {
-                playLiveChannel(channel)
-            } label: {
-                Label("Watch Live", systemImage: "dot.radiowaves.left.and.right")
-            }
-            Button {
-                Task {
-                    try? await client.cancelRecording(recordingId: recId)
-                    await viewModel.reloadRecordings(client: client)
-                }
-            } label: {
-                Label("Cancel Recording", systemImage: "xmark.circle")
-            }
-        } else if viewModel.isScheduledRecording(program), let recId = viewModel.recordingId(for: program) {
-            Button {
-                Task {
-                    try? await client.cancelRecording(recordingId: recId)
-                    await viewModel.reloadRecordings(client: client)
-                }
-            } label: {
-                Label("Cancel Recording", systemImage: "xmark.circle")
-            }
-        } else if !program.hasEnded {
-            Button {
-                Task {
-                    try? await client.scheduleRecording(eventId: program.id)
-                    await viewModel.reloadRecordings(client: client)
-                }
-            } label: {
-                Label("Record", systemImage: "record.circle")
-            }
-        }
-
-        Button {
-            selectedProgramDetail = (program: program, channel: channel)
-        } label: {
-            Label("Details", systemImage: "info.circle")
-        }
-    }
     #endif
 
 
@@ -1523,14 +1413,7 @@ struct GuideView: View {
 
                 Button {
                     #if os(tvOS)
-                    // tvOS: recording in progress shows options, live plays directly
-                    if program.isCurrentlyAiring, let recId = viewModel.activeRecordingId(for: program, channelId: channel.id) {
-                        inProgressProgram = (program: program, channel: channel, recordingId: recId)
-                    } else if program.isCurrentlyAiring {
-                        playLiveChannel(channel)
-                    } else {
-                        selectedProgramDetail = (program: program, channel: channel)
-                    }
+                    selectedProgramDetail = (program: program, channel: channel)
                     #else
                     selectedProgramDetail = (program: program, channel: channel)
                     #endif
@@ -1548,55 +1431,6 @@ struct GuideView: View {
                 #if os(tvOS)
                 .buttonStyle(TVGuideButtonStyle())
                 .focusEffectDisabled()
-                .contextMenu {
-                    if program.isCurrentlyAiring, let recId = viewModel.activeRecordingId(for: program, channelId: channel.id) {
-                        #if !DISPATCHERPVR
-                        let canPlay = UserPreferences.load().currentGPUAPI == .pixelbuffer
-                        Button {
-                            Task {
-                                do {
-                                    let url = try await client.recordingStreamURL(recordingId: recId)
-                                    appState.playStream(url: url, title: program.name, recordingId: recId)
-                                } catch {
-                                    streamError = error.localizedDescription
-                                }
-                            }
-                        } label: {
-                            Label(canPlay ? "Watch from Beginning" : "Watch from Beginning (requires PixelBuffer)", systemImage: "play.fill")
-                        }
-                        .disabled(!canPlay)
-                        #endif
-
-                        Button {
-                            playLiveChannel(channel)
-                        } label: {
-                            Label("Watch Live", systemImage: "dot.radiowaves.left.and.right")
-                        }
-
-                        Button {
-                            Task {
-                                try? await client.cancelRecording(recordingId: recId)
-                                await viewModel.reloadRecordings(client: client)
-                            }
-                        } label: {
-                            Label("Cancel Recording", systemImage: "xmark.circle")
-                        }
-                    } else if program.isCurrentlyAiring {
-                        Button {
-                            selectedProgramDetail = (program: program, channel: channel)
-                        } label: {
-                            Label("Details", systemImage: "info.circle")
-                        }
-
-                        if !isScheduled {
-                            Button {
-                                selectedProgramDetail = (program: program, channel: channel)
-                            } label: {
-                                Label("Record", systemImage: "record.circle")
-                            }
-                        }
-                    }
-                }
                 #else
                 .buttonStyle(.plain)
                 .contextMenu {
