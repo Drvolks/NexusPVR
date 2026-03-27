@@ -213,7 +213,9 @@ struct CalendarView: View {
                 }
             }
             #endif
-            .sheet(item: $selectedProgramDetail) { detail in
+            .sheet(item: $selectedProgramDetail, onDismiss: {
+                Task { await loadScheduledRecordings() }
+            }) { detail in
                 ProgramDetailView(
                     program: detail.program,
                     channel: detail.channel,
