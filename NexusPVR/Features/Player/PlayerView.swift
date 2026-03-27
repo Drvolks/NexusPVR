@@ -1607,6 +1607,11 @@ class MPVPlayerCore: NSObject {
         // AV1/VP9 forced to software (AV1 hwdec is broken on iOS, causes texture errors)
         mpv_set_option_string(mpv, "hwdec", "auto-safe")
         mpv_set_option_string(mpv, "hwdec-codecs", "h264,hevc,av1")
+        // Allow more hw decode failures before permanent fallback to software.
+        // Live MPEG-TS streams start mid-GOP without SPS/PPS, causing initial
+        // VideoToolbox errors. Default threshold is too low — mpv falls back to
+        // software permanently before the first IDR frame arrives.
+        mpv_set_option_string(mpv, "vd-lavc-software-fallback", "600")
 
         // CPU threading for software decode (MPV recommends max 16)
         let threadCount = min(ProcessInfo.processInfo.processorCount * 2, 16)
@@ -1628,7 +1633,7 @@ class MPVPlayerCore: NSObject {
         mpv_set_option_string(mpv, "demuxer-max-back-bytes", "150MiB")
         mpv_set_option_string(mpv, "demuxer-seekable-cache", "yes")
         mpv_set_option_string(mpv, "cache-pause-wait", "1")       // Shorter pause to avoid visible glitches
-        mpv_set_option_string(mpv, "cache-pause", "no")           // Don't auto-pause on buffer underrun during playback
+        mpv_set_option_string(mpv, "cache-pause", "yes")          // Pause and rebuffer on underrun (prevents choppy live streams)
         mpv_set_option_string(mpv, "demuxer-readahead-secs", "60")
 
         // Network
@@ -1649,6 +1654,10 @@ class MPVPlayerCore: NSObject {
         mpv_set_option_string(mpv, "ao", "coreaudio")
         mpv_set_option_string(mpv, "audio-buffer", "0.5")  // Larger buffer on macOS to avoid coreaudio race with raw TS streams
         mpv_set_option_string(mpv, "audio-wait-open", "0.5")  // Delay opening audio device until data is ready (prevents NULL buffer crash with raw TS streams)
+        #elseif os(tvOS)
+        mpv_set_option_string(mpv, "ao", "audiounit")
+        mpv_set_option_string(mpv, "audio-buffer", "0.5")
+        mpv_set_option_string(mpv, "audio-wait-open", "0.5")
         #else
         mpv_set_option_string(mpv, "ao", "audiounit")
         mpv_set_option_string(mpv, "audio-buffer", "0.2")
@@ -1657,7 +1666,7 @@ class MPVPlayerCore: NSObject {
         mpv_set_option_string(mpv, "audio-channels", audioChannels)
         mpv_set_option_string(mpv, "volume", "100")
         mpv_set_option_string(mpv, "audio-fallback-to-null", "yes")
-        mpv_set_option_string(mpv, "audio-stream-silence", "yes")  // Output silence while audio buffers (avoid muting)
+        mpv_set_option_string(mpv, "audio-stream-silence", "no")
 
         // Seeking - precise seeks for better audio sync with external audio tracks
         mpv_set_option_string(mpv, "hr-seek", "yes")
@@ -3256,7 +3265,7 @@ class MPVPlayerPixelBufferView: UIView {
             return
         }
 
-        #if os(iOS)
+        #if os(iOS) || os(tvOS)
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
         try? AVAudioSession.sharedInstance().setActive(true)
         #endif
