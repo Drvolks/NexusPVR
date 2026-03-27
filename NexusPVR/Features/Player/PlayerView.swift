@@ -57,6 +57,9 @@ struct PlayerView: View {
     @State private var droppedFrames: Int64 = 0
     @State private var videoGamma: String?
     @State private var showVideoInfo = false
+    @State private var isBuffering = false
+    @State private var lastBufferingCheckPosition: Double = -1
+    @State private var bufferingStallCount = 0
     #if DISPATCHERPVR
     @State private var dispatchProfileBadge: String?
     @State private var dispatchProfileRefreshTask: Task<Void, Never>?
@@ -244,6 +247,21 @@ struct PlayerView: View {
                 .ignoresSafeArea()
             }
 
+            // Buffering overlay for in-progress recordings
+            if isBuffering && isRecordingInProgress && isPlayerReady {
+                VStack(spacing: Theme.spacingSM) {
+                    ProgressView()
+                        .scaleEffect(1.2)
+                        .tint(.white)
+                    Text("Buffering...")
+                        .font(.subheadline)
+                        .foregroundStyle(.white)
+                }
+                .padding(Theme.spacingLG)
+                .background(.black.opacity(0.6))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusMD))
+            }
+
             // Custom controls overlay
             if showControls && isPlayerReady {
                 controlsOverlay
@@ -426,10 +444,51 @@ struct PlayerView: View {
             }
         }
         .onChange(of: isPlaying) {
-            // Save position to NextPVR when paused
             if !isPlaying {
                 savePlaybackPosition()
             }
+        }
+        .onChange(of: currentPosition) {
+            detectBuffering()
+        }
+        .onChange(of: duration) {
+            // duration keeps growing for in-progress recordings even when
+            // position is frozen by cache-pause, so this fires the detection
+            // when onChange(of: currentPosition) can't.
+            detectBuffering()
+        }
+    }
+
+    /// Detects when playback has stalled (position not advancing while
+    /// playing) and triggers a stream reload to recover.
+    private func detectBuffering() {
+        guard isRecordingInProgress, isPlayerReady, isPlaying else {
+            bufferingStallCount = 0
+            isBuffering = false
+            return
+        }
+        // Detect position jumps (e.g. after reload with backoff) — reset tracking
+        if currentPosition < lastBufferingCheckPosition - 1 {
+            lastBufferingCheckPosition = currentPosition
+            bufferingStallCount = 0
+            isBuffering = false
+            return
+        }
+        if currentPosition > lastBufferingCheckPosition + 0.1 {
+            // Position advancing — not buffering
+            lastBufferingCheckPosition = currentPosition
+            bufferingStallCount = 0
+            if isBuffering {
+                isBuffering = false
+            }
+        } else {
+            // Position stalled — count consecutive stalls (each ~0.5s from duration changes)
+            bufferingStallCount += 1
+            if bufferingStallCount >= 3 && !isBuffering {
+                isBuffering = true
+            }
+            // No app-level reload needed — stream-lavf-growing-file
+            // handles the close/reopen at the stream layer.
         }
     }
 
@@ -1195,7 +1254,10 @@ class MPVPlayerCore: NSObject {
             var duration = self.getDuration()
 
             // For recordings in progress: estimate growing duration via HEAD,
-            // and detect stalls to reload with reconnect_at_eof on demand.
+            // then subtract a 15s safety margin so the seek bar and playback
+            // never reach the actual write edge (same approach as Kodi's
+            // NextPVR addon). The demuxer still has real data beyond this
+            // point, preventing EOF stalls during normal playback.
             if self.isRecordingInProgress {
                 self.recordingMonitor.updateBaseline(duration: duration)
                 self.recordingMonitor.refreshIfNeeded()
@@ -1203,7 +1265,8 @@ class MPVPlayerCore: NSObject {
                 if estimated > duration {
                     duration = estimated
                 }
-                self.checkRecordingStalled(position: position, estimated: estimated)
+                duration = max(0, duration - 15)
+                self.reportedDuration = duration
             }
 
             // Only query full video info every 2 seconds (4 ticks) to reduce mpv lock contention.
@@ -1319,9 +1382,21 @@ class MPVPlayerCore: NSObject {
         return duration
     }
 
+    /// The last duration reported to the UI (with 15s margin already applied).
+    /// Set by PlayerView via the position timer callback.
+    var reportedDuration: Double = 0
+
     func seek(seconds: Int) {
         guard let mpv = mpv else { return }
-        let command = "seek \(seconds) relative"
+        var actualSeconds = seconds
+        // Clamp forward seeks to the reported duration (which has 15s margin)
+        if isRecordingInProgress && seconds > 0 && reportedDuration > 0 {
+            let position = getTimePosition()
+            let maxSeek = Int(reportedDuration - position)
+            if maxSeek <= 0 { return }
+            actualSeconds = min(seconds, maxSeek)
+        }
+        let command = "seek \(actualSeconds) relative"
         let result = mpv_command_string(mpv, command)
         if result < 0 {
             print("MPV: seek command failed: \(result)")
@@ -1330,79 +1405,21 @@ class MPVPlayerCore: NSObject {
 
     func seekTo(position: Double) {
         guard let mpv = mpv else { return }
-        let command = "seek \(position) absolute"
+        var target = position
+        // Clamp to the reported duration (which has 15s margin)
+        if isRecordingInProgress && reportedDuration > 0 {
+            target = min(target, reportedDuration)
+        }
+        let command = "seek \(target) absolute"
         let result = mpv_command_string(mpv, command)
         if result < 0 {
             print("MPV: seekTo command failed: \(result)")
         }
     }
 
-    private var lastReloadPosition: Double = -1
-
-    /// Reload the file with reconnect_at_eof. Backs off from the live edge
-    /// to ensure there's decodable content at the seek target.
-    private func reloadForSeek(at position: Double) {
-        guard let mpv = mpv, let url = recordingMonitor.currentURL else { return }
-
-        // Don't reload at the same position twice — we'd just loop
-        if abs(position - lastReloadPosition) < 5 {
-            print("RecordingMonitor: skipping reload (same position \(String(format: "%.1f", position))s)")
-            return
-        }
-
-        // Back off 30s from the known end so mpv has decodable content
-        // at the seek position instead of landing right at EOF
-        let mpvDuration = getDuration()
-        let estimated = recordingMonitor.estimatedDuration
-        let knownEnd = max(mpvDuration, estimated)
-        var seekPos = position
-        if knownEnd > 30 && seekPos > knownEnd - 30 {
-            seekPos = knownEnd - 30
-        }
-
-        lastReloadPosition = seekPos
-
-        let command = "loadfile \"\(url)\" replace -1 start=\(String(format: "%.1f", seekPos))"
-        let result = mpv_command_string(mpv, command)
-        if result < 0 {
-            print("RecordingMonitor: reload-for-seek failed: \(String(cString: mpv_error_string(result)))")
-        } else {
-            print("RecordingMonitor: reload-for-seek at \(String(format: "%.1f", seekPos))s (requested \(String(format: "%.1f", position))s, edge \(String(format: "%.1f", knownEnd))s)")
-            recordingMonitor.resetBaseline()
-        }
-    }
-
     func startRecordingMonitor(url: URL) {
         guard let mpv = mpv else { return }
         recordingMonitor.start(mpv: mpv, url: url.absoluteString)
-    }
-
-    private var lastAdvancingPosition: Double = 0
-    private var positionStalledSince: Date = .distantPast
-    private var lastStallReloadTime: Date = .distantPast
-
-    /// Detects when playback has truly stalled (position not advancing)
-    /// vs. ffmpeg reconnection in progress (eof-reached but still playing).
-    private func checkRecordingStalled(position: Double, estimated: Double) {
-        if position > lastAdvancingPosition + 0.5 {
-            // Position is advancing — not stalled
-            lastAdvancingPosition = position
-            positionStalledSince = Date()
-            return
-        }
-
-        // Position hasn't advanced — check if stalled long enough
-        guard position > 10 && estimated > position + 5 else { return }
-        guard Date().timeIntervalSince(positionStalledSince) >= 2 else { return }
-
-        // Hard cooldown: don't reload more than once per 20s.
-        // Each loadfile takes ~10s (reconnect + seek + decode init),
-        // so reloading sooner just creates a loop.
-        guard Date().timeIntervalSince(lastStallReloadTime) >= 20 else { return }
-
-        print("RecordingMonitor: playback stalled at \(String(format: "%.1f", position))s, \(String(format: "%.0f", estimated - position))s available — reloading")
-        lastStallReloadTime = Date()
-        reloadForSeek(at: position)
     }
 
 
@@ -1616,11 +1633,15 @@ class MPVPlayerCore: NSObject {
 
         // Network
         mpv_set_option_string(mpv, "network-timeout", "30")
-        mpv_set_option_string(mpv, "stream-lavf-o", "reconnect=1,reconnect_streamed=1,reconnect_at_eof=1,reconnect_delay_max=3")
+        mpv_set_option_string(mpv, "stream-lavf-o", "reconnect=1,reconnect_streamed=1,reconnect_delay_max=3")
         if isRecordingInProgress {
-            // Demuxer retries on EOF instead of propagating it to the decoder,
-            // giving ffmpeg's reconnect_at_eof time to fetch new data.
+            // Growing file: when the stream hits EOF, close and reopen the
+            // HTTP connection to get a fresh Content-Length with new data.
+            // Combined with demuxer-force-retry-eof, this lets mpv seamlessly
+            // play a file that's still being written to.
+            mpv_set_option_string(mpv, "stream-lavf-growing-file", "yes")
             mpv_set_option_string(mpv, "demuxer-force-retry-eof", "yes")
+            mpv_set_option_string(mpv, "cache-pause-initial", "no")
         }
 
         // Audio

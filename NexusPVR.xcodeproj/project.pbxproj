@@ -1362,7 +1362,7 @@
 			repositoryURL = "https://github.com/Drvolks/MPVKit";
 			requirement = {
 				kind = exactVersion;
-				version = "0.41.0-drvolks.3";
+				version = "0.41.0-drvolks.4";
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

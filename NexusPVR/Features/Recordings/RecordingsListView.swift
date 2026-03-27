@@ -139,15 +139,18 @@ private struct RecordingsListContentView: View {
             }
             .confirmationDialog("Play Recording", isPresented: .constant(inProgressRecording != nil), presenting: inProgressRecording) { recording in
                 #if !DISPATCHERPVR
-                Button("Play from Beginning") {
+                let canPlay = UserPreferences.load().currentGPUAPI == .pixelbuffer
+                Button(canPlay ? "Play from Beginning" : "Play from Beginning (requires PixelBuffer)") {
                     playRecordingFromBeginning(recording)
                     inProgressRecording = nil
                 }
+                .disabled(!canPlay)
                 if let position = recording.playbackPosition, position > 10 {
-                    Button("Resume") {
+                    Button(canPlay ? "Resume" : "Resume (requires PixelBuffer)") {
                         playRecording(recording)
                         inProgressRecording = nil
                     }
+                    .disabled(!canPlay)
                 }
                 #endif
                 if recording.channelId != nil {
@@ -160,7 +163,12 @@ private struct RecordingsListContentView: View {
                     inProgressRecording = nil
                 }
             } message: { recording in
-                Text("\(recording.name) is currently recording.")
+                let canPlay = UserPreferences.load().currentGPUAPI == .pixelbuffer
+                if canPlay {
+                    Text("\(recording.name) is currently recording.")
+                } else {
+                    Text("Watching in-progress recordings requires the PixelBuffer renderer. You can change this in Settings > Playback.")
+                }
             }
             .alert("Error", isPresented: .constant(deleteError != nil)) {
                 Button("OK") { deleteError = nil }
@@ -287,17 +295,20 @@ private struct RecordingsListContentView: View {
     private func recordingContextMenu(for recording: Recording) -> some View {
         if recording.recordingStatus == .recording {
             #if !DISPATCHERPVR
+            let canPlay = UserPreferences.load().currentGPUAPI == .pixelbuffer
             Button {
                 playRecordingFromBeginning(recording)
             } label: {
-                Label("Play from Beginning", systemImage: "play.fill")
+                Label(canPlay ? "Play from Beginning" : "Play from Beginning (requires PixelBuffer)", systemImage: "play.fill")
             }
+            .disabled(!canPlay)
             if let position = recording.playbackPosition, position > 10 {
                 Button {
                     playRecording(recording)
                 } label: {
-                    Label("Resume", systemImage: "arrow.clockwise")
+                    Label(canPlay ? "Resume" : "Resume (requires PixelBuffer)", systemImage: "arrow.clockwise")
                 }
+                .disabled(!canPlay)
             }
             #endif
             if recording.channelId != nil {
@@ -385,7 +396,13 @@ private struct RecordingsListContentView: View {
     private func tvOSRecordingRow(_ recording: Recording) -> some View {
         RecordingRowTV(
             recording: recording,
-            onPlay: { playRecording(recording) },
+            onPlay: {
+                if recording.recordingStatus == .recording {
+                    inProgressRecording = recording
+                } else {
+                    playRecording(recording)
+                }
+            },
             onShowDetails: { selectedRecording = recording },
             onDelete: { deleteRecording(recording) },
             durationMismatch: viewModel.durationMismatches[recording.id],

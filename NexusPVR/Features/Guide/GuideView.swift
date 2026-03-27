@@ -74,7 +74,8 @@ struct GuideView: View {
                                 isPresented: .constant(inProgressProgram != nil),
                                 presenting: inProgressProgram) { info in
                 #if !DISPATCHERPVR
-                Button("Watch from Beginning") {
+                let canPlay = UserPreferences.load().currentGPUAPI == .pixelbuffer
+                Button(canPlay ? "Watch from Beginning" : "Watch from Beginning (requires PixelBuffer)") {
                     Task {
                         do {
                             let url = try await client.recordingStreamURL(recordingId: info.recordingId)
@@ -85,6 +86,7 @@ struct GuideView: View {
                     }
                     inProgressProgram = nil
                 }
+                .disabled(!canPlay)
                 #endif
                 Button("Watch Live") {
                     playLiveChannel(info.channel)
@@ -94,7 +96,12 @@ struct GuideView: View {
                     inProgressProgram = nil
                 }
             } message: { info in
-                Text("\(info.program.name) is currently recording.")
+                let canPlay = UserPreferences.load().currentGPUAPI == .pixelbuffer
+                if canPlay {
+                    Text("\(info.program.name) is currently recording.")
+                } else {
+                    Text("Watching in-progress recordings requires the PixelBuffer renderer. You can change this in Settings > Playback.")
+                }
             }
             .alert("Error", isPresented: .constant(streamError != nil)) {
                 Button("OK") { streamError = nil }
@@ -1379,6 +1386,7 @@ struct GuideView: View {
     private func tvOSContextMenuItems(program: Program, channel: Channel) -> some View {
         if program.isCurrentlyAiring, let recId = viewModel.activeRecordingId(for: program, channelId: channel.id) {
             #if !DISPATCHERPVR
+            let canPlay = UserPreferences.load().currentGPUAPI == .pixelbuffer
             Button {
                 Task {
                     do {
@@ -1389,8 +1397,9 @@ struct GuideView: View {
                     }
                 }
             } label: {
-                Label("Watch from Beginning", systemImage: "play.fill")
+                Label(canPlay ? "Watch from Beginning" : "Watch from Beginning (requires PixelBuffer)", systemImage: "play.fill")
             }
+            .disabled(!canPlay)
             #endif
             Button {
                 playLiveChannel(channel)
@@ -1542,6 +1551,7 @@ struct GuideView: View {
                 .contextMenu {
                     if program.isCurrentlyAiring, let recId = viewModel.activeRecordingId(for: program, channelId: channel.id) {
                         #if !DISPATCHERPVR
+                        let canPlay = UserPreferences.load().currentGPUAPI == .pixelbuffer
                         Button {
                             Task {
                                 do {
@@ -1552,8 +1562,9 @@ struct GuideView: View {
                                 }
                             }
                         } label: {
-                            Label("Watch from Beginning", systemImage: "play.fill")
+                            Label(canPlay ? "Watch from Beginning" : "Watch from Beginning (requires PixelBuffer)", systemImage: "play.fill")
                         }
+                        .disabled(!canPlay)
                         #endif
 
                         Button {
@@ -1591,6 +1602,7 @@ struct GuideView: View {
                 .contextMenu {
                     if program.isCurrentlyAiring, let recId = viewModel.activeRecordingId(for: program, channelId: channel.id) {
                         #if !DISPATCHERPVR
+                        let canPlay = UserPreferences.load().currentGPUAPI == .pixelbuffer
                         Button {
                             Task {
                                 do {
@@ -1601,8 +1613,9 @@ struct GuideView: View {
                                 }
                             }
                         } label: {
-                            Label("Watch from Beginning", systemImage: "play.fill")
+                            Label(canPlay ? "Watch from Beginning" : "Watch from Beginning (requires PixelBuffer)", systemImage: "play.fill")
                         }
+                        .disabled(!canPlay)
                         #endif
 
                         Button {

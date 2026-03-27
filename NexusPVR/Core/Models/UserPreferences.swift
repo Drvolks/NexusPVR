@@ -47,6 +47,17 @@ nonisolated struct UserPreferences: Codable {
     var iosGPUAPI: GPUAPI = .pixelbuffer
     var macosGPUAPI: GPUAPI = .pixelbuffer
 
+    /// The GPU API for the current platform.
+    var currentGPUAPI: GPUAPI {
+        #if os(tvOS)
+        tvosGPUAPI
+        #elseif os(macOS)
+        macosGPUAPI
+        #else
+        iosGPUAPI
+        #endif
+    }
+
     // Migration: keep old property for decoding existing data
     private enum CodingKeys: String, CodingKey {
         case keywords

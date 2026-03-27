@@ -215,9 +215,9 @@ struct SettingsView: View {
                         Divider()
                             .background(Theme.textTertiary)
 
-                        // MPV Variant
+                        // Renderer
                         VStack(spacing: Theme.spacingSM) {
-                            Text("MPV Variant")
+                            Text("Renderer")
                                 .foregroundStyle(Theme.textPrimary)
 
                             HStack(spacing: Theme.spacingMD) {
@@ -228,7 +228,7 @@ struct SettingsView: View {
                                         prefs.tvosGPUAPI = api
                                         prefs.save()
                                     } label: {
-                                        Text(api == .metal ? "Metal" : api == .pixelbuffer ? "PixelBuffer" : "OpenGL")
+                                        Text(api == .metal ? "Metal" : api == .pixelbuffer ? "PixelBuffer (Recommended)" : "OpenGL")
                                             .font(.callout)
                                             .fontWeight(.medium)
                                             .padding(.horizontal, Theme.spacingLG)
@@ -410,19 +410,19 @@ struct SettingsView: View {
             }
 
             #if os(iOS)
-            Picker("MPV Variant", selection: $iosGPUAPI) {
+            Picker("Renderer", selection: $iosGPUAPI) {
                 Text("OpenGL").tag(GPUAPI.opengl)
-                Text("Metal (Experimental)").tag(GPUAPI.metal)
-                Text("PixelBuffer").tag(GPUAPI.pixelbuffer)
+                Text("Metal").tag(GPUAPI.metal)
+                Text("PixelBuffer (Recommended)").tag(GPUAPI.pixelbuffer)
             }
             Text(rendererDescription(for: iosGPUAPI))
                 .font(.caption)
                 .foregroundStyle(Theme.textTertiary)
             #elseif os(macOS)
-            Picker("MPV Variant", selection: $macosGPUAPI) {
+            Picker("Renderer", selection: $macosGPUAPI) {
                 Text("OpenGL").tag(GPUAPI.opengl)
-                Text("Metal (Experimental)").tag(GPUAPI.metal)
-                Text("PixelBuffer").tag(GPUAPI.pixelbuffer)
+                Text("Metal").tag(GPUAPI.metal)
+                Text("PixelBuffer (Recommended)").tag(GPUAPI.pixelbuffer)
             }
             Text(rendererDescription(for: macosGPUAPI))
                 .font(.caption)
@@ -466,7 +466,7 @@ struct SettingsView: View {
         case .pixelbuffer:
             return "Renders directly to a Metal surface + Supports native Picture-in-Picture"
         case .metal:
-            return "Renders directly to a Metal surface. Experimental — may offer lower latency but lacks Picture-in-Picture support."
+            return "Renders directly to a Metal surface. May offer lower latency but lacks Picture-in-Picture support."
         case .opengl:
             return "Legacy OpenGL-based rendering. Broad compatibility but no Picture-in-Picture support."
         }
