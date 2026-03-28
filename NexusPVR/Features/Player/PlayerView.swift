@@ -105,6 +105,9 @@ struct PlayerView: View {
                 onPlaybackEnded: {
                     savePlaybackPosition()
                     markAsWatched()
+                    if !isRecordingInProgress {
+                        appState.stopPlayback()
+                    }
                 },
                 onTogglePlayPause: {
                     isPlaying.toggle()
@@ -154,6 +157,9 @@ struct PlayerView: View {
                 onPlaybackEnded: {
                     savePlaybackPosition()
                     markAsWatched()
+                    if !isRecordingInProgress {
+                        appState.stopPlayback()
+                    }
                 },
                 onVideoInfoUpdate: { codec, height, hwdec, audioChannels, dropped, gamma, fps in
                     videoCodec = codec
@@ -195,6 +201,9 @@ struct PlayerView: View {
                 onPlaybackEnded: {
                     savePlaybackPosition()
                     markAsWatched()
+                    if !isRecordingInProgress {
+                        appState.stopPlayback()
+                    }
                 },
                 onVideoInfoUpdate: { codec, height, hwdec, audioChannels, dropped, gamma, fps in
                     videoCodec = codec
@@ -1699,6 +1708,10 @@ class MPVPlayerCore: NSObject {
         // Request verbose log messages for debugging
         mpv_request_log_messages(mpv, "v")
 
+        // Observe eof-reached so we know when playback finishes
+        // (keep-open=yes prevents MPV_EVENT_END_FILE from firing on EOF)
+        mpv_observe_property(mpv, 0, "eof-reached", MPV_FORMAT_FLAG)
+
         // Start event loop
         startEventLoop()
 
@@ -2011,6 +2024,20 @@ class MPVPlayerCore: NSObject {
                         errorBinding?.wrappedValue = detail
                     }
                     lastPlaybackError = nil
+                }
+            }
+
+        case MPV_EVENT_PROPERTY_CHANGE:
+            if let prop = event.data?.assumingMemoryBound(to: mpv_event_property.self).pointee {
+                let name = String(cString: prop.name)
+                if name == "eof-reached",
+                   prop.format == MPV_FORMAT_FLAG,
+                   let flag = prop.data?.assumingMemoryBound(to: Int32.self).pointee,
+                   flag != 0 {
+                    print("MPV: EOF reached (keep-open)")
+                    DispatchQueue.main.async { [weak self] in
+                        self?.onPlaybackEnded?()
+                    }
                 }
             }
 
