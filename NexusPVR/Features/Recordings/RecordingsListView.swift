@@ -30,6 +30,7 @@ private struct RecordingsListContentView: View {
     @Binding var selectedRecording: Recording?
     @Binding var deleteError: String?
     @State private var inProgressRecording: Recording?
+    @State private var resumeRecording: Recording?
     @State private var filterSelection: RecordingsFilter = .completed
     @State private var suppressNextFilterSelectionChange = false
 
@@ -168,6 +169,25 @@ private struct RecordingsListContentView: View {
                     Text("\(recording.name) is currently recording.")
                 } else {
                     Text("Watching in-progress recordings requires the PixelBuffer renderer. You can change this in Settings > Playback.")
+                }
+            }
+            .confirmationDialog("Resume Playback", isPresented: .constant(resumeRecording != nil), presenting: resumeRecording) { recording in
+                Button("Resume") {
+                    playRecording(recording)
+                    resumeRecording = nil
+                }
+                Button("Watch from Beginning") {
+                    playRecordingFromBeginning(recording)
+                    resumeRecording = nil
+                }
+                Button("Cancel", role: .cancel) {
+                    resumeRecording = nil
+                }
+            } message: { recording in
+                if let position = recording.playbackPosition {
+                    let minutes = position / 60
+                    let seconds = position % 60
+                    Text("\(recording.name)\nStopped at \(minutes):\(String(format: "%02d", seconds))")
                 }
             }
             .alert("Error", isPresented: .constant(deleteError != nil)) {
@@ -399,6 +419,8 @@ private struct RecordingsListContentView: View {
             onPlay: {
                 if recording.recordingStatus == .recording {
                     inProgressRecording = recording
+                } else if recording.hasResumePosition && !recording.isWatched {
+                    resumeRecording = recording
                 } else {
                     playRecording(recording)
                 }
@@ -448,7 +470,11 @@ private struct RecordingsListContentView: View {
             if recording.recordingStatus == .recording {
                 inProgressRecording = recording
             } else if recording.recordingStatus.isPlayable {
-                playRecording(recording)
+                if recording.hasResumePosition && !recording.isWatched {
+                    resumeRecording = recording
+                } else {
+                    playRecording(recording)
+                }
             } else {
                 selectedRecording = recording
             }
@@ -517,7 +543,11 @@ private struct RecordingsListContentView: View {
             if recording.recordingStatus == .recording {
                 inProgressRecording = recording
             } else if recording.recordingStatus.isPlayable {
-                playRecording(recording)
+                if recording.hasResumePosition && !recording.isWatched {
+                    resumeRecording = recording
+                } else {
+                    playRecording(recording)
+                }
             } else {
                 selectedRecording = recording
             }
