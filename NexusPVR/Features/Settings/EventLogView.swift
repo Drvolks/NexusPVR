@@ -9,6 +9,8 @@ import SwiftUI
 
 struct EventLogView: View {
     @ObservedObject private var eventLog = NetworkEventLog.shared
+    @EnvironmentObject private var appState: AppState
+    @Environment(\.dismiss) private var dismiss
     @State private var showingCopied = false
 
     var body: some View {
@@ -80,14 +82,14 @@ struct EventLogView: View {
                                     eventLog.clear()
                                 } label: {
                                     Text("Clear")
-                                        .font(.caption)
-                                        .padding(.horizontal, Theme.spacingMD)
+                                        .font(.system(size: 20, weight: .semibold))
+                                        .padding(.horizontal, Theme.spacingLG)
                                         .padding(.vertical, Theme.spacingSM)
-                                        .background(Theme.surfaceElevated)
-                                        .foregroundStyle(Theme.textSecondary)
+                                        .background(Theme.guideNowPlaying.opacity(0.85))
+                                        .foregroundStyle(Theme.textPrimary)
                                         .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
                                 }
-                                .buttonStyle(.card)
+                                .buttonStyle(TVEventLogActionButtonStyle())
                             }
 
                             ForEach(eventLog.events.reversed()) { event in
@@ -100,6 +102,15 @@ struct EventLogView: View {
             }
             .padding(.vertical)
             .padding(.horizontal, 40)
+        }
+        .onAppear {
+            appState.tvosBlocksSidebarExitCommand = true
+        }
+        .onDisappear {
+            appState.tvosBlocksSidebarExitCommand = false
+        }
+        .onExitCommand {
+            dismiss()
         }
     }
     #endif
@@ -161,3 +172,21 @@ struct EventLogView: View {
     }
     #endif
 }
+
+#if os(tvOS)
+private struct TVEventLogActionButtonStyle: ButtonStyle {
+    @Environment(\.isFocused) private var isFocused
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.cornerRadiusSM)
+                    .stroke(isFocused ? Theme.accent : Color.clear, lineWidth: isFocused ? 3 : 0)
+            }
+            .shadow(color: isFocused ? Theme.accent.opacity(0.22) : .clear, radius: 10)
+            .scaleEffect(configuration.isPressed ? 0.985 : isFocused ? 1.01 : 1.0)
+            .animation(.easeInOut(duration: 0.14), value: configuration.isPressed)
+            .animation(.easeInOut(duration: 0.14), value: isFocused)
+    }
+}
+#endif

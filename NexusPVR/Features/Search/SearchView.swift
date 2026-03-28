@@ -13,7 +13,7 @@ struct SearchView: View {
     @EnvironmentObject private var epgCache: EPGCache
     @StateObject private var viewModel = SearchViewModel()
     #if os(tvOS)
-    @Environment(\.requestNavBarFocus) private var requestNavBarFocus
+    @Environment(\.requestSidebarFocus) private var requestSidebarFocus
     #endif
     @State private var selectedProgramDetail: ProgramSearchDetail?
     @State private var refreshTrigger = UUID()
@@ -57,7 +57,11 @@ struct SearchView: View {
                 .environmentObject(appState)
             }
         }
+        #if os(tvOS)
+        .background(.ultraThinMaterial)
+        #else
         .background(Theme.background)
+        #endif
         .task {
             viewModel.epgCache = epgCache
             if !appState.searchQuery.isEmpty {
@@ -91,7 +95,7 @@ struct SearchView: View {
         .background(Theme.surface)
         .onMoveCommand { direction in
             if direction == .up {
-                requestNavBarFocus()
+                requestSidebarFocus()
             }
         }
     }

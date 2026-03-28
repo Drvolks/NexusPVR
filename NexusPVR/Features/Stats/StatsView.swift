@@ -11,6 +11,10 @@ import SwiftUI
 struct StatsView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var client: PVRClient
+    #if os(tvOS)
+    @Environment(\.requestSidebarFocus) private var requestSidebarFocus
+    @FocusState private var isRootFocused: Bool
+    #endif
     @StateObject private var vm = StatsViewModel()
 
     var body: some View {
@@ -54,7 +58,7 @@ struct StatsView: View {
             }
             .padding(.vertical)
         }
-        .background(Theme.background)
+        .background(.ultraThinMaterial)
         .task {
             vm.startRefreshing(client: client, appState: appState)
         }
@@ -99,7 +103,18 @@ struct StatsView: View {
             }
             .padding(.vertical, 40)
         }
-        .background(Theme.background)
+        .focusable(true)
+        .focused($isRootFocused)
+        .focusEffectDisabled()
+        .background(.ultraThinMaterial)
+        .onAppear {
+            DispatchQueue.main.async {
+                isRootFocused = true
+            }
+        }
+        .onExitCommand {
+            requestSidebarFocus()
+        }
         .task {
             vm.startRefreshing(client: client, appState: appState)
         }

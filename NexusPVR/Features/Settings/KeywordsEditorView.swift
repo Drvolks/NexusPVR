@@ -9,9 +9,7 @@ import SwiftUI
 
 struct KeywordsEditorView: View {
     @Environment(\.dismiss) private var dismiss
-    #if os(iOS)
     @EnvironmentObject private var appState: AppState
-    #endif
     @State private var preferences = UserPreferences.load()
     @State private var newKeyword = ""
 
@@ -125,11 +123,9 @@ struct KeywordsEditorView: View {
             #endif
         }
         .background(Theme.background)
-        #if os(iOS)
         .onChange(of: preferences.keywords) {
             appState.topicKeywords = preferences.keywords
         }
-        #endif
     }
 
     #if os(tvOS)

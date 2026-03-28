@@ -197,9 +197,39 @@ struct TopicProgramRow: View {
 // MARK: - tvOS Row
 
 #if os(tvOS)
+private struct TVTopicSubtleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        TVTopicFocusWrapper {
+            configuration.label
+        }
+    }
+}
+
+private struct TVTopicFocusWrapper<Content: View>: View {
+    @Environment(\.isFocused) private var isFocused
+    let content: () -> Content
+
+    init(@ViewBuilder content: @escaping () -> Content) {
+        self.content = content
+    }
+
+    var body: some View {
+        content()
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(isFocused ? Theme.accent.opacity(0.8) : Color.clear, lineWidth: 1.5)
+            )
+            .shadow(color: isFocused ? .black.opacity(0.28) : .clear, radius: 7, x: 0, y: 2)
+            .scaleEffect(isFocused ? 1.01 : 1.0)
+            .animation(.easeInOut(duration: 0.14), value: isFocused)
+            .focusEffectDisabled()
+    }
+}
+
 struct TopicProgramRowTV: View {
     @EnvironmentObject private var client: PVRClient
     @EnvironmentObject private var appState: AppState
+    @Environment(\.isFocused) private var isFocused
 
     let program: Program
     let channel: Channel
@@ -264,84 +294,113 @@ struct TopicProgramRowTV: View {
         }
     }
 
+    private var rightCellBackground: Color {
+        Theme.guideNowPlaying
+    }
+
     var body: some View {
         Button {
-            onShowDetails?()
-        } label: {
-            HStack(alignment: .center, spacing: Theme.spacingLG) {
-                ProgramSportIcon(program: program, size: 80, iconSize: 32)
-
-                VStack(alignment: .leading, spacing: Theme.spacingSM) {
-                    if program.isCurrentlyAiring {
-                        Label("Live", systemImage: "circle.fill")
-                            .font(.caption)
-                            .foregroundStyle(Theme.accent)
-                    }
-
-                    Text(program.cleanName)
-                        .font(.headline)
-                        .foregroundStyle(Theme.textPrimary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-
-                    if let subtitle = program.subtitle, !subtitle.isEmpty {
-                        Text(subtitle)
-                            .font(.subheadline)
-                            .foregroundStyle(Theme.textSecondary)
-                            .lineLimit(1)
-                    }
-
-                    HStack(spacing: Theme.spacingMD) {
-                        Label(channel.name, systemImage: "tv")
-                            .font(.caption)
-                            .foregroundStyle(Theme.textTertiary)
-
-                        Label {
-                            Text(vm.programScheduleText)
-                        } icon: {
-                            Image(systemName: "clock")
-                        }
-                        .font(.caption)
-                        .foregroundStyle(Theme.textTertiary)
-
-                        if program.isNew { NewBadge() }
-                    }
-
-                    if let existing = vm.existingRecording {
-                        HStack(spacing: 4) {
-                            Image(systemName: "checkmark.circle")
-                            Text("Already recorded \(existing.startDate ?? Date(), style: .time)")
-                        }
-                        .font(.caption2)
-                        .foregroundStyle(Theme.warning)
-                    } else if let earlier = vm.earlierScheduled {
-                        HStack(spacing: 4) {
-                            Image(systemName: "clock.badge.checkmark")
-                            Text("Already scheduled at \(earlier.startDate ?? Date(), style: .time) on \(earlier.startDate ?? Date(), style: .date)")
-                        }
-                        .font(.caption2)
-                        .foregroundStyle(Theme.success)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                HStack(spacing: 8) {
-                    if vm.isProcessing {
-                        ProgressView()
-                    } else {
-                        Image(systemName: actionIcon)
-                        Text(actionLabel)
-                    }
-                }
-                .font(.callout)
-                .fontWeight(.medium)
-                .foregroundStyle(actionColor)
-                .padding(.horizontal, Theme.spacingLG)
-                .padding(.vertical, Theme.spacingMD)
+            guard !vm.isProcessing else { return }
+            if canRecord && !program.hasEnded {
+                vm.toggleRecording(using: client, onChanged: onRecordingChanged)
+            } else {
+                onShowDetails?()
             }
-            .padding()
+        } label: {
+            HStack(spacing: 10) {
+                HStack(spacing: 10) {
+                    CachedAsyncImage(url: try? client.channelIconURL(channelId: channel.id)) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                    } placeholder: {
+                        Image(systemName: "tv")
+                            .font(.title2)
+                            .foregroundStyle(Theme.textTertiary)
+                    }
+                }
+                .padding(.horizontal, Theme.spacingMD)
+                .frame(width: Theme.channelColumnWidth, height: Theme.cellHeight)
+
+                ZStack {
+                    HStack(spacing: 10) {
+                        ProgramSportIcon(program: program, size: 54, iconSize: 24)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(program.cleanName)
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundStyle(.white.opacity(isFocused ? 1.0 : 0.95))
+                                .lineLimit(1)
+
+                            Text(vm.programScheduleText)
+                                .font(.system(size: 24, weight: .medium))
+                                .foregroundStyle(.white.opacity(isFocused ? 0.82 : 0.72))
+                                .lineLimit(1)
+
+                            if let subtitle = program.subtitle, !subtitle.isEmpty {
+                                Text(subtitle)
+                                    .font(.system(size: 17))
+                                    .foregroundStyle(.white.opacity(isFocused ? 0.76 : 0.64))
+                                    .lineLimit(1)
+                            }
+
+                            if let existing = vm.existingRecording {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "checkmark.circle")
+                                    Text("Already recorded \(existing.startDate ?? Date(), style: .time)")
+                                }
+                                .font(.caption2)
+                                .foregroundStyle(Theme.warning.opacity(0.95))
+                            } else if let earlier = vm.earlierScheduled {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "clock.badge.checkmark")
+                                    Text("Already scheduled at \(earlier.startDate ?? Date(), style: .time)")
+                                }
+                                .font(.caption2)
+                                .foregroundStyle(Theme.success.opacity(0.9))
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                        HStack(spacing: 8) {
+                            if vm.isProcessing {
+                                ProgressView()
+                            } else {
+                                Image(systemName: actionIcon)
+                                Text(actionLabel)
+                            }
+                        }
+                        .font(.callout)
+                        .fontWeight(.medium)
+                        .foregroundStyle(actionColor.opacity(0.95))
+                        .padding(.horizontal, Theme.spacingLG)
+                        .padding(.vertical, Theme.spacingMD)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+
+                    if program.isNew {
+                        VStack {
+                            HStack {
+                                Spacer()
+                                Theme.success
+                                    .frame(width: 8, height: 24)
+                                    .clipShape(UnevenRoundedRectangle(
+                                        topLeadingRadius: 0,
+                                        bottomLeadingRadius: 4,
+                                        bottomTrailingRadius: 0,
+                                        topTrailingRadius: 10
+                                    ))
+                            }
+                            Spacer()
+                        }
+                    }
+                }
+                .frame(height: Theme.cellHeight)
+                .background(RoundedRectangle(cornerRadius: 12).fill(rightCellBackground))
+            }
         }
-        .buttonStyle(.card)
+        .buttonStyle(TVTopicSubtleButtonStyle())
         .contextMenu {
             Button {
                 onShowDetails?()
@@ -349,7 +408,6 @@ struct TopicProgramRowTV: View {
                 Label("Details", systemImage: "info.circle")
             }
         }
-        .disabled(vm.isProcessing)
         .accessibilityIdentifier("topic-program-\(program.id)")
         .task {
             await vm.checkIfScheduled(using: client)

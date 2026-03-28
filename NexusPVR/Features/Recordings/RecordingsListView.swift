@@ -46,46 +46,14 @@ private struct RecordingsListContentView: View {
 
     @Environment(\.scenePhase) private var scenePhase
     #if os(tvOS)
-    @Environment(\.requestNavBarFocus) private var requestNavBarFocus
+    @Environment(\.requestSidebarFocus) private var requestSidebarFocus
     #endif
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 // Tab picker (tvOS and macOS only — iOS uses floating nav bar picker)
-                #if os(tvOS)
-                Picker("Filter", selection: $filterSelection) {
-                    if viewModel.hasActiveRecordings {
-                        Text("Recording").tag(RecordingsFilter.recording)
-                    }
-                    Text("Completed").tag(RecordingsFilter.completed)
-                    Text("Scheduled").tag(RecordingsFilter.scheduled)
-                }
-                .pickerStyle(.segmented)
-                .accessibilityIdentifier("recordings-filter")
-                .onMoveCommand { direction in
-                    if direction == .up {
-                        requestNavBarFocus()
-                    }
-                }
-                .onChange(of: filterSelection) {
-                    if suppressNextFilterSelectionChange {
-                        suppressNextFilterSelectionChange = false
-                        return
-                    }
-                    appState.setRecordingsFilter(filterSelection, userInitiated: true)
-                    Task { viewModel.filter = filterSelection }
-                }
-                .onChange(of: viewModel.filter) {
-                    if filterSelection != viewModel.filter {
-                        suppressNextFilterSelectionChange = true
-                        filterSelection = viewModel.filter
-                    }
-                }
-                .padding(.horizontal)
-                .padding(.vertical, Theme.spacingSM)
-                .background(Theme.background)
-                #elseif os(macOS)
+                #if os(macOS)
                 Picker("Filter", selection: $filterSelection) {
                     if viewModel.hasActiveRecordings {
                         Text("Recording").tag(RecordingsFilter.recording)
@@ -178,8 +146,17 @@ private struct RecordingsListContentView: View {
                     Text(error)
                 }
             }
+            #if os(tvOS)
+            .onExitCommand {
+                requestSidebarFocus()
+            }
+            #endif
         }
+        #if os(tvOS)
+        .background(.ultraThinMaterial)
+        #else
         .background(Theme.background)
+        #endif
         .task {
             // Apply user-selected filter before loading so the view shows the correct tab
             if appState.recordingsFilterUserOverride {
@@ -343,17 +320,21 @@ private struct RecordingsListContentView: View {
 
     private func recordingsList(_ vm: RecordingsViewModel) -> some View {
         #if os(tvOS)
-        ScrollView {
+        let channelIdByName = buildChannelIdByNameMap(from: vm.filteredRecordings)
+        return ScrollView {
             LazyVStack(spacing: Theme.spacingMD) {
                 ForEach(vm.standaloneRecordings) { recording in
-                    tvOSRecordingRow(recording)
+                    tvOSRecordingRow(recording, channelIdByName: channelIdByName)
                 }
 
                 ForEach(vm.seriesGroups) { group in
-                    seriesSectionTV(group)
+                    seriesSectionTV(group, channelIdByName: channelIdByName)
                 }
             }
             .padding()
+        }
+        .onExitCommand {
+            requestSidebarFocus()
         }
         #else
         List {
@@ -394,9 +375,27 @@ private struct RecordingsListContentView: View {
     }
 
     #if os(tvOS)
-    private func tvOSRecordingRow(_ recording: Recording) -> some View {
-        RecordingRowTV(
+    private func buildChannelIdByNameMap(from recordings: [Recording]) -> [String: Int] {
+        var map: [String: Int] = [:]
+        for recording in recordings {
+            guard let channelId = recording.channelId,
+                  let channelName = recording.channel?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !channelName.isEmpty else { continue }
+            map[channelName.lowercased()] = channelId
+        }
+        return map
+    }
+
+    private func tvOSRecordingRow(_ recording: Recording, channelIdByName: [String: Int]) -> some View {
+        let fallbackChannelId: Int? = {
+            guard let name = recording.channel?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !name.isEmpty else { return nil }
+            return channelIdByName[name.lowercased()]
+        }()
+
+        return RecordingRowTV(
             recording: recording,
+            fallbackChannelId: fallbackChannelId,
             onPlay: {
                 if recording.recordingStatus == .recording {
                     inProgressRecording = recording
@@ -412,6 +411,7 @@ private struct RecordingsListContentView: View {
             durationVerified: viewModel.durationVerified.contains(recording.id),
             durationUnverifiable: viewModel.durationUnverifiable.contains(recording.id)
         )
+        .padding(.leading, Theme.spacingMD)
         .contextMenu {
             recordingContextMenu(for: recording)
             Button(role: .destructive) {
@@ -423,7 +423,7 @@ private struct RecordingsListContentView: View {
         .resumeDialog(recording: recording, resumeRecording: $resumeRecording, playRecording: playRecording, playFromBeginning: playRecordingFromBeginning)
     }
 
-    private func seriesSectionTV(_ group: SeriesGroup) -> some View {
+    private func seriesSectionTV(_ group: SeriesGroup, channelIdByName: [String: Int]) -> some View {
         VStack(alignment: .leading, spacing: Theme.spacingSM) {
             HStack(spacing: Theme.spacingSM) {
                 Image(systemName: "arrow.2.squarepath")
@@ -435,7 +435,7 @@ private struct RecordingsListContentView: View {
             .padding(.top, Theme.spacingMD)
 
             ForEach(group.recordings) { recording in
-                tvOSRecordingRow(recording)
+                tvOSRecordingRow(recording, channelIdByName: channelIdByName)
             }
         }
     }

@@ -394,8 +394,6 @@ struct TVSettingsSection<Content: View, StatusView: View>: View {
                     .padding(.bottom, Theme.spacingSM)
             }
         }
-        .background(Theme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusMD))
     }
 }
 

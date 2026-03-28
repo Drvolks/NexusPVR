@@ -14,21 +14,22 @@ struct TopicsView: View {
     @StateObject private var viewModel = TopicsViewModel()
     @State private var selectedProgramDetail: ProgramTopicDetail?
     @State private var refreshTrigger = UUID()
+    @State private var selectedKeyword: String = ""
     @Environment(\.scenePhase) private var scenePhase
     #if os(tvOS)
-    @State private var selectedKeyword: String = ""
-    @State private var showingKeywordsEditor = false
     @State private var newKeyword = ""
-    @Environment(\.requestNavBarFocus) private var requestNavBarFocus
-    private let manageTag = "__manage__"
-    #else
-    @State private var selectedKeyword: String = ""
     #endif
 
     private var filteredPrograms: [MatchingProgram] {
         let nonScheduled = viewModel.matchingPrograms.filter { $0.matchedKeyword != MatchingProgram.scheduledKeyword }
+        #if os(tvOS)
+        let keyword = appState.selectedTopicKeyword
+        guard !keyword.isEmpty else { return nonScheduled }
+        return nonScheduled.filter { $0.matchedKeyword == keyword }
+        #else
         guard !selectedKeyword.isEmpty else { return nonScheduled }
         return nonScheduled.filter { $0.matchedKeyword == selectedKeyword }
+        #endif
     }
 
     #if os(iOS)
@@ -64,25 +65,7 @@ struct TopicsView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Keyword tabs
-                #if os(tvOS)
-                Picker("Topic", selection: $selectedKeyword) {
-                    ForEach(viewModel.keywords, id: \.self) { keyword in
-                        Text(keyword).tag(keyword)
-                    }
-                    Text("Manage").tag(manageTag)
-                }
-                .pickerStyle(.segmented)
-                .accessibilityIdentifier("keyword-tabs")
-                .onMoveCommand { direction in
-                    if direction == .up {
-                        requestNavBarFocus()
-                    }
-                }
-                .padding(.horizontal)
-                .padding(.vertical, Theme.spacingSM)
-                .background(Theme.background)
-                #elseif os(macOS)
+                #if os(macOS)
                 if !viewModel.keywords.isEmpty {
                     HStack {
                         Picker("Topic", selection: $selectedKeyword) {
@@ -137,17 +120,22 @@ struct TopicsView: View {
             }
             .onChange(of: viewModel.keywords) {
                 #if os(tvOS)
-                if selectedKeyword.isEmpty {
-                    selectedKeyword = viewModel.keywords.first ?? manageTag
-                } else if selectedKeyword != manageTag && !viewModel.keywords.contains(selectedKeyword) {
-                    selectedKeyword = viewModel.keywords.first ?? manageTag
+                appState.topicKeywords = viewModel.keywords
+                if !appState.showingKeywordsEditor {
+                    if appState.selectedTopicKeyword.isEmpty || !viewModel.keywords.contains(appState.selectedTopicKeyword) {
+                        appState.selectedTopicKeyword = viewModel.keywords.first ?? ""
+                    }
                 }
                 #else
                 syncTopicSelection(with: viewModel.keywords)
                 #endif
             }
         }
+        #if os(tvOS)
+        .background(.ultraThinMaterial)
+        #else
         .background(Theme.background)
+        #endif
         #if os(macOS)
         .sheet(isPresented: $appState.showingKeywordsEditor) {
             KeywordsEditorView()
@@ -183,6 +171,12 @@ struct TopicsView: View {
             updateKeywordsWithMatches()
             #elseif !os(tvOS)
             syncTopicSelection(with: viewModel.keywords)
+            #else
+            appState.topicKeywords = viewModel.keywords
+            if !appState.showingKeywordsEditor,
+               (appState.selectedTopicKeyword.isEmpty || !viewModel.keywords.contains(appState.selectedTopicKeyword)) {
+                appState.selectedTopicKeyword = viewModel.keywords.first ?? ""
+            }
             #endif
         }
         #if os(iOS)
@@ -194,11 +188,13 @@ struct TopicsView: View {
             syncTopicSelection(with: viewModel.keywords, preferFirst: !hasValidSelection)
         }
         #endif
+        #if !os(tvOS)
         .onChange(of: appState.selectedTopicKeyword) {
             if selectedKeyword != appState.selectedTopicKeyword {
                 selectedKeyword = appState.selectedTopicKeyword
             }
         }
+        #endif
         .onChange(of: scenePhase) {
             if scenePhase == .active {
                 Task {
@@ -230,7 +226,7 @@ struct TopicsView: View {
     @ViewBuilder
     private var contentView: some View {
         #if os(tvOS)
-        if selectedKeyword == manageTag {
+        if appState.showingKeywordsEditor {
             manageKeywordsView
         } else if viewModel.isLoading && viewModel.matchingPrograms.isEmpty {
             loadingView
@@ -291,7 +287,7 @@ struct TopicsView: View {
                 .font(.headline)
                 .foregroundStyle(Theme.textPrimary)
             #if os(tvOS)
-            Text("No upcoming programs match: \(selectedKeyword.isEmpty ? viewModel.keywords.joined(separator: ", ") : selectedKeyword)")
+            Text("No upcoming programs match: \(appState.selectedTopicKeyword.isEmpty ? viewModel.keywords.joined(separator: ", ") : appState.selectedTopicKeyword)")
                 .font(.subheadline)
                 .foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center)
@@ -371,41 +367,41 @@ struct TopicsView: View {
     private var manageKeywordsView: some View {
         ScrollView {
             VStack(spacing: Theme.spacingLG) {
-                ForEach(viewModel.keywords, id: \.self) { keyword in
-                    Button {
-                        removeKeyword(keyword)
-                    } label: {
-                        HStack {
-                            Text(keyword)
-                                .font(.tvHeadline)
-                            Spacer()
-                            Text("Delete")
-                                .font(.tvBody)
-                                .foregroundStyle(Theme.error)
-                        }
-                        .padding(.horizontal, Theme.spacingLG)
-                        .padding(.vertical, Theme.spacingMD)
-                    }
-                    .buttonStyle(.card)
-                }
-
                 HStack(spacing: Theme.spacingMD) {
-                    TextField("New keyword", text: $newKeyword)
+                    Image(systemName: "plus.circle")
+                        .foregroundStyle(Theme.accent)
+
+                    TextField("Add topic keyword", text: $newKeyword)
                         .textFieldStyle(.plain)
-                        .padding(Theme.spacingMD)
-                        .background(Theme.surfaceElevated)
-                        .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
+                        .font(.tvBody)
                         .accessibilityIdentifier("keyword-text-field")
                         .onSubmit { addKeyword() }
+                }
+                .padding(.horizontal, Theme.spacingMD)
+                .padding(.vertical, Theme.spacingMD)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-                    Button {
-                        addKeyword()
-                    } label: {
-                        Text("Add")
+                ForEach(viewModel.keywords, id: \.self) { keyword in
+                    HStack(spacing: Theme.spacingMD) {
+                        Text(keyword)
+                            .font(.tvHeadline)
+                            .foregroundStyle(.white.opacity(0.95))
+                        Spacer()
+                        Button(role: .destructive) {
+                            removeKeyword(keyword)
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.headline)
+                                .padding(.horizontal, Theme.spacingMD)
+                                .padding(.vertical, Theme.spacingSM)
+                        }
+                        .buttonStyle(TVManageDeleteButtonStyle())
                     }
-                    .buttonStyle(AccentButtonStyle())
-                    .disabled(newKeyword.trimmingCharacters(in: .whitespaces).isEmpty)
-                    .accessibilityIdentifier("add-keyword-button")
+                    .padding(.horizontal, Theme.spacingLG)
+                    .padding(.vertical, Theme.spacingMD)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.guideNowPlaying)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
                 }
             }
             .padding(Theme.spacingXL)
@@ -424,7 +420,6 @@ struct TopicsView: View {
         prefs.keywords.append(trimmed)
         prefs.save()
         newKeyword = ""
-        selectedKeyword = trimmed
         Task {
             await viewModel.loadData()
         }
@@ -434,14 +429,47 @@ struct TopicsView: View {
         var prefs = UserPreferences.load()
         prefs.keywords.removeAll { $0 == keyword }
         prefs.save()
-        if selectedKeyword == keyword {
-            selectedKeyword = prefs.keywords.first ?? manageTag
+        if appState.selectedTopicKeyword == keyword {
+            appState.selectedTopicKeyword = prefs.keywords.first ?? ""
         }
         Task {
             await viewModel.loadData()
         }
     }
     #endif
+}
+
+private struct TVManageDeleteButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        TVManageDeleteFocusWrapper {
+            configuration.label
+        }
+    }
+}
+
+private struct TVManageDeleteFocusWrapper<Content: View>: View {
+    @Environment(\.isFocused) private var isFocused
+    let content: () -> Content
+
+    init(@ViewBuilder content: @escaping () -> Content) {
+        self.content = content
+    }
+
+    var body: some View {
+        content()
+            .background(
+                RoundedRectangle(cornerRadius: Theme.cornerRadiusLG)
+                    .fill(Theme.surface.opacity(0.65))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.cornerRadiusLG)
+                    .stroke(isFocused ? Theme.accent.opacity(0.95) : Color.clear, lineWidth: 2)
+            )
+            .shadow(color: isFocused ? Theme.accent.opacity(0.2) : .clear, radius: 6, x: 0, y: 1)
+            .scaleEffect(isFocused ? 1.01 : 1.0)
+            .animation(.easeInOut(duration: 0.14), value: isFocused)
+            .focusEffectDisabled()
+    }
 }
 
 // Helper struct for sheet binding

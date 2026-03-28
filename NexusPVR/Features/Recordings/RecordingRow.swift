@@ -227,8 +227,41 @@ struct RecordingRow: View {
 // MARK: - tvOS Version
 
 #if os(tvOS)
+private struct TVRecordingSubtleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        TVRecordingFocusWrapper {
+            configuration.label
+        }
+    }
+}
+
+private struct TVRecordingFocusWrapper<Content: View>: View {
+    @Environment(\.isFocused) private var isFocused
+    let content: () -> Content
+
+    init(@ViewBuilder content: @escaping () -> Content) {
+        self.content = content
+    }
+
+    var body: some View {
+        content()
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(isFocused ? Theme.accent.opacity(0.8) : Color.clear, lineWidth: 1.5)
+            )
+            .shadow(color: isFocused ? .black.opacity(0.28) : .clear, radius: 7, x: 0, y: 2)
+            .scaleEffect(isFocused ? 1.01 : 1.0)
+            .animation(.easeInOut(duration: 0.14), value: isFocused)
+            .focusEffectDisabled()
+    }
+}
+
 struct RecordingRowTV: View {
+    @EnvironmentObject private var client: PVRClient
+    @Environment(\.isFocused) private var isFocused
+
     let recording: Recording
+    let fallbackChannelId: Int?
     let onPlay: () -> Void
     let onShowDetails: () -> Void
     let onDelete: () -> Void
@@ -277,6 +310,55 @@ struct RecordingRowTV: View {
         return min(max(elapsed / Double(totalDuration), 0), 1)
     }
 
+    private var timeRangeText: String {
+        guard let start = recording.startDate else { return "No schedule" }
+        if let end = recording.endDate {
+            return "\(start.formatted(date: .omitted, time: .shortened)) - \(end.formatted(date: .omitted, time: .shortened))"
+        }
+        return start.formatted(date: .omitted, time: .shortened)
+    }
+
+    private var rightCellBackground: Color {
+        if isFocused { return Theme.guideNowPlaying.opacity(0.9) }
+        return Theme.guideNowPlaying
+    }
+
+    private var scheduledDetailText: String? {
+        guard recording.recordingStatus.isScheduled else { return nil }
+        if let subtitle = recording.subtitle?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !subtitle.isEmpty {
+            return subtitle
+        }
+        if let desc = recording.desc?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !desc.isEmpty {
+            return desc
+        }
+        return nil
+    }
+
+    private var effectiveChannelId: Int? {
+        recording.channelId ?? fallbackChannelId
+    }
+
+    private var tvDurationWarningText: String? {
+        if let mismatch = durationMismatch {
+            let fileSeemsComplete: Bool = {
+                guard let size = recording.size, mismatch.expected > 0 else { return false }
+                let bytesPerSecond = Double(size) / Double(mismatch.expected)
+                return bytesPerSecond >= 200_000
+            }()
+            if fileSeemsComplete {
+                return "Detected stream duration \(formatDuration(mismatch.detected)), playback may be impacted"
+            } else {
+                return "Duration mismatch: expected \(formatDuration(mismatch.expected)), detected \(formatDuration(mismatch.detected))"
+            }
+        }
+        if durationUnverifiable {
+            return "Duration could not be verified for this stream, playback may be impacted"
+        }
+        return nil
+    }
+
     var body: some View {
         Button {
             if recording.recordingStatus.isPlayable {
@@ -285,91 +367,131 @@ struct RecordingRowTV: View {
                 onShowDetails()
             }
         } label: {
-            HStack(spacing: Theme.spacingLG) {
-                RecordingStatusIcon(recording: recording, size: 60)
-
-                // Recording info
-                VStack(alignment: .leading, spacing: Theme.spacingXS) {
-                    Text(recording.cleanName)
-                        .font(.headline)
-                        .foregroundStyle(Theme.textPrimary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-
-                    if let subtitle = recording.subtitle, !subtitle.isEmpty {
-                        Text(subtitle)
-                            .font(.subheadline)
-                            .foregroundStyle(Theme.textSecondary)
-                            .lineLimit(1)
-                    }
-
-                    HStack(spacing: Theme.spacingMD) {
-                        if let channel = recording.channel {
-                            Label(channel, systemImage: "tv")
+            HStack(spacing: 10) {
+                // Channel column (Guide-like left side)
+                HStack(spacing: 10) {
+                    if let channelId = effectiveChannelId {
+                        CachedAsyncImage(url: try? client.channelIconURL(channelId: channelId)) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                        } placeholder: {
+                            Image(systemName: "tv")
+                                .font(.title2)
+                                .foregroundStyle(Theme.textTertiary)
                         }
-
-                        if let start = recording.startDate {
-                            Label {
-                                if let end = recording.endDate {
-                                    Text("\(start.formatted(date: .abbreviated, time: .shortened)) – \(end.formatted(date: .omitted, time: .shortened))")
-                                } else {
-                                    Text(start.formatted(date: .abbreviated, time: .shortened))
-                                }
-                            } icon: {
-                                Image(systemName: "calendar")
-                            }
-                        }
-
-                        if recording.isNew { NewBadge() }
-                    }
-                    .font(.caption)
-                    .foregroundStyle(Theme.textTertiary)
-
-                    // Recording progress bar
-                    if recording.recordingStatus == .recording {
-                        TimelineView(.periodic(from: .now, by: 30)) { context in
-                            if let progress = recordingProgress(at: context.date) {
-                                RecordingProgressBar(progress: progress)
-                            }
-                        }
-                    }
-
-                    // Duration mismatch warning
-                    if let mismatch = durationMismatch {
-                        durationWarningLabel(recording: recording, mismatch: mismatch)
-                    } else if durationUnverifiable {
-                        durationUnverifiableLabel()
-                    }
-                }
-
-                Spacer()
-
-                // Right side info
-                VStack(alignment: .trailing, spacing: Theme.spacingXS) {
-                    if !recording.recordingStatus.isCompleted {
-                        Text(actionLabel)
-                            .font(.callout)
-                            .fontWeight(.medium)
-                            .foregroundStyle(recording.recordingStatus.statusColor)
-                    }
-
-                    if let size = recording.fileSizeFormatted {
-                        Text(size)
-                            .font(.caption)
+                    } else {
+                        Image(systemName: "tv")
+                            .font(.title2)
                             .foregroundStyle(Theme.textTertiary)
-                    }
-
-                    if let duration = recording.durationMinutes {
-                        Text("\(duration) min")
-                            .font(.caption)
-                            .foregroundStyle(durationVerified ? Theme.success : Theme.textTertiary)
+                        Text(recording.channel ?? "Channel")
+                            .font(.headline)
+                            .foregroundStyle(Theme.textPrimary)
+                            .lineLimit(1)
                     }
                 }
                 .padding(.horizontal, Theme.spacingMD)
+                .frame(width: Theme.channelColumnWidth, height: Theme.cellHeight)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(isFocused ? Theme.accent.opacity(0.35) : Color.clear, lineWidth: 1)
+                )
+
+                // Program cell (Guide-like right side)
+                ZStack {
+                    HStack(spacing: 10) {
+                        RecordingStatusIcon(recording: recording, size: 54)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(recording.cleanName)
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundStyle(.white.opacity(isFocused ? 1.0 : 0.95))
+                                .lineLimit(1)
+
+                            Text(timeRangeText)
+                                .font(.system(size: 24, weight: .medium))
+                                .foregroundStyle(.white.opacity(isFocused ? 0.82 : 0.72))
+                                .lineLimit(1)
+
+                            if let detail = scheduledDetailText {
+                                Text(detail)
+                                    .font(.system(size: 17))
+                                    .foregroundStyle(.white.opacity(isFocused ? 0.76 : 0.64))
+                                    .lineLimit(1)
+                            }
+
+                            if let warning = tvDurationWarningText {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                    Text(warning)
+                                        .lineLimit(1)
+                                }
+                                .font(.caption)
+                                .foregroundStyle(Theme.warning.opacity(isFocused ? 0.95 : 0.88))
+                            }
+
+                            if recording.recordingStatus == .recording {
+                                TimelineView(.periodic(from: .now, by: 30)) { context in
+                                    if let progress = recordingProgress(at: context.date) {
+                                        RecordingProgressBar(progress: progress)
+                                            .frame(maxWidth: 360)
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(minLength: 0)
+
+                        VStack(alignment: .trailing, spacing: 4) {
+                            if !recording.recordingStatus.isCompleted {
+                                Text(actionLabel)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(isFocused ? .white.opacity(0.86) : recording.recordingStatus.statusColor.opacity(0.9))
+                            }
+                            if let size = recording.fileSizeFormatted {
+                                Text(size)
+                                    .font(.caption)
+                                    .foregroundStyle(.white.opacity(isFocused ? 0.6 : 0.48))
+                            }
+                            if let duration = recording.durationMinutes {
+                                Text("\(duration) min")
+                                    .font(.caption)
+                                    .foregroundStyle(durationVerified ? Theme.success.opacity(isFocused ? 0.9 : 0.75) : .white.opacity(isFocused ? 0.58 : 0.45))
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+
+                    if recording.isNew {
+                        VStack {
+                            HStack {
+                                Spacer()
+                                Theme.success
+                                    .frame(width: 8, height: 24)
+                                    .clipShape(UnevenRoundedRectangle(
+                                        topLeadingRadius: 0,
+                                        bottomLeadingRadius: 4,
+                                        bottomTrailingRadius: 0,
+                                        topTrailingRadius: 10
+                                    ))
+                            }
+                            Spacer()
+                        }
+                    }
+                }
+                .frame(height: Theme.cellHeight)
+                .background(RoundedRectangle(cornerRadius: 12).fill(rightCellBackground))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(isFocused ? Theme.accent.opacity(0.75) : Color.clear, lineWidth: 1.5)
+                )
+                .shadow(color: isFocused ? .black.opacity(0.22) : .clear, radius: 6, x: 0, y: 2)
+                .scaleEffect(isFocused ? 1.005 : 1.0, anchor: .leading)
+                .animation(.easeInOut(duration: 0.14), value: isFocused)
             }
-            .padding()
         }
-        .buttonStyle(.card)
+        .buttonStyle(TVRecordingSubtleButtonStyle())
     }
 }
 #endif

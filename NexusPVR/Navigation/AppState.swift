@@ -81,7 +81,7 @@ enum Tab: String, Identifiable {
     #endif
 
     #if os(tvOS)
-    /// Tabs shown in the tvOS nav bar (search is integrated into the guide filter panel)
+    /// Tabs shown in the tvOS sidebar
     static func tvOSTabs(userLevel: Int) -> [Tab] {
         var cases: [Tab] = [.guide]
         if userLevel >= 1 { cases.append(.recordings) }
@@ -132,6 +132,15 @@ final class AppState: ObservableObject {
     @Published var selectedChannel: Channel?
     @Published var selectedProgram: Program?
     @Published var selectedRecording: Recording?
+    #if os(tvOS)
+    /// When true, the global tvOS escape handler must not move focus to the sidebar.
+    @Published var tvosBlocksSidebarExitCommand = false
+    /// Settings-specific exit orchestration for tvOS.
+    @Published var tvosSettingsHasPopup = false
+    @Published var tvosSettingsShowingEventLog = false
+    @Published var tvosSettingsDismissPopupRequest = 0
+    @Published var tvosSettingsDismissEventLogRequest = 0
+    #endif
 
     // Alert state
     @Published var alertMessage: String?

@@ -126,10 +126,6 @@ struct ProgramDetailView: View {
                                 .foregroundStyle(Theme.textTertiary)
                         }
                         .frame(width: 120, height: 120)
-
-                        Text(channel.name)
-                            .font(.caption)
-                            .foregroundStyle(Theme.textSecondary)
                     }
 
                     // Row 2: Program name (full width)
@@ -350,7 +346,11 @@ struct ProgramDetailView: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
+                #if os(tvOS)
+                .buttonStyle(TVProgramPopupButtonStyle(variant: .accent))
+                #else
                 .buttonStyle(AccentButtonStyle())
+                #endif
             }
 
             if program.isCurrentlyAiring {
@@ -363,7 +363,11 @@ struct ProgramDetailView: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
+                #if os(tvOS)
+                .buttonStyle(TVProgramPopupButtonStyle(variant: .accent))
+                #else
                 .buttonStyle(AccentButtonStyle())
+                #endif
                 .accessibilityIdentifier("watch-live-button")
             }
 
@@ -392,7 +396,11 @@ struct ProgramDetailView: View {
                         }
                         .frame(maxWidth: .infinity)
                     }
+                    #if os(tvOS)
+                    .buttonStyle(TVProgramPopupButtonStyle(variant: .secondary))
+                    #else
                     .buttonStyle(AccentButtonStyle())
+                    #endif
                     .disabled(isScheduling)
                     .accessibilityIdentifier("cancel-recording-button")
 
@@ -411,7 +419,11 @@ struct ProgramDetailView: View {
                             }
                             .frame(maxWidth: .infinity)
                         }
+                        #if os(tvOS)
+                        .buttonStyle(TVProgramPopupButtonStyle(variant: .secondary))
+                        #else
                         .buttonStyle(AccentButtonStyle())
+                        #endif
                         .disabled(isCancellingSeries)
                     }
                 } else {
@@ -429,7 +441,11 @@ struct ProgramDetailView: View {
                         }
                         .frame(maxWidth: .infinity)
                     }
+                    #if os(tvOS)
+                    .buttonStyle(TVProgramPopupButtonStyle(variant: .accent))
+                    #else
                     .buttonStyle(AccentButtonStyle())
+                    #endif
                     .disabled(isScheduling)
                     .accessibilityIdentifier("record-button")
 
@@ -449,7 +465,11 @@ struct ProgramDetailView: View {
                                 }
                                 .frame(maxWidth: .infinity)
                             }
+                            #if os(tvOS)
+                            .buttonStyle(TVProgramPopupButtonStyle(variant: .secondary))
+                            #else
                             .buttonStyle(AccentButtonStyle())
+                            #endif
                             .disabled(isCancellingSeries)
                         } else {
                             Button {
@@ -466,7 +486,11 @@ struct ProgramDetailView: View {
                                 }
                                 .frame(maxWidth: .infinity)
                             }
+                            #if os(tvOS)
+                            .buttonStyle(TVProgramPopupButtonStyle(variant: .accent))
+                            #else
                             .buttonStyle(AccentButtonStyle())
+                            #endif
                             .disabled(isSchedulingSeries)
                         }
                     }
@@ -634,6 +658,52 @@ struct ProgramDetailView: View {
         }
     }
 }
+
+#if os(tvOS)
+private struct TVProgramPopupButtonStyle: ButtonStyle {
+    enum Variant {
+        case accent
+        case secondary
+    }
+
+    let variant: Variant
+    @Environment(\.isFocused) private var isFocused
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, Theme.spacingLG)
+            .padding(.vertical, Theme.spacingMD)
+            .frame(maxWidth: .infinity)
+            .background(backgroundColor(configuration: configuration))
+            .foregroundStyle(foregroundColor)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusMD))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.cornerRadiusMD)
+                    .stroke(isFocused ? Color.white : Color.clear, lineWidth: 2)
+            )
+            .scaleEffect(configuration.isPressed ? 0.98 : isFocused ? 1.02 : 1.0)
+            .animation(.easeInOut(duration: 0.14), value: configuration.isPressed)
+            .animation(.easeInOut(duration: 0.14), value: isFocused)
+    }
+
+    private var foregroundColor: Color {
+        isEnabled ? .white : Theme.textTertiary
+    }
+
+    private func backgroundColor(configuration: Configuration) -> Color {
+        let base: Color = {
+            switch variant {
+            case .accent: return Theme.accent
+            case .secondary: return Theme.surfaceElevated
+            }
+        }()
+        if !isEnabled { return Theme.textTertiary.opacity(0.5) }
+        if configuration.isPressed { return base.opacity(0.75) }
+        return base
+    }
+}
+#endif
 
 #Preview {
     ProgramDetailView(

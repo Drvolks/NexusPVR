@@ -77,9 +77,12 @@ final class RecordingsViewModel: ObservableObject {
         let grouped = Dictionary(grouping: seriesRecordings) { $0.seriesInfo!.seriesName }
         return grouped.map { name, recordings in
             let sorted = recordings.sorted { r1, r2 in
+                if let d1 = r1.startDate, let d2 = r2.startDate, d1 != d2 {
+                    return d1 > d2
+                }
                 guard let s1 = r1.seriesInfo, let s2 = r2.seriesInfo else { return false }
-                if s1.season != s2.season { return s1.season < s2.season }
-                return s1.episode < s2.episode
+                if s1.season != s2.season { return s1.season > s2.season }
+                return s1.episode > s2.episode
             }
             return SeriesGroup(seriesName: name, recordings: sorted)
         }

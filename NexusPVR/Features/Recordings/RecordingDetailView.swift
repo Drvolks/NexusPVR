@@ -67,29 +67,6 @@ struct RecordingDetailView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.spacingMD) {
-                    // Channel icon + name
-                    HStack(spacing: Theme.spacingMD) {
-                        if let channelId = recording.channelId {
-                            CachedAsyncImage(url: try? client.channelIconURL(channelId: channelId)) { image in
-                                image
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                            } placeholder: {
-                                Image(systemName: "tv")
-                                    .foregroundStyle(Theme.textTertiary)
-                            }
-                            .frame(width: 60, height: 60)
-                            .background(Theme.surfaceElevated)
-                            .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
-                        }
-
-                        if let channel = recording.channel {
-                            Text(channel)
-                                .font(.title3)
-                                .foregroundStyle(Theme.textSecondary)
-                        }
-                    }
-
                     // Recording name
                     HStack(alignment: .top, spacing: 8) {
                         Text(recording.cleanName)
@@ -164,7 +141,7 @@ struct RecordingDetailView: View {
                                 }
                                 .frame(maxWidth: .infinity)
                             }
-                            .buttonStyle(AccentButtonStyle())
+                            .buttonStyle(TVPopupActionButtonStyle(variant: .accent))
                             .disabled(!canPlayInProgress)
 
                             if let position = recording.playbackPosition, position > 10 {
@@ -177,7 +154,7 @@ struct RecordingDetailView: View {
                                     }
                                     .frame(maxWidth: .infinity)
                                 }
-                                .buttonStyle(SecondaryButtonStyle())
+                                .buttonStyle(TVPopupActionButtonStyle(variant: .secondary))
                                 .disabled(!canPlayInProgress)
                             }
 
@@ -191,7 +168,7 @@ struct RecordingDetailView: View {
                                     }
                                     .frame(maxWidth: .infinity)
                                 }
-                                .buttonStyle(SecondaryButtonStyle())
+                                .buttonStyle(TVPopupActionButtonStyle(variant: .secondary))
                             }
                         } else if recording.recordingStatus.isPlayable {
                             Button {
@@ -203,7 +180,7 @@ struct RecordingDetailView: View {
                                 }
                                 .frame(maxWidth: .infinity)
                             }
-                            .buttonStyle(AccentButtonStyle())
+                            .buttonStyle(TVPopupActionButtonStyle(variant: .accent))
 
                             if recording.hasResumePosition {
                                 Button {
@@ -215,7 +192,7 @@ struct RecordingDetailView: View {
                                     }
                                     .frame(maxWidth: .infinity)
                                 }
-                                .buttonStyle(SecondaryButtonStyle())
+                                .buttonStyle(TVPopupActionButtonStyle(variant: .secondary))
                             }
                         }
 
@@ -240,7 +217,7 @@ struct RecordingDetailView: View {
                                 }
                                 .frame(maxWidth: .infinity)
                             }
-                            .buttonStyle(SecondaryButtonStyle())
+                            .buttonStyle(TVPopupActionButtonStyle(variant: .secondary))
                             .disabled(isDeleting)
                         } else {
                             Label("Managing recordings requires admin permissions", systemImage: "lock.fill")
@@ -532,6 +509,52 @@ struct RecordingDetailView: View {
         }
     }
 }
+
+#if os(tvOS)
+private struct TVPopupActionButtonStyle: ButtonStyle {
+    enum Variant {
+        case accent
+        case secondary
+    }
+
+    let variant: Variant
+    @Environment(\.isFocused) private var isFocused
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, Theme.spacingLG)
+            .padding(.vertical, Theme.spacingMD)
+            .frame(maxWidth: .infinity)
+            .background(backgroundColor(configuration: configuration))
+            .foregroundStyle(foregroundColor)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusMD))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.cornerRadiusMD)
+                    .stroke(isFocused ? Color.white : Color.clear, lineWidth: 2)
+            )
+            .scaleEffect(configuration.isPressed ? 0.98 : isFocused ? 1.02 : 1.0)
+            .animation(.easeInOut(duration: 0.14), value: configuration.isPressed)
+            .animation(.easeInOut(duration: 0.14), value: isFocused)
+    }
+
+    private var foregroundColor: Color {
+        isEnabled ? .white : Theme.textTertiary
+    }
+
+    private func backgroundColor(configuration: Configuration) -> Color {
+        let base: Color = {
+            switch variant {
+            case .accent: return Theme.accent
+            case .secondary: return Theme.surfaceElevated
+            }
+        }()
+        if !isEnabled { return Theme.textTertiary.opacity(0.5) }
+        if configuration.isPressed { return base.opacity(0.75) }
+        return base
+    }
+}
+#endif
 
 #Preview {
     RecordingDetailView(recording: .preview)

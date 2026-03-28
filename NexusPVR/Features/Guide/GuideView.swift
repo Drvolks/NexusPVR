@@ -6,7 +6,7 @@
 //
 
 import SwiftUI
-#if os(iOS)
+#if os(iOS) || os(tvOS)
 import UIKit
 #endif
 
@@ -62,7 +62,7 @@ struct GuideView: View {
     var body: some View {
         contentView
             .accessibilityIdentifier("guide-view")
-            .background(Theme.background)
+            .background(.ultraThinMaterial)
             #if os(macOS)
             .toolbar(.hidden)
             #endif
@@ -529,9 +529,13 @@ struct GuideView: View {
 
     #if os(tvOS)
     // tvOS manual focus tracking (like Rivulet approach)
+    @FocusState private var gridHasFocus: Bool
+    @State private var isTVSearchFieldFocused = false
+    @State private var requestTVSearchKeyboard = false
     @State private var focusedRow: Int = 0
     @State private var focusedColumn: Int = 0
     @State private var scrollTopRow: Int = 0
+    @State private var focusedHeaderItem: TVGuideHeaderItem = .search
     @State private var timeOffset: Int = 0  // 30-minute increments from now
     @State private var guideStartTime: Date = {
         // Start from current time, rounded down to nearest 30 minutes
@@ -545,15 +549,6 @@ struct GuideView: View {
                             of: now) ?? now
     }()
 
-    // Filter panel
-    @State private var showTVFilterPanel = false
-    @State private var tvSearchText = ""
-    @State private var tvSearchChannelCount = 0
-    @State private var tvSearchProgramCount = 0
-    @State private var tvSearchGroups: [ChannelGroup] = []
-    @State private var tvSearchTask: Task<Void, Never>?
-    private let tvFilterPanelWidth: CGFloat = 400
-    private let tvFilterHintWidth: CGFloat = 36
 
     // Visible time window: 3 hours
     private let visibleHours: Double = 3.0
@@ -693,112 +688,167 @@ struct GuideView: View {
     }
     #endif
 
+    private let filterRowIndex = -1
+
     #if os(tvOS)
+    private enum TVGuideHeaderItem: Int, CaseIterable {
+        case previousDay
+        case nextDay
+        case search
+        #if DISPATCHERPVR
+        case group
+        case profile
+        #endif
+    }
+
+    private var tvHeaderItems: [TVGuideHeaderItem] {
+        var items: [TVGuideHeaderItem] = [.previousDay, .nextDay, .search]
+        #if DISPATCHERPVR
+        items.append(contentsOf: [.group, .profile])
+        #endif
+        return items
+    }
+
+    #if DISPATCHERPVR
+    private enum TVGuideDrawerKind {
+        case group
+        case profile
+    }
+
+    private struct TVGuideDrawerItem: Identifiable {
+        let id: String
+        let label: String
+        let value: Int?
+    }
+
+    @State private var headerDrawerKind: TVGuideDrawerKind? = nil
+    @State private var drawerSelectionIndex: Int = 0
+
+    private var isHeaderDrawerOpen: Bool { headerDrawerKind != nil }
+
+    private var currentDrawerItems: [TVGuideDrawerItem] {
+        switch headerDrawerKind {
+        case .group:
+            let populatedGroups = epgCache.channelGroups.filter { group in
+                epgCache.visibleChannels.contains { $0.groupId == group.id }
+            }
+            return [TVGuideDrawerItem(id: "group-all", label: "All Groups", value: nil)] +
+                   populatedGroups.map { TVGuideDrawerItem(id: "group-\($0.id)", label: $0.name, value: $0.id) }
+        case .profile:
+            return [TVGuideDrawerItem(id: "profile-all", label: "All Profiles", value: nil)] +
+                   epgCache.channelProfiles.map { TVGuideDrawerItem(id: "profile-\($0.id)", label: $0.name, value: $0.id) }
+        case .none:
+            return []
+        }
+    }
+    #endif
+
     private var tvOSGuideContent: some View {
         GeometryReader { geometry in
             let gridWidth = geometry.size.width - channelWidth
             let pxPerMinute = gridWidth / visibleMinutes
-            let gridOffset = showTVFilterPanel ? tvFilterPanelWidth : 0.0
+            let filterRowHeight: CGFloat = 70
+            #if DISPATCHERPVR
+            let drawerContentHeight = 60 + CGFloat(currentDrawerItems.count) * 52
+            let drawerHeight: CGFloat = isHeaderDrawerOpen ? min(320, max(170, drawerContentHeight)) : 0
+            #else
+            let drawerHeight: CGFloat = 0
+            #endif
 
-            ZStack(alignment: .leading) {
-                // Grid — manual offset driven by scrollTopRow (keep-in-view scrolling)
-                let totalRows = viewModel.channels.count
-                let visibleRows = Int(geometry.size.height / rowHeight)
-                let scrollOffset = CGFloat(scrollTopRow) * rowHeight
+            // Grid — manual offset driven by scrollTopRow (keep-in-view scrolling)
+            let totalRows = viewModel.channels.count
+            let visibleRows = Int((geometry.size.height - filterRowHeight - drawerHeight) / rowHeight)
+            let scrollOffset = CGFloat(scrollTopRow) * rowHeight
 
-                // Virtualization: only render visible rows + buffer
-                let buffer = 3
-                let firstRow = max(0, scrollTopRow - buffer)
-                let lastRow = min(totalRows - 1, scrollTopRow + visibleRows - 1 + buffer)
+            // Virtualization: only render visible rows + buffer
+            let buffer = 3
+            let firstRow = max(0, scrollTopRow - buffer)
+            let lastRow = min(totalRows - 1, scrollTopRow + visibleRows - 1 + buffer)
 
-                Button {
-                    selectFocusedProgram()
-                } label: {
-                    VStack(spacing: 0) {
-                        if totalRows > 0 {
-                            Color.clear.frame(height: CGFloat(firstRow) * rowHeight)
-                            ForEach(firstRow...lastRow, id: \.self) { rowIndex in
-                                tvOSChannelRow(
-                                    channel: viewModel.channels[rowIndex],
-                                    rowIndex: rowIndex,
-                                    gridWidth: gridWidth,
-                                    pxPerMinute: pxPerMinute
-                                )
-                                .id(viewModel.channels[rowIndex].id)
-                            }
-                            Color.clear.frame(height: CGFloat(max(0, totalRows - 1 - lastRow)) * rowHeight)
+            VStack(spacing: 0) {
+                // Filter row (row -1)
+                tvOSFilterRow(
+                    isFocused: gridHasFocus && focusedRow == filterRowIndex,
+                    focusedItem: focusedHeaderItem
+                )
+                .frame(height: filterRowHeight)
+                #if DISPATCHERPVR
+                if isHeaderDrawerOpen {
+                    tvOSHeaderDrawer
+                        .frame(height: drawerHeight)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+                #endif
+
+                // Channel rows
+                VStack(spacing: 0) {
+                    if totalRows > 0 {
+                        Color.clear.frame(height: CGFloat(firstRow) * rowHeight)
+                        ForEach(firstRow...lastRow, id: \.self) { rowIndex in
+                            tvOSChannelRow(
+                                channel: viewModel.channels[rowIndex],
+                                rowIndex: rowIndex,
+                                gridWidth: gridWidth,
+                                pxPerMinute: pxPerMinute
+                            )
+                            .id(viewModel.channels[rowIndex].id)
                         }
-                    }
-                    .offset(y: -scrollOffset)
-                    .animation(.easeInOut(duration: 0.15), value: scrollTopRow)
-                }
-                .onChange(of: focusedRow) { _, newRow in
-                    // Only scroll when focused row would be outside visible area
-                    let maxTopRow = max(0, viewModel.channels.count - visibleRows)
-                    if newRow < scrollTopRow {
-                        // Focus moved above visible area
-                        scrollTopRow = max(0, newRow)
-                    } else if newRow >= scrollTopRow + visibleRows {
-                        // Focus moved below visible area
-                        scrollTopRow = min(maxTopRow, newRow - visibleRows + 1)
+                        Color.clear.frame(height: CGFloat(max(0, totalRows - 1 - lastRow)) * rowHeight)
                     }
                 }
-                .buttonStyle(TVGridContainerButtonStyle())
-                .onMoveCommand { direction in
-                    handleTVNavigation(direction)
-                }
-                .onPlayPauseCommand {
-                    selectFocusedProgram()
-                }
-                .disabled(showTVFilterPanel)
-                .offset(x: gridOffset)
-
-                // Filter panel — real focusable elements (TextField + Buttons)
-                if showTVFilterPanel {
-                    tvOSFilterPanel
-                        .frame(width: tvFilterPanelWidth)
-                        .transition(.move(edge: .leading))
-                }
-
-                // Hint indicator
-                if !showTVFilterPanel {
-                    tvOSFilterHintStrip
+                .offset(y: -scrollOffset)
+                .animation(.easeInOut(duration: 0.15), value: scrollTopRow)
+            }
+            .contentShape(Rectangle())
+            .focusable(true)
+            .onChange(of: focusedRow) { _, newRow in
+                guard newRow >= 0 else { return }
+                // Only scroll when focused row would be outside visible area
+                let maxTopRow = max(0, viewModel.channels.count - visibleRows)
+                if newRow < scrollTopRow {
+                    scrollTopRow = max(0, newRow)
+                } else if newRow >= scrollTopRow + visibleRows {
+                    scrollTopRow = min(maxTopRow, newRow - visibleRows + 1)
                 }
             }
-            .clipped()
+            .focused($gridHasFocus)
+            .onTapGesture {
+                handleTVSelect()
+            }
+            .onMoveCommand { direction in
+                handleTVNavigation(direction)
+            }
+            .onPlayPauseCommand {
+                handleTVSelect()
+            }
         }
-        .ignoresSafeArea(.all, edges: .leading)
-    }
-
-    /// Arrow strip overlaid on the left edge of the channel column, hinting at the filter panel
-    private var tvOSFilterHintStrip: some View {
-        VStack(spacing: 6) {
-            Spacer()
-            Image(systemName: "chevron.left")
-                .font(.system(size: 20, weight: .bold))
-            Image(systemName: "line.3.horizontal.decrease")
-                .font(.system(size: 16, weight: .semibold))
-            Image(systemName: "chevron.left")
-                .font(.system(size: 20, weight: .bold))
-            Spacer()
-        }
-        .foregroundStyle(.white.opacity(0.9))
-        .frame(width: tvFilterHintWidth)
-        .frame(maxHeight: .infinity)
-        .background(Theme.accent.opacity(0.7))
-        .allowsHitTesting(false)
-    }
-
-    /// Button style that makes the grid container fill available space with no visual changes
-    struct TVGridContainerButtonStyle: ButtonStyle {
-        func makeBody(configuration: Configuration) -> some View {
-            configuration.label
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .onChange(of: viewModel.selectedDate) {
+            // Reset grid time window when date changes
+            let calendar = Calendar.current
+            if calendar.isDateInToday(viewModel.selectedDate) {
+                // Today: start from current time rounded to 30 min
+                let now = Date()
+                let minute = calendar.component(.minute, from: now)
+                let roundedMinute = (minute / 30) * 30
+                guideStartTime = calendar.date(bySettingHour: calendar.component(.hour, from: now),
+                                               minute: roundedMinute, second: 0, of: now) ?? now
+            } else {
+                // Other days: start from midnight
+                guideStartTime = calendar.startOfDay(for: viewModel.selectedDate)
+            }
+            timeOffset = 0
+            focusedRow = 0
+            focusedColumn = 0
+            scrollTopRow = 0
+            endTVSearchEditing()
+            #if DISPATCHERPVR
+            closeHeaderDrawer()
+            #endif
         }
     }
 
     private func tvOSChannelRow(channel: Channel, rowIndex: Int, gridWidth: CGFloat, pxPerMinute: CGFloat) -> some View {
-        let isRowFocused = rowIndex == focusedRow
+        let isRowFocused = gridHasFocus && rowIndex == focusedRow
         let programs = tvOSVisiblePrograms(for: channel)
 
         return HStack(spacing: 0) {
@@ -808,7 +858,7 @@ struct GuideView: View {
             // Programs row
             ZStack(alignment: .leading) {
                 Rectangle()
-                    .fill(isRowFocused ? Theme.surfaceElevated : Theme.surface)
+                    .fill(.ultraThinMaterial)
 
                 if programs.isEmpty {
                     // Show channel name as tappable placeholder so user can still play
@@ -854,7 +904,7 @@ struct GuideView: View {
         .padding(.leading, 40)
         .padding(.trailing, 10)
         .frame(width: channelWidth, height: rowHeight)
-        .background(isSelected ? Theme.surfaceHighlight : Theme.surfaceElevated)
+        .background(.ultraThinMaterial)
     }
 
     private func tvOSProgramCell(program: Program, isFocused: Bool, gridWidth: CGFloat, pxPerMinute: CGFloat) -> some View {
@@ -864,9 +914,7 @@ struct GuideView: View {
         let isRecording = isScheduled && isAiring && viewModel.recordingStatus(program) == .recording
 
         let bgColor: Color = {
-            if isFocused {
-                return Theme.accent
-            } else if isRecording {
+            if isRecording {
                 return Theme.recording.opacity(0.3)
             } else if isAiring {
                 return Theme.guideNowPlaying
@@ -887,12 +935,12 @@ struct GuideView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(program.cleanName)
                         .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(isFocused ? .white : Theme.textPrimary)
+                        .foregroundStyle(Theme.textPrimary)
                         .lineLimit(1)
 
                     Text("\(program.startDate, format: .dateTime.hour().minute()) - \(program.endDate, format: .dateTime.hour().minute())")
                         .font(.system(size: 14))
-                        .foregroundStyle(isFocused ? .white.opacity(0.8) : Theme.textSecondary)
+                        .foregroundStyle(Theme.textSecondary)
                 }
 
                 Spacer(minLength: 0)
@@ -939,11 +987,15 @@ struct GuideView: View {
         }
         .frame(width: max(cellWidth - 4, 80), height: rowHeight - 10, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 10).fill(bgColor))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(isFocused ? Theme.accent.opacity(0.95) : Color.clear, lineWidth: 3)
+        )
         .clipShape(RoundedRectangle(cornerRadius: 10))
-        .shadow(color: isFocused ? .black.opacity(0.5) : .clear, radius: 10, x: 0, y: 4)
-        .scaleEffect(isFocused ? 1.02 : 1.0, anchor: .leading)
+        .shadow(color: isFocused ? Theme.accent.opacity(0.22) : .clear, radius: 10, x: 0, y: 1)
+        .scaleEffect(isFocused ? 1.015 : 1.0, anchor: .leading)
         .zIndex(isFocused ? 1 : 0)
-        .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isFocused)
+        .animation(.easeInOut(duration: 0.14), value: isFocused)
         .offset(x: xPos + 2)
     }
 
@@ -967,220 +1019,235 @@ struct GuideView: View {
         }
     }
 
-    // MARK: - tvOS Filter Panel
+    // MARK: - tvOS Filter Bar
 
-    /// Filter panel with real focusable elements — TextField for search, Buttons for filters
-    private var tvOSFilterPanel: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Filters")
-                    .font(.tvHeadline)
-                    .foregroundStyle(.white)
-                    .padding(.bottom, 12)
+    /// Filter row rendered as the first row in the grid (focusedRow == -1)
+    private func tvOSFilterRow(isFocused: Bool, focusedItem: TVGuideHeaderItem) -> some View {
+        HStack(spacing: Theme.spacingLG) {
+            // Date
+            tvOSHeaderField(
+                imageName: "chevron.left",
+                isFocused: isFocused && focusedItem == .previousDay,
+                isEnabled: !viewModel.isOnToday
+            )
 
-                // Search field
-                TextField("Search...", text: $tvSearchText)
-                    .focused($tvSearchFieldFocused)
-                    .onSubmit { performTVSearch() }
-                    .onChange(of: tvSearchText) {
-                        performTVSearch()
-                    }
+            Text(viewModel.selectedDate, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day())
+                .font(.headline)
+                .foregroundStyle(isFocused ? .white : Theme.textPrimary)
 
-                // Search results
-                if tvSearchText.count >= 2 {
-                    tvOSSearchResults
-                }
+            tvOSHeaderField(
+                imageName: "chevron.right",
+                isFocused: isFocused && focusedItem == .nextDay,
+                isEnabled: true
+            )
 
-                // Clear active search filter
-                if !viewModel.channelSearchText.isEmpty {
-                    tvOSFilterButton(label: "Clear Search", icon: "xmark.circle.fill", isActive: false) {
-                        viewModel.channelSearchText = ""
-                        tvSearchText = ""
-                        tvSearchChannelCount = 0
-                        tvSearchProgramCount = 0
-                        tvSearchGroups = []
-                        clampFocusedRowToChannels()
-                    }
-                }
+            Rectangle().fill(Theme.surfaceHighlight).frame(width: 1, height: 30)
 
-                #if DISPATCHERPVR
-                // Group filter buttons
-                let populatedGroups = epgCache.channelGroups.filter { group in
-                    epgCache.visibleChannels.contains { $0.groupId == group.id }
-                }
-                if !populatedGroups.isEmpty {
-                    Text("GROUP")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.5))
-                        .padding(.top, 20)
-                        .padding(.bottom, 4)
-                        .padding(.leading, 8)
+            // Search / active filter
+            tvOSSearchField(isFocused: isFocused && focusedItem == .search)
 
-                    tvOSFilterButton(label: "All", icon: "folder", isActive: viewModel.selectedGroupId == nil) {
-                        viewModel.selectedGroupId = nil
-                        clampFocusedRowToChannels()
-                    }
-                    ForEach(populatedGroups) { group in
-                        tvOSFilterButton(label: group.name, icon: "folder", isActive: viewModel.selectedGroupId == group.id) {
-                            viewModel.selectedGroupId = group.id
-                            clampFocusedRowToChannels()
-                        }
-                    }
-                }
+            #if DISPATCHERPVR
+            tvOSDispatcharrField(
+                icon: "folder.fill",
+                title: "Group",
+                value: selectedGroupLabel,
+                isFocused: isFocused && focusedItem == .group
+            )
+            tvOSDispatcharrField(
+                icon: "person.fill",
+                title: "Profile",
+                value: selectedProfileLabel,
+                isFocused: isFocused && focusedItem == .profile
+            )
+            #endif
 
-                // Profile filter buttons
-                if !epgCache.channelProfiles.isEmpty {
-                    Text("PROFILE")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.5))
-                        .padding(.top, 20)
-                        .padding(.bottom, 4)
-                        .padding(.leading, 8)
-
-                    tvOSFilterButton(label: "All", icon: "person", isActive: viewModel.selectedProfileId == nil) {
-                        viewModel.selectedProfileId = nil
-                        clampFocusedRowToChannels()
-                    }
-                    ForEach(epgCache.channelProfiles) { profile in
-                        tvOSFilterButton(label: profile.name, icon: "person", isActive: viewModel.selectedProfileId == profile.id) {
-                            viewModel.selectedProfileId = profile.id
-                            clampFocusedRowToChannels()
-                        }
-                    }
-                }
-                #endif
-
-                Spacer(minLength: 20)
-            }
-            .padding(28)
+            Spacer()
         }
+        .padding(.horizontal, Theme.spacingLG)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Theme.accent)
-        .focusSection()
-        .onMoveCommand { direction in
-            if direction == .right {
-                dismissTVFilterPanel()
-            }
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Theme.surface.opacity(0.55))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(isFocused ? Theme.surfaceHighlight : Color.clear, lineWidth: 1)
+        )
+        .padding(.horizontal, 4)
+        .padding(.vertical, 4)
+    }
+
+    private var selectedGroupLabel: String {
+        if let groupId = viewModel.selectedGroupId,
+           let group = epgCache.channelGroups.first(where: { $0.id == groupId }) {
+            return group.name
         }
-        .onExitCommand {
-            dismissTVFilterPanel()
+        return "All Groups"
+    }
+
+    private var selectedProfileLabel: String {
+        if let profileId = viewModel.selectedProfileId,
+           let profile = epgCache.channelProfiles.first(where: { $0.id == profileId }) {
+            return profile.name
         }
-        .onAppear {
-            // Auto-focus the search field when panel opens
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                tvSearchFieldFocused = true
-            }
+        return "All Profiles"
+    }
+
+    private func tvOSSearchField(isFocused: Bool) -> some View {
+        let isActive = isFocused || isTVSearchFieldFocused
+        return HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(isActive ? Color(white: 0.1) : Theme.textTertiary)
+            TVImmediateSearchField(
+                text: $viewModel.channelSearchText,
+                placeholder: "Search channels...",
+                requestFocus: $requestTVSearchKeyboard,
+                useFocusedStyle: isActive,
+                onFocusChange: { focused in
+                    isTVSearchFieldFocused = focused
+                    if !focused {
+                        requestTVSearchKeyboard = false
+                        DispatchQueue.main.async {
+                            gridHasFocus = true
+                        }
+                        clampFocusedRowToChannels()
+                    }
+                }
+            )
+            .frame(height: 36)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isActive ? Color.white : Theme.surfaceElevated.opacity(0.75))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(isActive ? Color.clear : Theme.surfaceHighlight, lineWidth: 1)
+        )
+        .scaleEffect(isActive ? 1.06 : 1.0)
+        .animation(.easeInOut(duration: 0.14), value: isActive)
+    }
+
+    private func beginTVSearchEditing() {
+        gridHasFocus = false
+        requestTVSearchKeyboard = true
+    }
+
+    private func endTVSearchEditing() {
+        requestTVSearchKeyboard = false
+        isTVSearchFieldFocused = false
+        DispatchQueue.main.async {
+            gridHasFocus = true
         }
     }
 
-    private func tvOSFilterButton(label: String, icon: String, isActive: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.system(size: 20))
-                    .frame(width: 28)
-                Text(label)
-                    .font(.system(size: 22, weight: isActive ? .semibold : .regular))
-                    .lineLimit(1)
-                Spacer()
-                if isActive {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 18, weight: .bold))
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(isActive ? Color.white.opacity(0.2) : Color.clear)
-            .foregroundStyle(.white)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
+    private func tvOSDispatcharrField(
+        icon: String,
+        title: String,
+        value: String,
+        isFocused: Bool
+    ) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+            Text("\(title): \(value)")
+                .lineLimit(1)
         }
-        .buttonStyle(.card)
+        .font(.subheadline)
+        .foregroundStyle(
+            isFocused
+            ? Color(white: 0.1)
+            : (value.hasPrefix("All ") ? Theme.textTertiary : Theme.accent)
+        )
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isFocused ? Color.white : Theme.surfaceElevated.opacity(0.75))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(isFocused ? Color.clear : Theme.surfaceHighlight, lineWidth: 1)
+        )
+        .scaleEffect(isFocused ? 1.06 : 1.0)
+        .animation(.easeInOut(duration: 0.14), value: isFocused)
     }
 
-    @FocusState private var tvSearchFieldFocused: Bool
+    #if DISPATCHERPVR
+    private var tvOSHeaderDrawer: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(headerDrawerKind == .group ? "Select Group" : "Select Profile")
+                .font(.headline)
+                .foregroundStyle(Theme.textSecondary)
 
-    @ViewBuilder
-    private var tvOSSearchResults: some View {
-        let hasResults = tvSearchChannelCount > 0 || tvSearchProgramCount > 0 || !tvSearchGroups.isEmpty
-
-        if hasResults {
-            VStack(alignment: .leading, spacing: 4) {
-                if tvSearchChannelCount > 0 {
-                    Button {
-                        applyTVSearchChannelFilter()
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "tv")
-                                .frame(width: 28)
-                            Text("Channels")
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(Array(currentDrawerItems.enumerated()), id: \.element.id) { index, item in
+                        let isSelected = index == drawerSelectionIndex
+                        HStack(spacing: 10) {
+                            if isSelected {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(Theme.accent)
+                            } else {
+                                Image(systemName: "circle")
+                                    .foregroundStyle(Theme.textTertiary)
+                            }
+                            Text(item.label)
                                 .lineLimit(1)
                             Spacer()
-                            Text("\(tvSearchChannelCount)")
-                                .foregroundStyle(.white.opacity(0.6))
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 16))
-                                .foregroundStyle(.white.opacity(0.4))
                         }
-                        .font(.system(size: 22))
-                        .padding(.horizontal, 16)
+                        .font(.subheadline)
+                        .foregroundStyle(isSelected ? Theme.textPrimary : Theme.textSecondary)
+                        .padding(.horizontal, 12)
                         .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(isSelected ? Theme.surfaceElevated : Theme.surface.opacity(0.3))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(isSelected ? Theme.accent : Theme.surfaceHighlight.opacity(0.5), lineWidth: isSelected ? 2 : 1)
+                        )
                     }
-                    .buttonStyle(.card)
                 }
-
-                if tvSearchProgramCount > 0 {
-                    Button {
-                        applyTVSearchPrograms()
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "film")
-                                .frame(width: 28)
-                            Text("Programs")
-                                .lineLimit(1)
-                            Spacer()
-                            Text("\(tvSearchProgramCount)")
-                                .foregroundStyle(.white.opacity(0.6))
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 16))
-                                .foregroundStyle(.white.opacity(0.4))
-                        }
-                        .font(.system(size: 22))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                    }
-                    .buttonStyle(.card)
-                }
-
-                #if DISPATCHERPVR
-                ForEach(tvSearchGroups) { group in
-                    Button {
-                        applyTVSearchGroup(group.id)
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "folder")
-                                .frame(width: 28)
-                            Text(group.name)
-                                .lineLimit(1)
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 16))
-                                .foregroundStyle(.white.opacity(0.4))
-                        }
-                        .font(.system(size: 22))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                    }
-                    .buttonStyle(.card)
-                }
-                #endif
             }
-            .padding(.top, 8)
-        } else if tvSearchText.count >= 2 {
-            Text("No results")
-                .font(.system(size: 20))
-                .foregroundStyle(.white.opacity(0.4))
-                .padding(.top, 12)
         }
+        .padding(.horizontal, Theme.spacingLG)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(.ultraThinMaterial)
+        )
+        .padding(.horizontal, 8)
+        .padding(.bottom, 6)
+    }
+    #endif
+
+    private func tvOSHeaderField(
+        imageName: String,
+        isFocused: Bool,
+        isEnabled: Bool
+    ) -> some View {
+        Image(systemName: imageName)
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(
+                isEnabled
+                ? (isFocused ? Color(white: 0.1) : Theme.textSecondary)
+                : Theme.textTertiary.opacity(0.3)
+            )
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isFocused ? Color.white : Theme.surfaceElevated.opacity(0.8))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isFocused ? Color.clear : Theme.surfaceHighlight, lineWidth: 1)
+            )
+            .scaleEffect(isFocused ? 1.06 : 1.0)
+            .animation(.easeInOut(duration: 0.14), value: isFocused)
     }
 
     private func clampFocusedRowToChannels() {
@@ -1189,86 +1256,95 @@ struct GuideView: View {
         focusedColumn = 0
     }
 
-    private func dismissTVFilterPanel() {
-        tvSearchText = ""
-        tvSearchChannelCount = 0
-        tvSearchProgramCount = 0
-        tvSearchGroups = []
-        tvSearchTask?.cancel()
-        withAnimation(Theme.springAnimation) {
-            showTVFilterPanel = false
-        }
-        let channelCount = viewModel.channels.count
-        if channelCount > 0 {
-            focusedRow = min(focusedRow, channelCount - 1)
+    #if DISPATCHERPVR
+    private func openHeaderDrawer(_ kind: TVGuideDrawerKind) {
+        headerDrawerKind = kind
+        let selectedValue: Int? = (kind == .group) ? viewModel.selectedGroupId : viewModel.selectedProfileId
+        if let idx = currentDrawerItems.firstIndex(where: { $0.value == selectedValue }) {
+            drawerSelectionIndex = idx
         } else {
-            focusedRow = 0
+            drawerSelectionIndex = 0
         }
-        scrollTopRow = 0
-        clampColumn()
     }
 
-    private func applyTVSearchChannelFilter() {
-        viewModel.channelSearchText = tvSearchText
+    private func closeHeaderDrawer() {
+        headerDrawerKind = nil
+    }
+
+    private func applyDrawerSelection() {
+        guard let kind = headerDrawerKind, currentDrawerItems.indices.contains(drawerSelectionIndex) else { return }
+        let selected = currentDrawerItems[drawerSelectionIndex]
+        switch kind {
+        case .group:
+            viewModel.selectedGroupId = selected.value
+        case .profile:
+            viewModel.selectedProfileId = selected.value
+        }
         clampFocusedRowToChannels()
+        closeHeaderDrawer()
     }
 
-    private func applyTVSearchGroup(_ groupId: Int) {
-        viewModel.selectedGroupId = groupId
-        clampFocusedRowToChannels()
-    }
-
-    private func applyTVSearchPrograms() {
-        let query = tvSearchText
-        dismissTVFilterPanel()
-        appState.searchQuery = query
-        appState.selectedTab = .search
-    }
-
-    private func performTVSearch() {
-        tvSearchTask?.cancel()
-        let query = tvSearchText
-        guard query.count >= 2 else {
-            tvSearchChannelCount = 0
-            tvSearchProgramCount = 0
-            tvSearchGroups = []
-            return
-        }
-        tvSearchTask = Task {
-            let channels = epgCache.filteredChannels(matching: query).count
-            let programs = await epgCache.searchProgramsCount(query: query)
-            guard !Task.isCancelled else { return }
-            tvSearchChannelCount = channels
-            tvSearchProgramCount = programs
-            #if DISPATCHERPVR
-            let q = query.lowercased()
-            tvSearchGroups = epgCache.channelGroups.filter { group in
-                group.name.lowercased().contains(q) &&
-                epgCache.visibleChannels.contains { $0.groupId == group.id }
-            }
-            #endif
+    private func handleHeaderDrawerNavigation(_ direction: MoveCommandDirection) {
+        guard !currentDrawerItems.isEmpty else { return }
+        switch direction {
+        case .up:
+            drawerSelectionIndex = max(0, drawerSelectionIndex - 1)
+        case .down:
+            drawerSelectionIndex = min(currentDrawerItems.count - 1, drawerSelectionIndex + 1)
+        case .left, .right:
+            closeHeaderDrawer()
+        @unknown default:
+            break
         }
     }
+    #endif
+
+
 
     private func handleTVNavigation(_ direction: MoveCommandDirection) {
+        #if DISPATCHERPVR
+        if isHeaderDrawerOpen {
+            handleHeaderDrawerNavigation(direction)
+            return
+        }
+        #endif
+
+        if isTVSearchFieldFocused {
+            endTVSearchEditing()
+            if direction == .down {
+                clampFocusedRowToChannels()
+                return
+            }
+        }
+
         let channels = viewModel.channels
-        guard !channels.isEmpty else { return }
 
         switch direction {
         case .up:
-            if focusedRow > 0 {
+            if focusedRow == filterRowIndex {
+                onRequestNavBarFocus?()
+            } else if focusedRow == 0 {
+                // Move up to filter row
+                focusedRow = filterRowIndex
+                focusedHeaderItem = focusedColumn == 0 ? .nextDay : .search
+            } else {
                 focusedRow -= 1
                 clampColumn()
-            } else {
-                // At top row - request focus move to nav bar
-                onRequestNavBarFocus?()
             }
         case .down:
-            if focusedRow < channels.count - 1 {
+            if focusedRow == filterRowIndex {
+                // Move from filter row to first channel
+                focusedRow = 0
+            } else if focusedRow < channels.count - 1 {
                 focusedRow += 1
                 clampColumn()
             }
         case .left:
+            if focusedRow == filterRowIndex {
+                moveHeaderFocusLeft()
+                return
+            }
+            guard focusedRow >= 0, !channels.isEmpty else { return }
             if focusedColumn > 0 {
                 focusedColumn -= 1
             } else if timeOffset > 0 {
@@ -1276,13 +1352,13 @@ struct GuideView: View {
                 timeOffset -= 1
                 let newPrograms = tvOSVisiblePrograms(for: channels[focusedRow])
                 focusedColumn = newPrograms.isEmpty ? 0 : newPrograms.count - 1
-            } else {
-                // At leftmost position — open filter panel
-                withAnimation(Theme.springAnimation) {
-                    showTVFilterPanel = true
-                }
             }
         case .right:
+            if focusedRow == filterRowIndex {
+                moveHeaderFocusRight()
+                return
+            }
+            guard focusedRow >= 0, !channels.isEmpty else { return }
             let programs = tvOSVisiblePrograms(for: channels[focusedRow])
             guard !programs.isEmpty else {
                 // No programs visible — just scroll forward in time
@@ -1306,6 +1382,58 @@ struct GuideView: View {
             }
         @unknown default:
             break
+        }
+    }
+
+    private func moveHeaderFocusLeft() {
+        guard let currentIndex = tvHeaderItems.firstIndex(of: focusedHeaderItem) else { return }
+        focusedHeaderItem = tvHeaderItems[max(0, currentIndex - 1)]
+    }
+
+    private func moveHeaderFocusRight() {
+        guard let currentIndex = tvHeaderItems.firstIndex(of: focusedHeaderItem) else { return }
+        focusedHeaderItem = tvHeaderItems[min(tvHeaderItems.count - 1, currentIndex + 1)]
+    }
+
+    private func handleTVSelect() {
+        #if DISPATCHERPVR
+        if isHeaderDrawerOpen {
+            applyDrawerSelection()
+            return
+        }
+        #endif
+        if isTVSearchFieldFocused {
+            endTVSearchEditing()
+            clampFocusedRowToChannels()
+            return
+        }
+        if focusedRow == filterRowIndex {
+            selectFocusedHeaderItem()
+            return
+        }
+        selectFocusedProgram()
+    }
+
+    private func selectFocusedHeaderItem() {
+        switch focusedHeaderItem {
+        case .previousDay:
+            guard !viewModel.isOnToday else { return }
+            viewModel.previousDay()
+            Task { await viewModel.navigateToDate(using: client) }
+        case .nextDay:
+            endTVSearchEditing()
+            viewModel.nextDay()
+            Task { await viewModel.navigateToDate(using: client) }
+        case .search:
+            beginTVSearchEditing()
+        #if DISPATCHERPVR
+        case .group:
+            endTVSearchEditing()
+            openHeaderDrawer(.group)
+        case .profile:
+            endTVSearchEditing()
+            openHeaderDrawer(.profile)
+        #endif
         }
     }
 
@@ -1550,6 +1678,86 @@ struct GuideView: View {
     }
 
 }
+
+#if os(tvOS)
+private struct TVImmediateSearchField: UIViewRepresentable {
+    @Binding var text: String
+    let placeholder: String
+    @Binding var requestFocus: Bool
+    var useFocusedStyle: Bool
+    var onFocusChange: (Bool) -> Void
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var parent: TVImmediateSearchField
+
+        init(parent: TVImmediateSearchField) {
+            self.parent = parent
+        }
+
+        @objc func textDidChange(_ sender: UITextField) {
+            parent.text = sender.text ?? ""
+        }
+
+        func textFieldDidBeginEditing(_ textField: UITextField) {
+            parent.onFocusChange(true)
+        }
+
+        func textFieldDidEndEditing(_ textField: UITextField) {
+            parent.onFocusChange(false)
+        }
+
+        func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+            textField.resignFirstResponder()
+            return true
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeUIView(context: Context) -> UITextField {
+        let field = UITextField(frame: .zero)
+        field.delegate = context.coordinator
+        field.placeholder = placeholder
+        field.text = text
+        field.textColor = UIColor.white
+        field.tintColor = UIColor.white
+        field.borderStyle = .none
+        field.clearButtonMode = .whileEditing
+        field.returnKeyType = .search
+        field.adjustsFontSizeToFitWidth = true
+        field.minimumFontSize = 12
+        field.addTarget(context.coordinator, action: #selector(Coordinator.textDidChange(_:)), for: .editingChanged)
+        return field
+    }
+
+    func updateUIView(_ uiView: UITextField, context: Context) {
+        context.coordinator.parent = self
+        if uiView.text != text {
+            uiView.text = text
+        }
+        uiView.placeholder = placeholder
+        uiView.textColor = useFocusedStyle ? UIColor(white: 0.1, alpha: 1.0) : UIColor.white
+        uiView.attributedPlaceholder = NSAttributedString(
+            string: placeholder,
+            attributes: [
+                .foregroundColor: useFocusedStyle
+                    ? UIColor(white: 0.35, alpha: 1.0)
+                    : UIColor(white: 0.62, alpha: 1.0)
+            ]
+        )
+
+        if requestFocus {
+            if !uiView.isFirstResponder {
+                uiView.becomeFirstResponder()
+            }
+        } else if uiView.isFirstResponder {
+            uiView.resignFirstResponder()
+        }
+    }
+}
+#endif
 
 
 #Preview {

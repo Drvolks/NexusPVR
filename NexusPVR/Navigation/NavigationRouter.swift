@@ -7,17 +7,17 @@
 
 import SwiftUI
 
-// MARK: - Nav Bar Focus Environment Key
+// MARK: - Sidebar Focus Environment Key
 
 #if os(tvOS)
-private struct RequestNavBarFocusKey: EnvironmentKey {
+private struct RequestSidebarFocusKey: EnvironmentKey {
     static let defaultValue: () -> Void = {}
 }
 
 extension EnvironmentValues {
-    var requestNavBarFocus: () -> Void {
-        get { self[RequestNavBarFocusKey.self] }
-        set { self[RequestNavBarFocusKey.self] = newValue }
+    var requestSidebarFocus: () -> Void {
+        get { self[RequestSidebarFocusKey.self] }
+        set { self[RequestSidebarFocusKey.self] = newValue }
     }
 }
 #endif
@@ -843,21 +843,24 @@ struct IOSNavigation: View {
 struct TVOSNavigation: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var client: PVRClient
-    @State private var navBarEnabled = true
-    @FocusState private var focusedTab: Tab?
+    @State private var sidebarEnabled = true
+    @FocusState private var focusedItem: TVSidebarItem?
+
+    private let sidebarWidth: CGFloat = 280
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Top navigation bar (TabView style)
-            tvOSNavBar
-                .disabled(!navBarEnabled)
+        HStack(spacing: 0) {
+            // Persistent left sidebar — collapses to icons when content has focus
+            tvOSSidebar
+                .frame(width: sidebarWidth)
+                .disabled(!sidebarEnabled)
                 .focusSection()
 
             // Main content
             Group {
                 switch appState.selectedTab {
                 case .guide:
-                    GuideView(onRequestNavBarFocus: { enableNavBar() })
+                    GuideView(onRequestNavBarFocus: { focusSidebar() })
                 case .recordings:
                     RecordingsListView()
                 case .topics, .calendar:
@@ -873,23 +876,48 @@ struct TVOSNavigation: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .focusSection()
-            .environment(\.requestNavBarFocus, enableNavBar)
-            .onExitCommand {
-                enableNavBar()
+            .environment(\.requestSidebarFocus, focusSidebar)
+        }
+        .background(.ultraThinMaterial)
+        .onExitCommand {
+            if appState.selectedTab == .settings {
+                if appState.tvosSettingsHasPopup {
+                    appState.tvosSettingsDismissPopupRequest += 1
+                    return
+                }
+                if appState.tvosSettingsShowingEventLog {
+                    appState.tvosSettingsDismissEventLogRequest += 1
+                    return
+                }
+                focusSidebar()
+                return
             }
+            #if DISPATCHERPVR
+            if appState.selectedTab == .stats {
+                focusSidebar()
+                return
+            }
+            #endif
+            if appState.tvosBlocksSidebarExitCommand {
+                return
+            }
+            focusSidebar()
         }
         .onAppear {
-            // Start with focus on nav bar
-            focusedTab = appState.selectedTab
+            focusedItem = preferredSidebarFocusItem()
+            appState.topicKeywords = UserPreferences.load().keywords
         }
-        .onChange(of: focusedTab) { _, newTab in
-            if let tab = newTab {
-                // Change page when navigating in nav bar
-                appState.selectedTab = tab
-            } else {
-                // When nav bar loses focus, disable it
-                navBarEnabled = false
+        .onChange(of: focusedItem) { _, newItem in
+            if newItem == nil {
+                // When sidebar loses focus, disable it so content can receive focus
+                sidebarEnabled = false
+            }
+        }
+        .onChange(of: appState.selectedTab) { _, newTab in
+            if newTab != .settings {
+                appState.tvosBlocksSidebarExitCommand = false
+                appState.tvosSettingsHasPopup = false
+                appState.tvosSettingsShowingEventLog = false
             }
         }
         .fullScreenCover(isPresented: $appState.isShowingPlayer) {
@@ -908,82 +936,275 @@ struct TVOSNavigation: View {
         }
     }
 
-    private func enableNavBar() {
-        navBarEnabled = true
+    private func focusSidebar() {
+        sidebarEnabled = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            focusedTab = appState.selectedTab
+            focusedItem = preferredSidebarFocusItem()
         }
     }
 
-    private var tvOSNavBar: some View {
-        HStack(spacing: 0) {
-            ForEach(Tab.tvOSTabs(userLevel: appState.userLevel)) { tab in
-                Button {
-                    appState.selectedTab = tab
-                    navBarEnabled = false
-                    focusedTab = nil
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: tab.icon)
-                            .font(.title3)
-                        Text(tab.label)
-                            .font(.headline)
-                        if tab == .recordings && appState.recordingsHasActive {
-                            Circle()
-                                .fill(Theme.recording)
-                                .frame(width: 10, height: 10)
+    private func preferredSidebarFocusItem() -> TVSidebarItem {
+        switch appState.selectedTab {
+        case .recordings:
+            // Recordings is rendered as a section (no focusable .tab row), so target a sub-item.
+            if appState.recordingsFilter == .recording && !appState.recordingsHasActive {
+                return .recordingsFilter(.completed)
+            }
+            return .recordingsFilter(appState.recordingsFilter)
+        case .topics, .calendar:
+            if appState.showingKeywordsEditor {
+                return .topicManage
+            }
+            if !appState.selectedTopicKeyword.isEmpty,
+               appState.topicKeywords.contains(appState.selectedTopicKeyword) {
+                return .topicKeyword(appState.selectedTopicKeyword)
+            }
+            if let first = appState.topicKeywords.first {
+                return .topicKeyword(first)
+            }
+            return .topicManage
+        default:
+            return .tab(appState.selectedTab)
+        }
+    }
+
+    // MARK: - Sidebar
+
+    private var tvOSSidebar: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Tab.tvOSTabs(userLevel: appState.userLevel)) { tab in
+                        if tab == .recordings {
+                            tvOSSidebarSection(icon: tab.icon, label: tab.label) {
+                                if appState.recordingsHasActive {
+                                    Circle()
+                                        .fill(Theme.recording)
+                                        .frame(width: 10, height: 10)
+                                }
+                            } content: {
+                                if appState.recordingsHasActive {
+                                    tvOSSidebarSubRow(
+                                        label: "Active",
+                                        item: .recordingsFilter(.recording),
+                                        isSelected: appState.selectedTab == .recordings && appState.recordingsFilter == .recording
+                                    ) {
+                                        if appState.activeRecordingCount > 0 {
+                                            Text("\(appState.activeRecordingCount)")
+                                                .font(.system(size: 20, weight: .medium))
+                                                .foregroundStyle(Theme.textTertiary)
+                                            Circle()
+                                                .fill(Theme.recording)
+                                                .frame(width: 8, height: 8)
+                                        }
+                                    }
+                                }
+                                tvOSSidebarSubRow(
+                                    label: "Completed",
+                                    item: .recordingsFilter(.completed),
+                                    isSelected: appState.selectedTab == .recordings && appState.recordingsFilter == .completed
+                                ) { EmptyView() }
+                                tvOSSidebarSubRow(
+                                    label: "Scheduled",
+                                    item: .recordingsFilter(.scheduled),
+                                    isSelected: appState.selectedTab == .recordings && appState.recordingsFilter == .scheduled
+                                ) { EmptyView() }
+                            }
+                        } else if tab == .topics {
+                            tvOSSidebarSection(icon: tab.icon, label: tab.label) {
+                                EmptyView()
+                            } content: {
+                                ForEach(appState.topicKeywords, id: \.self) { keyword in
+                                    tvOSSidebarSubRow(
+                                        label: keyword,
+                                        item: .topicKeyword(keyword),
+                                        isSelected: appState.selectedTab == .topics && !appState.showingKeywordsEditor && appState.selectedTopicKeyword == keyword
+                                    ) {
+                                        if let count = appState.topicKeywordMatchCounts[keyword] {
+                                            Text("\(count)")
+                                                .font(.system(size: 20, weight: .medium))
+                                                .foregroundStyle(Theme.textTertiary)
+                                        }
+                                    }
+                                }
+                                tvOSSidebarSubRow(
+                                    label: "Manage",
+                                    item: .topicManage,
+                                    isSelected: appState.selectedTab == .topics && appState.showingKeywordsEditor
+                                ) { EmptyView() }
+                            }
+                        } else {
+                            tvOSSidebarRow(
+                                icon: tab.icon,
+                                label: tab.label,
+                                item: .tab(tab),
+                                isSelected: appState.selectedTab == tab
+                            ) {
+                                appState.selectedTab = tab
+                                sidebarEnabled = false
+                                focusedItem = nil
+                            } badge: { tvOSSidebarBadge(for: tab) }
                         }
-                        #if DISPATCHERPVR
-                        if tab == .stats && appState.activeStreamCount > 0 {
-                            Text("\(appState.activeStreamCount)")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 2)
-                                .background(Theme.accent)
-                                .clipShape(Capsule())
-                        }
-                        if tab == .stats && appState.hasM3UErrors {
-                            Circle()
-                                .fill(Theme.error)
-                                .frame(width: 10, height: 10)
-                        }
-                        #endif
                     }
-                    .padding(.horizontal, 28)
-                    .padding(.vertical, 16)
                 }
-                .buttonStyle(TVTabButtonStyle(isSelected: appState.selectedTab == tab))
-                .focused($focusedTab, equals: tab)
+                .padding(.top, 40)
+                .padding(.bottom, Theme.spacingXL)
+                .padding(.horizontal, 20)
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 20)
-        .padding(.horizontal, 40)
-        .background(
-            LinearGradient(
-                colors: [Theme.background.opacity(0.8), Theme.background.opacity(0.4), Color.clear],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
+        .overlay(alignment: .trailing) {
+            Rectangle()
+                .fill(Theme.surfaceHighlight)
+                .frame(width: 1)
+        }
+        .background(.ultraThinMaterial)
+    }
+
+    // MARK: - Sidebar Row Helpers
+
+    private func tvOSSidebarRow<Badge: View>(
+        icon: String,
+        label: String,
+        item: TVSidebarItem,
+        isSelected: Bool,
+        action: @escaping () -> Void,
+        @ViewBuilder badge: () -> Badge
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                // Selected indicator
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(isSelected ? Theme.accent : Color.clear)
+                    .frame(width: 4, height: 24)
+
+                Image(systemName: icon)
+                    .font(.headline)
+                    .frame(width: 30, alignment: .center)
+                    .foregroundStyle(isSelected ? Theme.accent : .secondary)
+
+                Text(label)
+                    .font(.headline)
+                    .lineLimit(1)
+
+                Spacer()
+                badge()
+            }
+            .padding(.trailing, Theme.spacingMD)
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.card)
+        .focused($focusedItem, equals: item)
+    }
+
+    private func tvOSSidebarSection<Badge: View, Content: View>(
+        icon: String,
+        label: String,
+        @ViewBuilder badge: () -> Badge,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Section header — plain HStack, no .card wrapper
+            HStack(spacing: 14) {
+                Image(systemName: icon)
+                    .font(.headline)
+                    .frame(width: 30, alignment: .center)
+
+                Text(label.uppercased())
+                    .font(.system(size: 22, weight: .semibold))
+
+                badge()
+            }
+            .foregroundStyle(.secondary)
+            .padding(.vertical, 10)
+
+            // Sub-items
+            VStack(alignment: .leading, spacing: Theme.spacingSM) {
+                content()
+            }
+        }
+        .padding(.top, Theme.spacingSM)
+        .padding(.bottom, Theme.spacingXS)
+    }
+
+    private func tvOSSidebarSubRow<Badge: View>(
+        label: String,
+        item: TVSidebarItem,
+        isSelected: Bool,
+        @ViewBuilder badge: () -> Badge
+    ) -> some View {
+        Button {
+            switch item {
+            case .recordingsFilter(let filter):
+                appState.setRecordingsFilter(filter, userInitiated: true)
+                appState.selectedTab = .recordings
+            case .topicKeyword(let keyword):
+                appState.showingKeywordsEditor = false
+                appState.selectedTopicKeyword = keyword
+                appState.selectedTab = .topics
+            case .topicManage:
+                appState.showingKeywordsEditor = true
+                appState.selectedTab = .topics
+            default:
+                break
+            }
+            sidebarEnabled = false
+            focusedItem = nil
+        } label: {
+            HStack(spacing: 10) {
+                // Selected indicator
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(isSelected ? Theme.accent : Color.clear)
+                    .frame(width: 3, height: 18)
+
+                Text(label)
+                    .font(.subheadline)
+                    .lineLimit(1)
+
+                Spacer()
+                badge()
+            }
+            .padding(.trailing, Theme.spacingSM)
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.card)
+        .padding(.leading, 48) // inset from parent rows
+        .focused($focusedItem, equals: item)
+    }
+
+    @ViewBuilder
+    private func tvOSSidebarBadge(for tab: Tab) -> some View {
+        #if DISPATCHERPVR
+        if tab == .stats {
+            HStack(spacing: 6) {
+                if appState.hasM3UErrors {
+                    Circle()
+                        .fill(Theme.error)
+                        .frame(width: 10, height: 10)
+                }
+                if appState.activeStreamCount > 0 {
+                    Text("\(appState.activeStreamCount)")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Theme.accent)
+                        .clipShape(Capsule())
+                }
+            }
+        }
+        #endif
     }
 }
 
-struct TVTabButtonStyle: ButtonStyle {
-    let isSelected: Bool
-    @Environment(\.isFocused) var isFocused
+// MARK: - tvOS Sidebar Focus Item
 
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(isFocused ? .white : (isSelected ? Theme.accent : Theme.textSecondary))
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(isFocused ? Theme.accent : Color.clear)
-            )
-            .scaleEffect(isFocused ? 1.1 : 1.0)
-            .animation(.easeInOut(duration: 0.15), value: isFocused)
-    }
+enum TVSidebarItem: Hashable {
+    case tab(Tab)
+    case recordingsFilter(RecordingsFilter)
+    case topicKeyword(String)
+    case topicManage
 }
 #endif
 
