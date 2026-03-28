@@ -171,25 +171,6 @@ private struct RecordingsListContentView: View {
                     Text("Watching in-progress recordings requires the PixelBuffer renderer. You can change this in Settings > Playback.")
                 }
             }
-            .confirmationDialog("Resume Playback", isPresented: .constant(resumeRecording != nil), presenting: resumeRecording) { recording in
-                Button("Resume") {
-                    playRecording(recording)
-                    resumeRecording = nil
-                }
-                Button("Watch from Beginning") {
-                    playRecordingFromBeginning(recording)
-                    resumeRecording = nil
-                }
-                Button("Cancel", role: .cancel) {
-                    resumeRecording = nil
-                }
-            } message: { recording in
-                if let position = recording.playbackPosition {
-                    let minutes = position / 60
-                    let seconds = position % 60
-                    Text("\(recording.name)\nStopped at \(minutes):\(String(format: "%02d", seconds))")
-                }
-            }
             .alert("Error", isPresented: .constant(deleteError != nil)) {
                 Button("OK") { deleteError = nil }
             } message: {
@@ -439,6 +420,7 @@ private struct RecordingsListContentView: View {
                 Label("Delete", systemImage: "trash")
             }
         }
+        .resumeDialog(recording: recording, resumeRecording: $resumeRecording, playRecording: playRecording, playFromBeginning: playRecordingFromBeginning)
     }
 
     private func seriesSectionTV(_ group: SeriesGroup) -> some View {
@@ -495,6 +477,7 @@ private struct RecordingsListContentView: View {
                 Label(recording.recordingStatus.isScheduled ? "Cancel Recording" : "Delete", systemImage: "trash")
             }
         }
+        .resumeDialog(recording: recording, resumeRecording: $resumeRecording, playRecording: playRecording, playFromBeginning: playRecordingFromBeginning)
         .listRowBackground(Theme.surface)
     }
 
@@ -568,6 +551,7 @@ private struct RecordingsListContentView: View {
                 Label(recording.recordingStatus.isScheduled ? "Cancel Recording" : "Delete", systemImage: "trash")
             }
         }
+        .resumeDialog(recording: recording, resumeRecording: $resumeRecording, playRecording: playRecording, playFromBeginning: playRecordingFromBeginning)
         .listRowBackground(Theme.surface)
     }
     #endif
@@ -627,6 +611,49 @@ private struct RecordingsListContentView: View {
                 deleteError = error.localizedDescription
             }
         }
+    }
+}
+
+private struct ResumeDialogModifier: ViewModifier {
+    let recording: Recording
+    @Binding var resumeRecording: Recording?
+    let playRecording: (Recording) -> Void
+    let playFromBeginning: (Recording) -> Void
+
+    private var isPresented: Binding<Bool> {
+        Binding(
+            get: { resumeRecording?.id == recording.id },
+            set: { if !$0 { resumeRecording = nil } }
+        )
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .confirmationDialog("Resume Playback", isPresented: isPresented) {
+                Button("Resume") {
+                    playRecording(recording)
+                    resumeRecording = nil
+                }
+                Button("Watch from Beginning") {
+                    playFromBeginning(recording)
+                    resumeRecording = nil
+                }
+                Button("Cancel", role: .cancel) {
+                    resumeRecording = nil
+                }
+            } message: {
+                if let position = recording.playbackPosition {
+                    let minutes = position / 60
+                    let seconds = position % 60
+                    Text("\(recording.name)\nStopped at \(minutes):\(String(format: "%02d", seconds))")
+                }
+            }
+    }
+}
+
+private extension View {
+    func resumeDialog(recording: Recording, resumeRecording: Binding<Recording?>, playRecording: @escaping (Recording) -> Void, playFromBeginning: @escaping (Recording) -> Void) -> some View {
+        modifier(ResumeDialogModifier(recording: recording, resumeRecording: resumeRecording, playRecording: playRecording, playFromBeginning: playFromBeginning))
     }
 }
 
