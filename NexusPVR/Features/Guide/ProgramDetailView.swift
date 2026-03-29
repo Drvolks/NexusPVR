@@ -17,6 +17,7 @@ struct ProgramDetailView: View {
 
     @State private var isScheduling = false
     @State private var isSchedulingSeries = false
+    @State private var isSchedulingSeriesAll = false
     @State private var isCancellingSeries = false
     @State private var scheduleError: String?
     @State private var isScheduled: Bool
@@ -472,6 +473,49 @@ struct ProgramDetailView: View {
                             #endif
                             .disabled(isCancellingSeries)
                         } else {
+                            #if DISPATCHERPVR
+                            Button {
+                                scheduleSeriesRecording(mode: "new")
+                            } label: {
+                                HStack {
+                                    if isSchedulingSeries {
+                                        ProgressView()
+                                            .tint(.white)
+                                    } else {
+                                        Image(systemName: "arrow.2.squarepath")
+                                        Text("Record Series (New)")
+                                    }
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                            #if os(tvOS)
+                            .buttonStyle(TVProgramPopupButtonStyle(variant: .accent))
+                            #else
+                            .buttonStyle(AccentButtonStyle())
+                            #endif
+                            .disabled(isSchedulingSeries || isSchedulingSeriesAll)
+
+                            Button {
+                                scheduleSeriesRecording(mode: "all")
+                            } label: {
+                                HStack {
+                                    if isSchedulingSeriesAll {
+                                        ProgressView()
+                                            .tint(.white)
+                                    } else {
+                                        Image(systemName: "arrow.2.squarepath")
+                                        Text("Record Series (All)")
+                                    }
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                            #if os(tvOS)
+                            .buttonStyle(TVProgramPopupButtonStyle(variant: .accent))
+                            #else
+                            .buttonStyle(AccentButtonStyle())
+                            #endif
+                            .disabled(isSchedulingSeries || isSchedulingSeriesAll)
+                            #else
                             Button {
                                 scheduleSeriesRecording()
                             } label: {
@@ -492,6 +536,7 @@ struct ProgramDetailView: View {
                             .buttonStyle(AccentButtonStyle())
                             #endif
                             .disabled(isSchedulingSeries)
+                            #endif
                         }
                     }
                 }
@@ -555,11 +600,16 @@ struct ProgramDetailView: View {
             if let recording = matched {
                 isScheduled = true
                 existingRecordingId = recording.id
+                #if DISPATCHERPVR
+                isSeriesScheduled = program.seriesInfo != nil
+                #else
                 isSeriesScheduled = recording.recurringParent != nil || recording.recurring == true
                 recurringParentId = recording.recurringParent
+                #endif
             }
 
             // Check if a recurring recording rule exists for this program's series
+            #if !DISPATCHERPVR
             if !isSeriesScheduled, program.seriesInfo != nil {
                 let programName = program.name.lowercased().trimmingCharacters(in: .whitespaces)
                 if let recurrings = try? await client.getRecurringRecordings() {
@@ -572,6 +622,7 @@ struct ProgramDetailView: View {
                     }
                 }
             }
+            #endif
 
             // Check for a completed recording with the same name
             let programName = program.name.lowercased().trimmingCharacters(in: .whitespaces)
@@ -599,7 +650,7 @@ struct ProgramDetailView: View {
                     existingRecordingId = nil
                 } else {
                     // Schedule new recording
-                    try await client.scheduleRecording(eventId: program.id)
+                    try await client.scheduleRecording(program: program, channel: channel)
                     isScheduled = true
                     // Reload to get the recording ID
                     await checkIfScheduled()
@@ -621,11 +672,19 @@ struct ProgramDetailView: View {
 
         Task {
             do {
+                #if DISPATCHERPVR
+                if let recordingId = existingRecordingId {
+                    try await client.cancelRecording(recordingId: recordingId)
+                } else if let fallbackRecordingId = await findDispatcharrSeriesRecordingId() {
+                    try await client.cancelRecording(recordingId: fallbackRecordingId)
+                }
+                #else
                 if let parentId = recurringParentId {
                     try await client.cancelSeriesRecording(recurringId: parentId)
                 } else if let recordingId = existingRecordingId {
                     try await client.cancelSeriesRecording(recurringId: recordingId)
                 }
+                #endif
                 isSeriesScheduled = false
                 recurringParentId = nil
                 // Re-check to get accurate state from server
@@ -641,7 +700,32 @@ struct ProgramDetailView: View {
         }
     }
 
+    #if DISPATCHERPVR
+    private func findDispatcharrSeriesRecordingId() async -> Int? {
+        do {
+            let (_, _, scheduled) = try await client.getAllRecordings()
+            let targetSeriesName = (program.seriesInfo?.seriesName ?? program.name)
+                .lowercased()
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            return scheduled.first(where: { recording in
+                let recordingSeries = (recording.seriesInfo?.seriesName ?? recording.name)
+                    .lowercased()
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                return recordingSeries == targetSeriesName
+            })?.id
+        } catch {
+            return nil
+        }
+    }
+    #endif
+
     private func scheduleSeriesRecording() {
+        #if DISPATCHERPVR
+        scheduleSeriesRecording(mode: "new")
+        return
+        #endif
+
         isSchedulingSeries = true
         scheduleError = nil
 
@@ -660,6 +744,35 @@ struct ProgramDetailView: View {
             }
         }
     }
+
+    #if DISPATCHERPVR
+    private func scheduleSeriesRecording(mode: String) {
+        let normalizedMode = mode.lowercased()
+        if normalizedMode == "all" {
+            isSchedulingSeriesAll = true
+        } else {
+            isSchedulingSeries = true
+        }
+        scheduleError = nil
+
+        Task {
+            do {
+                try await client.scheduleSeriesRecording(eventId: program.id, mode: normalizedMode)
+                isScheduled = true
+                await checkIfScheduled()
+                didChangeRecording = true
+                NotificationCenter.default.post(name: .recordingsDidChange, object: nil)
+                onRecordingChanged?()
+                isSchedulingSeries = false
+                isSchedulingSeriesAll = false
+            } catch {
+                scheduleError = error.localizedDescription
+                isSchedulingSeries = false
+                isSchedulingSeriesAll = false
+            }
+        }
+    }
+    #endif
 }
 
 #if os(iOS)

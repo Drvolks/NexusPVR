@@ -32,6 +32,8 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
     private var channelLogoURLs: [Int: String] = [:]
     /// Channel groups extracted from M3U group-title or XC categories
     private var outputChannelGroups: [ChannelGroup] = []
+    /// In-memory map of synthetic recurring IDs -> Dispatcharr series rule, used for cancel.
+    private var seriesRuleIndex: [Int: DispatcharrSeriesRuleResponseItem] = [:]
 
     init(config: ServerConfig? = nil) {
         self.config = config ?? ServerConfig.load()
@@ -438,6 +440,15 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
     // MARK: - Authenticated Requests
 
     private func authenticatedRequest<T: Decodable>(_ url: URL, method: String = "GET", body: Data? = nil) async throws -> T {
+        let data = try await authenticatedRequestData(url, method: method, body: body)
+        do {
+            return try await Self.decodeOffMainActor(data)
+        } catch is DecodingError {
+            throw PVRClientError.invalidResponse
+        }
+    }
+
+    private func authenticatedRequestData(_ url: URL, method: String = "GET", body: Data? = nil) async throws -> Data {
         if !isAuthenticated {
             try await authenticate()
         }
@@ -461,34 +472,58 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
 
         do {
             let (data, response) = try await loggedData(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw PVRClientError.invalidResponse
+            }
 
-            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 401 {
+            if httpResponse.statusCode == 401 {
                 if useApiKeyAuth {
                     // API key auth doesn't support refresh — re-authenticate
                     isAuthenticated = false
                     try await authenticate()
-                    return try await authenticatedRequest(url, method: method, body: body)
+                    return try await authenticatedRequestData(url, method: method, body: body)
                 }
                 // Try refreshing the token
                 do {
                     try await refreshAccessToken()
-                    return try await authenticatedRequest(url, method: method, body: body)
+                    return try await authenticatedRequestData(url, method: method, body: body)
                 } catch {
                     // Refresh failed, full re-auth
                     isAuthenticated = false
                     try await authenticate()
-                    return try await authenticatedRequest(url, method: method, body: body)
+                    return try await authenticatedRequestData(url, method: method, body: body)
                 }
             }
 
-            return try await Self.decodeOffMainActor(data)
+            guard (200...299).contains(httpResponse.statusCode) else {
+                let detail = dispatcharrAPIErrorMessage(from: data)
+                let fallbackBody = String(data: Data(data.prefix(512)), encoding: .utf8) ?? ""
+                let message = detail ?? (fallbackBody.isEmpty ? "Request failed with status \(httpResponse.statusCode)" : fallbackBody)
+                NetworkEventLog.shared.log(NetworkEvent(
+                    timestamp: Date(),
+                    method: method,
+                    path: sanitizePath(url),
+                    statusCode: httpResponse.statusCode,
+                    isSuccess: false,
+                    durationMs: 0,
+                    responseSize: data.count,
+                    errorDetail: message
+                ))
+                throw PVRClientError.apiError("HTTP \(httpResponse.statusCode): \(message)")
+            }
+
+            return data
         } catch let error as PVRClientError {
             throw error
-        } catch is DecodingError {
-            throw PVRClientError.invalidResponse
         } catch {
             throw PVRClientError.networkError(error)
         }
+    }
+
+    private func dispatcharrAPIErrorMessage(from data: Data) -> String? {
+        guard !data.isEmpty else { return nil }
+        guard let payload = try? JSONDecoder().decode(DispatcharrAPIErrorResponse.self, from: data) else { return nil }
+        return payload.bestMessage
     }
 
     /// Decode JSON off the main actor to avoid blocking the UI
@@ -791,68 +826,206 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
 
     func scheduleRecording(eventId: Int) async throws {
         guard !config.isDemoMode else { DemoDataProvider.scheduleRecording(eventId: eventId); return }
-        // In Dispatcharr, scheduling requires start_time, end_time, and channel
-        // The eventId here is a program ID — we need to look up the program details
-        guard let programURL = URL(string: "\(baseURL)/api/epg/programs/\(eventId)/") else {
-            throw PVRClientError.invalidResponse
-        }
-
-        let program: DispatcharrProgram = try await authenticatedRequest(programURL)
-
-        // Resolve channel ID: try direct field, then tvg_id → channel mapping
-        let channelId: Int
-        if let directId = program.channel {
-            channelId = directId
-        } else if let tvgId = program.tvgId, let mappedId = tvgIdToChannelId[tvgId] {
-            channelId = mappedId
-        } else {
-            throw PVRClientError.apiError("Cannot determine channel for this program")
-        }
-
-        guard let url = URL(string: "\(baseURL)/api/channels/recordings/") else {
-            throw PVRClientError.invalidResponse
-        }
-
-        let recordingRequest = DispatcharrRecordingRequest(
+        let program = try await fetchProgramDetails(eventId: eventId)
+        let channelId = try resolveChannelId(for: program, fallbackChannelId: nil)
+        try await createRecording(
             startTime: program.startTime,
             endTime: program.endTime,
-            channel: String(channelId),
-            customProperties: DispatcharrCustomProperties(
-                program: DispatcharrProgramRef(
-                    id: program.id,
-                    startTime: program.startTime,
-                    endTime: program.endTime,
-                    title: program.title,
-                    subTitle: program.subTitle,
-                    description: program.description,
-                    tvgId: program.tvgId,
+            channelId: channelId,
+            programRef: DispatcharrProgramRef(
+                id: program.idWasSynthetic ? nil : program.id,
+                startTime: program.startTime,
+                endTime: program.endTime,
+                title: program.title,
+                subTitle: program.subTitle,
+                description: program.description,
+                tvgId: program.tvgId,
+                bannerURL: program.bannerURL
+            )
+        )
+    }
+
+    func scheduleRecording(program: Program, channel: Channel?) async throws {
+        guard !config.isDemoMode else { DemoDataProvider.scheduleRecording(eventId: program.id); return }
+        let fallbackChannelId = channel?.id ?? program.channelId
+
+        do {
+            let fetched = try await fetchProgramDetails(eventId: program.id)
+            let channelId = try resolveChannelId(for: fetched, fallbackChannelId: fallbackChannelId)
+            try await createRecording(
+                startTime: fetched.startTime,
+                endTime: fetched.endTime,
+                channelId: channelId,
+                programRef: DispatcharrProgramRef(
+                    id: fetched.idWasSynthetic ? nil : fetched.id,
+                    startTime: fetched.startTime,
+                    endTime: fetched.endTime,
+                    title: fetched.title,
+                    subTitle: fetched.subTitle,
+                    description: fetched.description,
+                    tvgId: fetched.tvgId,
+                    bannerURL: fetched.bannerURL
+                )
+            )
+        } catch {
+            guard shouldFallbackToProgramContext(error), let fallbackChannelId else {
+                throw error
+            }
+            try await createRecording(
+                startTime: Self.iso8601String(fromUnix: program.start),
+                endTime: Self.iso8601String(fromUnix: program.end),
+                channelId: fallbackChannelId,
+                programRef: DispatcharrProgramRef(
+                    id: nil,
+                    startTime: Self.iso8601String(fromUnix: program.start),
+                    endTime: Self.iso8601String(fromUnix: program.end),
+                    title: program.name,
+                    subTitle: program.subtitle,
+                    description: program.desc,
+                    tvgId: nil,
                     bannerURL: program.bannerURL
                 )
             )
-        )
-
-        let encoder = JSONEncoder()
-        let body = try encoder.encode(recordingRequest)
-
-        let _: DispatcharrRecording = try await authenticatedRequest(url, method: "POST", body: body)
+        }
     }
 
     func scheduleSeriesRecording(eventId: Int) async throws {
         guard !config.isDemoMode else { DemoDataProvider.scheduleSeriesRecording(eventId: eventId); return }
-        // Dispatcharr doesn't have native series recording — schedule as a single recording
-        try await scheduleRecording(eventId: eventId)
+        try await scheduleSeriesRecording(eventId: eventId, mode: "new")
+    }
+
+    func scheduleSeriesRecording(eventId: Int, mode: String) async throws {
+        guard !config.isDemoMode else { DemoDataProvider.scheduleSeriesRecording(eventId: eventId); return }
+
+        let normalizedMode = mode.lowercased()
+        guard normalizedMode == "new" || normalizedMode == "all" else {
+            throw PVRClientError.apiError("Unsupported series mode '\(mode)'. Expected 'new' or 'all'.")
+        }
+
+        let program = try await fetchProgramDetails(eventId: eventId)
+        let rawTitle = program.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = SeriesInfo.parse(
+            name: rawTitle,
+            subtitle: program.subTitle,
+            desc: program.description
+        )?.seriesName ?? rawTitle
+        guard !title.isEmpty else {
+            throw PVRClientError.apiError("Series rule requires a valid title")
+        }
+
+        let resolvedTvgId: String? = {
+            if let tvgId = program.tvgId?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !tvgId.isEmpty {
+                return tvgId
+            }
+            if let channelId = program.channel {
+                return tvgIdToChannelId.first(where: { $0.value == channelId })?.key
+            }
+            return nil
+        }()
+
+        guard let tvgId = resolvedTvgId, !tvgId.isEmpty else {
+            throw PVRClientError.apiError("Series rule requires tvg_id for this channel")
+        }
+
+        guard let url = URL(string: "\(baseURL)/api/channels/series-rules/") else {
+            throw PVRClientError.invalidResponse
+        }
+
+        let request = DispatcharrSeriesRuleRequest(
+            mode: normalizedMode,
+            title: title,
+            tvgId: tvgId
+        )
+        let body = try JSONEncoder().encode(request)
+        if let payload = Self.debugJSONString(from: body) {
+            print("[Dispatcharr][SeriesRule][Request] POST /api/channels/series-rules/ payload=\(payload)")
+        }
+        let data = try await authenticatedRequestData(url, method: "POST", body: body)
+        if let responseBody = Self.debugJSONString(from: data) {
+            print("[Dispatcharr][SeriesRule][Response] POST /api/channels/series-rules/ body=\(responseBody)")
+        }
+        if let response: DispatcharrSeriesRulesResponse = try? await Self.decodeOffMainActor(data),
+           response.success == false {
+            throw PVRClientError.apiError("Series rule was not created")
+        }
+
+        // Dispatcharr requires an evaluate pass to materialize matching scheduled recordings.
+        let evaluateResponse = try await evaluateSeriesRules(tvgId: tvgId, expectedTitle: title)
+
+        // In ALL mode, ensure at least the currently selected program is scheduled immediately.
+        if normalizedMode == "all", !didCreateScheduledRecording(from: evaluateResponse, expectedTitle: title) {
+            try await scheduleRecording(eventId: eventId)
+        }
     }
 
     func cancelSeriesRecording(recurringId: Int) async throws {
         guard !config.isDemoMode else { DemoDataProvider.cancelSeriesRecording(recurringId: recurringId); return }
-        // Dispatcharr doesn't have native series recording — cancel as a single recording
+
+        if let rule = seriesRuleIndex[recurringId],
+           let title = rule.title,
+           let tvgId = rule.tvgId {
+            try await deleteSeriesRule(
+                mode: (rule.mode ?? "new"),
+                title: title,
+                tvgId: tvgId
+            )
+            return
+        }
+
+        // Refresh mapping once and retry cancellation by rule ID.
+        _ = try? await getRecurringRecordings()
+        if let rule = seriesRuleIndex[recurringId],
+           let title = rule.title,
+           let tvgId = rule.tvgId {
+            try await deleteSeriesRule(
+                mode: (rule.mode ?? "new"),
+                title: title,
+                tvgId: tvgId
+            )
+            return
+        }
+
+        // Last-resort fallback for legacy behavior
         try await cancelRecording(recordingId: recurringId)
     }
 
     func getRecurringRecordings() async throws -> [RecurringRecording] {
         guard !config.isDemoMode else { return DemoDataProvider.recurringRecordings() }
-        // Dispatcharr doesn't have native recurring recordings
-        return []
+        guard let url = URL(string: "\(baseURL)/api/channels/series-rules/") else {
+            throw PVRClientError.invalidResponse
+        }
+
+        let data = try await authenticatedRequestData(url)
+        let response: DispatcharrSeriesRulesResponse = try await Self.decodeOffMainActor(data)
+        let rules = response.rules ?? []
+        seriesRuleIndex.removeAll(keepingCapacity: true)
+
+        var recurrings: [RecurringRecording] = []
+        recurrings.reserveCapacity(rules.count)
+
+        for rule in rules {
+            guard let title = rule.title?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !title.isEmpty,
+                  let tvgId = rule.tvgId?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !tvgId.isEmpty else { continue }
+
+            let mode = (rule.mode ?? "new").lowercased()
+            let recurringId = Self.syntheticSeriesRuleID(mode: mode, title: title, tvgId: tvgId)
+            seriesRuleIndex[recurringId] = rule
+
+            recurrings.append(
+                RecurringRecording(
+                    id: recurringId,
+                    name: title,
+                    channelID: tvgIdToChannelId[tvgId],
+                    channel: nil,
+                    enabled: response.success ?? true
+                )
+            )
+        }
+
+        return recurrings
     }
 
     func cancelRecording(recordingId: Int) async throws {
@@ -869,6 +1042,158 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
         // Dispatcharr doesn't natively support playback position tracking
         // Store locally in UserDefaults as a fallback
         UserDefaults.standard.set(positionSeconds, forKey: "recording_position_\(recordingId)")
+    }
+
+    private func fetchProgramDetails(eventId: Int) async throws -> DispatcharrProgram {
+        guard let programURL = URL(string: "\(baseURL)/api/epg/programs/\(eventId)/") else {
+            throw PVRClientError.invalidResponse
+        }
+        return try await authenticatedRequest(programURL)
+    }
+
+    private func resolveChannelId(for program: DispatcharrProgram, fallbackChannelId: Int?) throws -> Int {
+        if let directId = program.channel {
+            return directId
+        }
+        if let tvgId = program.tvgId, let mappedId = tvgIdToChannelId[tvgId] {
+            return mappedId
+        }
+        if let fallbackChannelId {
+            return fallbackChannelId
+        }
+        throw PVRClientError.apiError("Cannot determine channel for this program")
+    }
+
+    private func createRecording(startTime: String, endTime: String, channelId: Int, programRef: DispatcharrProgramRef?) async throws {
+        guard let url = URL(string: "\(baseURL)/api/channels/recordings/") else {
+            throw PVRClientError.invalidResponse
+        }
+
+        let recordingRequest = DispatcharrRecordingRequest(
+            startTime: startTime,
+            endTime: endTime,
+            channel: channelId,
+            customProperties: DispatcharrCustomProperties(program: programRef)
+        )
+        let body = try JSONEncoder().encode(recordingRequest)
+        let data = try await authenticatedRequestData(url, method: "POST", body: body)
+        let _: DispatcharrRecording? = try? await Self.decodeOffMainActor(data)
+    }
+
+    private func shouldFallbackToProgramContext(_ error: Error) -> Bool {
+        if case let PVRClientError.apiError(message) = error {
+            let lowercased = message.lowercased()
+            return lowercased.contains("no programdata matches") ||
+                lowercased.contains("cannot determine channel")
+        }
+        if case PVRClientError.invalidResponse = error {
+            return true
+        }
+        return false
+    }
+
+    private nonisolated static func iso8601String(fromUnix timestamp: Int) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: Date(timeIntervalSince1970: TimeInterval(timestamp)))
+    }
+
+    private func evaluateSeriesRules(tvgId: String, expectedTitle: String) async throws -> DispatcharrSeriesRulesEvaluateResponse? {
+        guard let url = URL(string: "\(baseURL)/api/channels/series-rules/evaluate/") else {
+            throw PVRClientError.invalidResponse
+        }
+
+        let request = DispatcharrSeriesRulesEvaluateRequest(tvgId: tvgId)
+        let body = try JSONEncoder().encode(request)
+        if let payload = Self.debugJSONString(from: body) {
+            print("[Dispatcharr][SeriesRule][Request] POST /api/channels/series-rules/evaluate/ payload=\(payload)")
+        }
+        let data = try await authenticatedRequestData(url, method: "POST", body: body)
+        if let responseBody = Self.debugJSONString(from: data) {
+            print("[Dispatcharr][SeriesRule][Response] POST /api/channels/series-rules/evaluate/ body=\(responseBody)")
+        }
+
+        guard let response: DispatcharrSeriesRulesEvaluateResponse = try? await Self.decodeOffMainActor(data) else {
+            return nil
+        }
+        guard response.success != false else {
+            throw PVRClientError.apiError("Series rule evaluation failed")
+        }
+
+        _ = expectedTitle
+        return response
+    }
+
+    private func didCreateScheduledRecording(from response: DispatcharrSeriesRulesEvaluateResponse?, expectedTitle: String) -> Bool {
+        guard let response else { return false }
+        if (response.scheduled ?? 0) > 0 { return true }
+        guard let details = response.details, !details.isEmpty else { return false }
+
+        let expected = expectedTitle.lowercased()
+        if details.contains(where: { ($0.title?.lowercased() == expected) && (($0.created ?? 0) > 0) }) {
+            return true
+        }
+        return details.contains(where: { ($0.created ?? 0) > 0 })
+    }
+
+    private func deleteSeriesRule(mode: String, title: String, tvgId: String) async throws {
+        let request = DispatcharrSeriesRuleRequest(
+            mode: mode.lowercased(),
+            title: title,
+            tvgId: tvgId
+        )
+        let body = try JSONEncoder().encode(request)
+
+        let attempts: [(path: String, method: String)] = [
+            ("/api/channels/series-rules/", "DELETE"),
+            ("/api/channels/series-rules/delete/", "POST"),
+            ("/api/channels/series-rules/remove/", "POST")
+        ]
+
+        var lastError: Error?
+        for attempt in attempts {
+            do {
+                guard let url = URL(string: "\(baseURL)\(attempt.path)") else {
+                    throw PVRClientError.invalidResponse
+                }
+                if let payload = Self.debugJSONString(from: body) {
+                    print("[Dispatcharr][SeriesRule][Request] \(attempt.method) \(attempt.path) payload=\(payload)")
+                }
+                let data = try await authenticatedRequestData(url, method: attempt.method, body: body)
+                if let responseBody = Self.debugJSONString(from: data) {
+                    print("[Dispatcharr][SeriesRule][Response] \(attempt.method) \(attempt.path) body=\(responseBody)")
+                }
+                return
+            } catch {
+                lastError = error
+                let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                print("[Dispatcharr][SeriesRule][Error] \(attempt.method) \(attempt.path) error=\(message)")
+            }
+        }
+
+        throw lastError ?? PVRClientError.apiError("Failed to delete series rule")
+    }
+
+    private nonisolated static func debugJSONString(from data: Data) -> String? {
+        guard !data.isEmpty else { return "{}" }
+        if let object = try? JSONSerialization.jsonObject(with: data),
+           JSONSerialization.isValidJSONObject(object),
+           let pretty = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted]),
+           let text = String(data: pretty, encoding: .utf8) {
+            return text.replacingOccurrences(of: "\n", with: " ")
+        }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private nonisolated static func syntheticSeriesRuleID(mode: String, title: String, tvgId: String) -> Int {
+        // Stable FNV-1a 32-bit hash for deterministic IDs across launches.
+        let key = "\(mode.lowercased())|\(title.lowercased())|\(tvgId.lowercased())"
+        var hash: UInt32 = 0x811C9DC5
+        for byte in key.utf8 {
+            hash ^= UInt32(byte)
+            hash = hash &* 0x01000193
+        }
+        return Int(hash & 0x7FFF_FFFF)
     }
 
     // MARK: - Streaming URLs
@@ -1334,6 +1659,28 @@ private nonisolated struct TokenRefreshResponse: Decodable {
     let access: String
 }
 
+private nonisolated struct DispatcharrAPIErrorResponse: Decodable {
+    let detail: String?
+    let message: String?
+    let error: String?
+    let nonFieldErrors: [String]?
+    let errors: [String: [String]]?
+
+    enum CodingKeys: String, CodingKey {
+        case detail, message, error, errors
+        case nonFieldErrors = "non_field_errors"
+    }
+
+    var bestMessage: String? {
+        if let detail, !detail.isEmpty { return detail }
+        if let message, !message.isEmpty { return message }
+        if let error, !error.isEmpty { return error }
+        if let first = nonFieldErrors?.first, !first.isEmpty { return first }
+        if let firstError = errors?.values.first?.first, !firstError.isEmpty { return firstError }
+        return nil
+    }
+}
+
 /// Flexible list response that handles array, { results: [] }, or { data: [] }
 nonisolated struct DispatcharrListResponse<T: Decodable>: Decodable {
     let results: [T]?
@@ -1489,6 +1836,7 @@ private func decodeFirstDispatcharrImageField(
 
 nonisolated struct DispatcharrProgram: Decodable, Sendable {
     let id: Int
+    let idWasSynthetic: Bool
     let startTime: String
     let endTime: String
     let title: String
@@ -1519,13 +1867,16 @@ nonisolated struct DispatcharrProgram: Decodable, Sendable {
         // id can be Int or String from Dispatcharr
         if let intId = try? container.decode(Int.self, forKey: .id) {
             id = intId
+            idWasSynthetic = false
         } else if let stringId = try? container.decode(String.self, forKey: .id),
                   let parsed = Int(stringId) {
             id = parsed
+            idWasSynthetic = false
         } else {
             // Use hash of the string value as fallback
             let raw = try container.decode(String.self, forKey: .id)
             id = abs(raw.hashValue)
+            idWasSynthetic = true
         }
 
         startTime = try container.decode(String.self, forKey: .startTime)
@@ -1932,7 +2283,7 @@ nonisolated struct ProxyClientInfo: Decodable, Identifiable {
 private nonisolated struct DispatcharrRecordingRequest: Encodable {
     let startTime: String
     let endTime: String
-    let channel: String
+    let channel: Int
     let customProperties: DispatcharrCustomProperties
 
     enum CodingKeys: String, CodingKey {
@@ -1940,5 +2291,62 @@ private nonisolated struct DispatcharrRecordingRequest: Encodable {
         case endTime = "end_time"
         case channel
         case customProperties = "custom_properties"
+    }
+}
+
+private nonisolated struct DispatcharrSeriesRuleRequest: Encodable {
+    let mode: String
+    let title: String
+    let tvgId: String
+
+    enum CodingKeys: String, CodingKey {
+        case mode
+        case title
+        case tvgId = "tvg_id"
+    }
+}
+
+private nonisolated struct DispatcharrSeriesRulesResponse: Decodable {
+    let success: Bool?
+    let rules: [DispatcharrSeriesRuleResponseItem]?
+}
+
+private nonisolated struct DispatcharrSeriesRuleResponseItem: Decodable {
+    let mode: String?
+    let title: String?
+    let tvgId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case mode
+        case title
+        case tvgId = "tvg_id"
+    }
+}
+
+private nonisolated struct DispatcharrSeriesRulesEvaluateRequest: Encodable {
+    let tvgId: String
+
+    enum CodingKeys: String, CodingKey {
+        case tvgId = "tvg_id"
+    }
+}
+
+private nonisolated struct DispatcharrSeriesRulesEvaluateResponse: Decodable {
+    let success: Bool?
+    let scheduled: Int?
+    let details: [DispatcharrSeriesRulesEvaluateDetail]?
+}
+
+private nonisolated struct DispatcharrSeriesRulesEvaluateDetail: Decodable {
+    let tvgId: String?
+    let title: String?
+    let status: String?
+    let created: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case tvgId = "tvg_id"
+        case title
+        case status
+        case created
     }
 }

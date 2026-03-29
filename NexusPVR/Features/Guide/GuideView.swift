@@ -1607,7 +1607,7 @@ struct GuideView: View {
                         } else {
                             Button {
                                 Task {
-                                    try? await client.scheduleRecording(eventId: program.id)
+                                    try? await client.scheduleRecording(program: program, channel: channel)
                                     await viewModel.reloadRecordings(client: client)
                                 }
                             } label: {

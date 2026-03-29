@@ -32,6 +32,7 @@ private struct RecordingsListContentView: View {
     @Binding var deleteError: String?
     @State private var inProgressRecording: Recording?
     @State private var resumeRecording: Recording?
+    @State private var isCancellingSeries = false
     @State private var filterSelection: RecordingsFilter = .completed
     @State private var suppressNextFilterSelectionChange = false
     private static let seriesDateFormatter: DateFormatter = {
@@ -70,6 +71,20 @@ private struct RecordingsListContentView: View {
             return appState.selectedRecordingsSeriesName
         }
         return appState.recordingsFilter.rawValue
+    }
+
+    private var selectedSeriesRecurringId: Int? {
+        guard appState.hasSelectedRecordingsSeries,
+              let summary = viewModel.seriesSummary(named: appState.selectedRecordingsSeriesName) else { return nil }
+        return seriesRecurringId(for: summary)
+    }
+
+    private var canManageRecordings: Bool {
+        #if DISPATCHERPVR
+        appState.canManageRecordings
+        #else
+        true
+        #endif
     }
 
     var body: some View {
@@ -133,6 +148,24 @@ private struct RecordingsListContentView: View {
             .sidebarMenuToolbar()
             .navigationTitle(recordingsNavigationTitle)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if canManageRecordings,
+                   let recurringId = selectedSeriesRecurringId,
+                   appState.hasSelectedRecordingsSeries {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button(role: .destructive) {
+                            cancelSeries(recurringId: recurringId)
+                        } label: {
+                            if isCancellingSeries {
+                                ProgressView()
+                            } else {
+                                Text("Cancel Series")
+                            }
+                        }
+                        .disabled(isCancellingSeries)
+                    }
+                }
+            }
             #endif
             .sheet(item: $selectedRecording) { recording in
                 RecordingDetailView(recording: recording)
@@ -738,6 +771,30 @@ private struct RecordingsListContentView: View {
         }
         .buttonStyle(TVRecordingSubtleButtonStyle())
     }
+
+    @ViewBuilder
+    private func cancelSeriesButtonTV(recurringId: Int) -> some View {
+        Button(role: .destructive) {
+            cancelSeries(recurringId: recurringId)
+        } label: {
+            HStack(spacing: Theme.spacingSM) {
+                if isCancellingSeries {
+                    ProgressView()
+                        .tint(.white)
+                } else {
+                    Image(systemName: "xmark.circle")
+                }
+                Text("Cancel Series")
+                Spacer()
+            }
+            .padding(.horizontal, Theme.spacingMD)
+            .padding(.vertical, Theme.spacingSM)
+            .background(Theme.surfaceElevated)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
+        }
+        .buttonStyle(TVRecordingSubtleButtonStyle())
+        .disabled(isCancellingSeries)
+    }
     #endif
 
     #if !os(tvOS)
@@ -1174,6 +1231,34 @@ private struct RecordingsListContentView: View {
         .listRowSeparator(.hidden)
     }
     #endif
+
+    private func seriesRecurringId(for summary: RecordingsSeriesSummary) -> Int? {
+        if let parentId = summary.scheduled.compactMap(\.recurringParent).first {
+            return parentId
+        }
+        return summary.scheduled.first?.id
+    }
+
+    private func cancelSeries(recurringId: Int) {
+        guard !isCancellingSeries else { return }
+        isCancellingSeries = true
+
+        Task {
+            do {
+                #if DISPATCHERPVR
+                try await client.cancelRecording(recordingId: recurringId)
+                #else
+                try await client.cancelSeriesRecording(recurringId: recurringId)
+                #endif
+                NotificationCenter.default.post(name: .recordingsDidChange, object: nil)
+                await reloadRecordings()
+                isCancellingSeries = false
+            } catch {
+                deleteError = error.localizedDescription
+                isCancellingSeries = false
+            }
+        }
+    }
 
     private func playRecording(_ recording: Recording) {
         if recording.isWatched {

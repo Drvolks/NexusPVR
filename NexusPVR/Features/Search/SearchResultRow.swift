@@ -205,7 +205,7 @@ struct SearchResultRow: View {
                     isScheduled = false
                     existingRecordingId = nil
                 } else {
-                    try await client.scheduleRecording(eventId: program.id)
+                    try await client.scheduleRecording(program: program, channel: channel)
                     isScheduled = true
                     await checkIfScheduled()
                 }
@@ -431,7 +431,7 @@ struct SearchResultRowTV: View {
                     isScheduled = false
                     existingRecordingId = nil
                 } else {
-                    try await client.scheduleRecording(eventId: program.id)
+                    try await client.scheduleRecording(program: program, channel: channel)
                     isScheduled = true
                     await checkIfScheduled()
                 }
