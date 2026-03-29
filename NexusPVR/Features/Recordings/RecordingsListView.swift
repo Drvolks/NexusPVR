@@ -27,6 +27,7 @@ private struct RecordingsListContentView: View {
     @ObservedObject var client: PVRClient
     @ObservedObject var appState: AppState
     @StateObject private var viewModel: RecordingsViewModel
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Binding var selectedRecording: Recording?
     @Binding var deleteError: String?
     @State private var inProgressRecording: Recording?
@@ -439,11 +440,11 @@ private struct RecordingsListContentView: View {
         let summary = vm.seriesSummary(named: seriesName)
         let representativeRecordingId = summary?.completed.first?.id ?? summary?.scheduled.first?.id
         let resolvedBannerURLString =
-            summary?.bannerURL ??
-            representativeRecordingId.flatMap { client.recordingArtworkURL(recordingId: $0, fanart: true)?.absoluteString }
+            representativeRecordingId.flatMap { client.recordingArtworkURL(recordingId: $0, fanart: true)?.absoluteString } ??
+            summary?.bannerURL
         let resolvedLeftArtworkURLString =
             representativeRecordingId.flatMap { client.recordingArtworkURL(recordingId: $0, fanart: false)?.absoluteString } ??
-            resolvedBannerURLString
+            summary?.bannerURL
         #if os(tvOS)
         let recordings = (summary?.completed ?? []) + (summary?.scheduled ?? [])
         let channelIdByName = buildChannelIdByNameMap(from: recordings)
@@ -487,13 +488,15 @@ private struct RecordingsListContentView: View {
             }
             .padding()
         }
+        .id("\(seriesName)-\(resolvedLeftArtworkURLString ?? "no-left-art")-\(resolvedBannerURLString ?? "no-fanart")")
         .background(seriesFanartBackgroundTV(resolvedBannerURLString))
         #else
         return List {
             if let summary {
                 if resolvedLeftArtworkURLString != nil {
-                    let inlineCompletedCount = min(3, summary.completed.count)
-                    let inlineScheduledCount = min(3 - inlineCompletedCount, summary.scheduled.count)
+                    let maxInlineRows = horizontalSizeClass == .compact ? 1 : 3
+                    let inlineCompletedCount = min(maxInlineRows, summary.completed.count)
+                    let inlineScheduledCount = min(maxInlineRows - inlineCompletedCount, summary.scheduled.count)
                     let inlineCompleted = Array(summary.completed.prefix(inlineCompletedCount))
                     let inlineScheduled = Array(summary.scheduled.prefix(inlineScheduledCount))
 
@@ -550,6 +553,7 @@ private struct RecordingsListContentView: View {
                 .listRowBackground(Color.clear)
             #endif
         }
+        .id("\(seriesName)-\(resolvedLeftArtworkURLString ?? "no-left-art")-\(resolvedBannerURLString ?? "no-fanart")")
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(seriesFanartBackground(resolvedBannerURLString))
@@ -626,6 +630,7 @@ private struct RecordingsListContentView: View {
                     }
                 }
                 .frame(width: 300)
+                .id(artworkURLString)
                 .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusMD))
                 .overlay(
                     RoundedRectangle(cornerRadius: Theme.cornerRadiusMD)
@@ -772,23 +777,24 @@ private struct RecordingsListContentView: View {
         HStack(alignment: .top, spacing: Theme.spacingMD) {
             if let bannerURLString,
                let bannerURL = URL(string: bannerURLString) {
-                CachedAsyncImage(url: bannerURL) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                } placeholder: {
+            CachedAsyncImage(url: bannerURL) { image in
+                image
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            } placeholder: {
                     ZStack {
                         Theme.surfaceHighlight
                         ProgressView()
                             .tint(Theme.accent)
                     }
                 }
-                .frame(width: 180)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusMD))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.cornerRadiusMD)
-                        .stroke(Theme.surfaceHighlight, lineWidth: 1)
-                )
+            .frame(width: 180)
+            .id(bannerURLString)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusMD))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.cornerRadiusMD)
+                    .stroke(Theme.surfaceHighlight, lineWidth: 1)
+            )
             }
 
             VStack(alignment: .leading, spacing: Theme.spacingSM) {
@@ -821,26 +827,33 @@ private struct RecordingsListContentView: View {
             RecordingStatusIcon(recording: recording, size: 34)
 
             VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .top, spacing: Theme.spacingXS) {
-                    if let series = recording.seriesInfo {
-                        Text(series.shortDisplayString)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(Theme.accent)
-                    }
-                    if let subtitle = recording.subtitle, !subtitle.isEmpty {
-                        let cleaned = SeriesInfo.stripPattern(from: subtitle)
-                        if !cleaned.isEmpty {
-                            Text(cleaned)
-                                .font(.subheadline.weight(.medium))
-                                .foregroundStyle(Theme.textPrimary)
-                                .lineLimit(2)
-                        }
+                if let series = recording.seriesInfo {
+                    Text(series.shortDisplayString)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Theme.accent)
+                }
+
+                if let subtitle = recording.subtitle, !subtitle.isEmpty {
+                    let cleaned = SeriesInfo.stripPattern(from: subtitle)
+                    if !cleaned.isEmpty {
+                        Text(cleaned)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(Theme.textPrimary)
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
                     } else {
                         Text(recording.cleanName)
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(Theme.textPrimary)
-                            .lineLimit(2)
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
+                } else {
+                    Text(recording.cleanName)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Theme.textPrimary)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 if let desc = episodeDescription(for: recording) {
@@ -1052,30 +1065,37 @@ private struct RecordingsListContentView: View {
             RecordingStatusIcon(recording: recording, size: 44)
 
             VStack(alignment: .leading, spacing: Theme.spacingXS) {
-                HStack {
-                    if let series = recording.seriesInfo {
-                        Text(series.shortDisplayString)
-                            .font(.headline)
-                            .foregroundStyle(Theme.accent)
-                    }
+                if let series = recording.seriesInfo {
+                    Text(series.shortDisplayString)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Theme.accent)
+                }
 
+                HStack(alignment: .top, spacing: Theme.spacingSM) {
                     if let subtitle = recording.subtitle, !subtitle.isEmpty {
                         let cleaned = SeriesInfo.stripPattern(from: subtitle)
                         if !cleaned.isEmpty {
                             Text(cleaned)
                                 .font(.headline)
                                 .foregroundStyle(Theme.textPrimary)
-                                .lineLimit(1)
+                                .lineLimit(nil)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } else {
+                            Text(recording.cleanName)
+                                .font(.headline)
+                                .foregroundStyle(Theme.textPrimary)
+                                .lineLimit(nil)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
+                    } else {
+                        Text(recording.cleanName)
+                            .font(.headline)
+                            .foregroundStyle(Theme.textPrimary)
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    Spacer()
-
-                    if let date = recording.startDate {
-                        Text(date, style: .date)
-                            .font(.caption)
-                            .foregroundStyle(Theme.textTertiary)
-                    }
+                    Spacer(minLength: 0)
                 }
 
                 if let desc = episodeDescription(for: recording) {
@@ -1083,8 +1103,15 @@ private struct RecordingsListContentView: View {
                         .font(.subheadline)
                         .foregroundStyle(Theme.textSecondary)
                 }
+
+                if let date = recording.startDate {
+                    Text(date, style: .date)
+                        .font(.caption)
+                        .foregroundStyle(Theme.textTertiary)
+                }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, Theme.spacingXS)
         .padding(.horizontal, Theme.spacingSM)
         .background(Theme.surface.opacity(0.78))
@@ -1120,7 +1147,7 @@ private struct RecordingsListContentView: View {
             }
         }
         .resumeDialog(recording: recording, resumeRecording: $resumeRecording, playRecording: playRecording, playFromBeginning: playRecordingFromBeginning)
-        .listRowBackground(Theme.surface)
+        .listRowBackground(Color.clear)
     }
 
     private func sectionHeaderIOS(_ title: String) -> some View {

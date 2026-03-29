@@ -153,9 +153,10 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
 
     private func loadImage() {
         guard let url = url, !isLoading else { return }
+        let requestedURL = url
 
         // Check cache first
-        if let cached = ImageCache.shared.image(for: url) {
+        if let cached = ImageCache.shared.image(for: requestedURL) {
             loadedImage = cached
             return
         }
@@ -164,21 +165,24 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
 
         Task {
             do {
-                let (data, _) = try await URLSession.shared.data(from: url)
+                let (data, _) = try await URLSession.shared.data(from: requestedURL)
                 if let image = PlatformImage(data: data) {
-                    ImageCache.shared.setImage(image, for: url)
+                    ImageCache.shared.setImage(image, for: requestedURL)
                     await MainActor.run {
+                        guard self.url == requestedURL else { return }
                         loadedImage = image
                         isLoading = false
                     }
                 } else {
                     await MainActor.run {
+                        guard self.url == requestedURL else { return }
                         isLoading = false
                         loadFailed = true
                     }
                 }
             } catch {
                 await MainActor.run {
+                    guard self.url == requestedURL else { return }
                     isLoading = false
                     loadFailed = true
                 }
