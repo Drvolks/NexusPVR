@@ -7,6 +7,13 @@
 
 import Foundation
 
+private struct DynamicRecordingCodingKey: CodingKey {
+    var stringValue: String
+    var intValue: Int? { nil }
+    init?(intValue: Int) { return nil }
+    init?(stringValue: String) { self.stringValue = stringValue }
+}
+
 nonisolated enum RecordingStatus: String, Codable {
     case pending = "pending"
     case recording = "recording"
@@ -61,6 +68,7 @@ nonisolated struct Recording: Identifiable, Codable, Hashable {
     let postPadding: Int?  // Minutes after program end
     let season: Int?
     let episode: Int?
+    let seriesBannerURL: String?
 
     var isNew: Bool {
         name.contains("\u{1D3A}\u{1D49}\u{02B7}")
@@ -145,7 +153,7 @@ nonisolated struct Recording: Identifiable, Codable, Hashable {
          recurring: Bool? = nil, recurringParent: Int? = nil, epgEventId: Int? = nil,
          size: Int64? = nil, quality: String? = nil, genres: [String]? = nil,
          playbackPosition: Int? = nil, prePadding: Int? = nil, postPadding: Int? = nil,
-         season: Int? = nil, episode: Int? = nil) {
+         season: Int? = nil, episode: Int? = nil, seriesBannerURL: String? = nil) {
         self.id = id
         self.name = name
         self.subtitle = subtitle
@@ -167,6 +175,7 @@ nonisolated struct Recording: Identifiable, Codable, Hashable {
         self.postPadding = postPadding
         self.season = season
         self.episode = episode
+        self.seriesBannerURL = seriesBannerURL
     }
 
     enum CodingKeys: String, CodingKey {
@@ -191,6 +200,58 @@ nonisolated struct Recording: Identifiable, Codable, Hashable {
         case postPadding
         case season
         case episode
+        case seriesBannerURL = "series_banner_url"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(Int.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        subtitle = try container.decodeIfPresent(String.self, forKey: .subtitle)
+        desc = try container.decodeIfPresent(String.self, forKey: .desc)
+        startTime = try container.decodeIfPresent(Int.self, forKey: .startTime)
+        duration = try container.decodeIfPresent(Int.self, forKey: .duration)
+        channel = try container.decodeIfPresent(String.self, forKey: .channel)
+        channelId = try container.decodeIfPresent(Int.self, forKey: .channelId)
+        status = try container.decodeIfPresent(String.self, forKey: .status)
+        file = try container.decodeIfPresent(String.self, forKey: .file)
+        recurring = try container.decodeIfPresent(Bool.self, forKey: .recurring)
+        recurringParent = try container.decodeIfPresent(Int.self, forKey: .recurringParent)
+        epgEventId = try container.decodeIfPresent(Int.self, forKey: .epgEventId)
+        size = try container.decodeIfPresent(Int64.self, forKey: .size)
+        quality = try container.decodeIfPresent(String.self, forKey: .quality)
+        genres = try container.decodeIfPresent([String].self, forKey: .genres)
+        playbackPosition = try container.decodeIfPresent(Int.self, forKey: .playbackPosition)
+        prePadding = try container.decodeIfPresent(Int.self, forKey: .prePadding)
+        postPadding = try container.decodeIfPresent(Int.self, forKey: .postPadding)
+        season = try container.decodeIfPresent(Int.self, forKey: .season)
+        episode = try container.decodeIfPresent(Int.self, forKey: .episode)
+
+        if let decoded = try container.decodeIfPresent(String.self, forKey: .seriesBannerURL),
+           !decoded.isEmpty {
+            seriesBannerURL = decoded
+        } else {
+            let dynamic = try decoder.container(keyedBy: DynamicRecordingCodingKey.self)
+            seriesBannerURL = Recording.decodeFirstString(
+                from: dynamic,
+                keys: [
+                    "banner", "banner_url", "series_banner", "series_image",
+                    "poster", "poster_url", "artwork", "artwork_url",
+                    "image", "image_url", "thumbnail", "thumbnail_url"
+                ]
+            )
+        }
+    }
+
+    private static func decodeFirstString(from container: KeyedDecodingContainer<DynamicRecordingCodingKey>, keys: [String]) -> String? {
+        for key in keys {
+            guard let codingKey = DynamicRecordingCodingKey(stringValue: key) else { continue }
+            if let value = try? container.decodeIfPresent(String.self, forKey: codingKey),
+               !value.isEmpty {
+                return value
+            }
+        }
+        return nil
     }
 }
 

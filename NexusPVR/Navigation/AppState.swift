@@ -8,6 +8,13 @@
 import SwiftUI
 import Combine
 
+struct RecordingsSeriesItem: Identifiable, Hashable {
+    let name: String
+    let count: Int
+
+    var id: String { name }
+}
+
 enum Tab: String, Identifiable {
     case guide = "Guide"
     case recordings = "Recordings"
@@ -119,7 +126,12 @@ final class AppState: ObservableObject {
     @Published var recordingsFilter: RecordingsFilter = .completed
     @Published var recordingsFilterUserOverride = false
     @Published var activeRecordingCount = 0
+    @Published var recordingsSeriesItems: [RecordingsSeriesItem] = []
+    @Published var recordingsSeriesIsLoading = false
+    @Published var selectedRecordingsSeriesName: String = ""
+    @Published var showingRecordingsSeriesList = false
     var recordingsHasActive: Bool { activeRecordingCount > 0 }
+    var hasSelectedRecordingsSeries: Bool { !selectedRecordingsSeriesName.isEmpty }
     @Published var currentlyPlayingURL: URL?
     @Published var currentlyPlayingTitle: String?
     @Published var currentlyPlayingRecordingId: Int?
@@ -233,6 +245,37 @@ final class AppState: ObservableObject {
             // Silently ignore transient errors; keep last known badge state.
         }
     }
+
+    func refreshRecordingsSidebarData(client: PVRClient) async {
+        if !client.isConfigured {
+            activeRecordingCount = 0
+            recordingsSeriesItems = []
+            recordingsSeriesIsLoading = false
+            return
+        }
+
+        recordingsSeriesIsLoading = true
+        defer { recordingsSeriesIsLoading = false }
+
+        do {
+            if !client.isAuthenticated {
+                try await client.authenticate()
+            }
+            let (completed, recording, scheduled) = try await client.getAllRecordings()
+            activeRecordingCount = recording.count
+
+            let grouped = Dictionary(grouping: (completed + scheduled).filter { $0.seriesInfo != nil }) {
+                $0.seriesInfo!.seriesName
+            }
+            recordingsSeriesItems = grouped
+                .map { name, recordings in
+                    RecordingsSeriesItem(name: name, count: recordings.count)
+                }
+                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        } catch {
+            // Keep previous values on transient failures.
+        }
+    }
     #endif
 
     func showAlert(_ message: String) {
@@ -242,6 +285,24 @@ final class AppState: ObservableObject {
 
     func setRecordingsFilter(_ filter: RecordingsFilter, userInitiated: Bool) {
         recordingsFilter = filter
+        selectedRecordingsSeriesName = ""
+        showingRecordingsSeriesList = false
+        if userInitiated {
+            recordingsFilterUserOverride = true
+        }
+    }
+
+    func selectRecordingsSeries(named seriesName: String, userInitiated: Bool) {
+        selectedRecordingsSeriesName = seriesName
+        showingRecordingsSeriesList = false
+        if userInitiated {
+            recordingsFilterUserOverride = true
+        }
+    }
+
+    func showRecordingsSeriesMenu(userInitiated: Bool) {
+        selectedRecordingsSeriesName = ""
+        showingRecordingsSeriesList = true
         if userInitiated {
             recordingsFilterUserOverride = true
         }

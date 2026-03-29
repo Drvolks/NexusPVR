@@ -605,6 +605,7 @@ struct ProgramDetailView: View {
                     await checkIfScheduled()
                 }
                 didChangeRecording = true
+                NotificationCenter.default.post(name: .recordingsDidChange, object: nil)
                 onRecordingChanged?()
                 isScheduling = false
             } catch {
@@ -630,6 +631,7 @@ struct ProgramDetailView: View {
                 // Re-check to get accurate state from server
                 await checkIfScheduled()
                 didChangeRecording = true
+                NotificationCenter.default.post(name: .recordingsDidChange, object: nil)
                 onRecordingChanged?()
                 isCancellingSeries = false
             } catch {
@@ -649,6 +651,7 @@ struct ProgramDetailView: View {
                 isScheduled = true
                 await checkIfScheduled()
                 didChangeRecording = true
+                NotificationCenter.default.post(name: .recordingsDidChange, object: nil)
                 onRecordingChanged?()
                 isSchedulingSeries = false
             } catch {

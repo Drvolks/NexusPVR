@@ -823,7 +823,8 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
                     title: program.title,
                     subTitle: program.subTitle,
                     description: program.description,
-                    tvgId: program.tvgId
+                    tvgId: program.tvgId,
+                    bannerURL: program.bannerURL
                 )
             )
         )
@@ -936,6 +937,10 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
             return URL(string: "\(baseURL)/api/channels/logos/\(logoId)/cache/?api_key=\(token)")
         }
         return URL(string: "\(baseURL)/api/channels/logos/\(logoId)/cache/?token=\(token)")
+    }
+
+    func recordingArtworkURL(recordingId: Int, fanart: Bool) -> URL? {
+        nil
     }
 
     // MARK: - Proxy Status
@@ -1459,6 +1464,27 @@ private nonisolated struct DispatcharrEPGData: Decodable, Sendable {
     }
 }
 
+private struct DispatcharrDynamicCodingKey: CodingKey {
+    var stringValue: String
+    var intValue: Int? { nil }
+    init?(intValue: Int) { return nil }
+    init?(stringValue: String) { self.stringValue = stringValue }
+}
+
+private func decodeFirstDispatcharrImageField(
+    from container: KeyedDecodingContainer<DispatcharrDynamicCodingKey>,
+    keys: [String]
+) -> String? {
+    for key in keys {
+        guard let codingKey = DispatcharrDynamicCodingKey(stringValue: key) else { continue }
+        if let value = try? container.decodeIfPresent(String.self, forKey: codingKey),
+           !value.isEmpty {
+            return value
+        }
+    }
+    return nil
+}
+
 nonisolated struct DispatcharrProgram: Decodable, Sendable {
     let id: Int
     let startTime: String
@@ -1470,6 +1496,7 @@ nonisolated struct DispatcharrProgram: Decodable, Sendable {
     let channel: Int?
     let season: Int?
     let episode: Int?
+    let bannerURL: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -1518,6 +1545,16 @@ nonisolated struct DispatcharrProgram: Decodable, Sendable {
 
         season = try container.decodeIfPresent(Int.self, forKey: .season)
         episode = try container.decodeIfPresent(Int.self, forKey: .episode)
+
+        let dynamic = try decoder.container(keyedBy: DispatcharrDynamicCodingKey.self)
+        bannerURL = decodeFirstDispatcharrImageField(
+            from: dynamic,
+            keys: [
+                "banner", "banner_url", "series_banner", "series_image",
+                "poster", "poster_url", "artwork", "artwork_url",
+                "image", "image_url", "thumbnail", "thumbnail_url"
+            ]
+        )
     }
 
     func toProgram(channelId: Int? = nil) -> Program? {
@@ -1541,9 +1578,11 @@ nonisolated struct DispatcharrProgram: Decodable, Sendable {
             genres: nil,
             channelId: channelId ?? channel,
             season: season,
-            episode: episode
+            episode: episode,
+            bannerURL: bannerURL
         )
     }
+
 }
 
 nonisolated struct DispatcharrRecording: Decodable {
@@ -1636,7 +1675,8 @@ nonisolated struct DispatcharrRecording: Decodable {
             genres: nil,
             playbackPosition: playbackPosition > 0 ? playbackPosition : nil,
             season: customProperties?.season,
-            episode: customProperties?.episode
+            episode: customProperties?.episode,
+            seriesBannerURL: customProperties?.seriesBannerURL ?? customProperties?.program?.bannerURL
         )
     }
 }
@@ -1645,11 +1685,48 @@ nonisolated struct DispatcharrCustomProperties: Codable {
     let program: DispatcharrProgramRef?
     let season: Int?
     let episode: Int?
+    let seriesBannerURL: String?
 
-    init(program: DispatcharrProgramRef?, season: Int? = nil, episode: Int? = nil) {
+    init(program: DispatcharrProgramRef?, season: Int? = nil, episode: Int? = nil, seriesBannerURL: String? = nil) {
         self.program = program
         self.season = season
         self.episode = episode
+        self.seriesBannerURL = seriesBannerURL
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case program
+        case season
+        case episode
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        program = try container.decodeIfPresent(DispatcharrProgramRef.self, forKey: .program)
+        season = try container.decodeIfPresent(Int.self, forKey: .season)
+        episode = try container.decodeIfPresent(Int.self, forKey: .episode)
+
+        let dynamic = try decoder.container(keyedBy: DispatcharrDynamicCodingKey.self)
+        seriesBannerURL = decodeFirstDispatcharrImageField(
+            from: dynamic,
+            keys: [
+                "banner", "banner_url", "series_banner", "series_image",
+                "poster", "poster_url", "artwork", "artwork_url",
+                "image", "image_url", "thumbnail", "thumbnail_url"
+            ]
+        )
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(program, forKey: .program)
+        try container.encodeIfPresent(season, forKey: .season)
+        try container.encodeIfPresent(episode, forKey: .episode)
+
+        if let seriesBannerURL {
+            var dynamic = encoder.container(keyedBy: DispatcharrDynamicCodingKey.self)
+            try dynamic.encode(seriesBannerURL, forKey: DispatcharrDynamicCodingKey(stringValue: "poster_url")!)
+        }
     }
 }
 
@@ -1661,6 +1738,7 @@ nonisolated struct DispatcharrProgramRef: Codable {
     let subTitle: String?
     let description: String?
     let tvgId: String?
+    let bannerURL: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -1670,6 +1748,63 @@ nonisolated struct DispatcharrProgramRef: Codable {
         case subTitle = "sub_title"
         case description
         case tvgId = "tvg_id"
+    }
+
+    init(
+        id: Int?,
+        startTime: String?,
+        endTime: String?,
+        title: String?,
+        subTitle: String?,
+        description: String?,
+        tvgId: String?,
+        bannerURL: String?
+    ) {
+        self.id = id
+        self.startTime = startTime
+        self.endTime = endTime
+        self.title = title
+        self.subTitle = subTitle
+        self.description = description
+        self.tvgId = tvgId
+        self.bannerURL = bannerURL
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(Int.self, forKey: .id)
+        startTime = try container.decodeIfPresent(String.self, forKey: .startTime)
+        endTime = try container.decodeIfPresent(String.self, forKey: .endTime)
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        subTitle = try container.decodeIfPresent(String.self, forKey: .subTitle)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        tvgId = try container.decodeIfPresent(String.self, forKey: .tvgId)
+
+        let dynamic = try decoder.container(keyedBy: DispatcharrDynamicCodingKey.self)
+        bannerURL = decodeFirstDispatcharrImageField(
+            from: dynamic,
+            keys: [
+                "banner", "banner_url", "series_banner", "series_image",
+                "poster", "poster_url", "artwork", "artwork_url",
+                "image", "image_url", "thumbnail", "thumbnail_url"
+            ]
+        )
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(id, forKey: .id)
+        try container.encodeIfPresent(startTime, forKey: .startTime)
+        try container.encodeIfPresent(endTime, forKey: .endTime)
+        try container.encodeIfPresent(title, forKey: .title)
+        try container.encodeIfPresent(subTitle, forKey: .subTitle)
+        try container.encodeIfPresent(description, forKey: .description)
+        try container.encodeIfPresent(tvgId, forKey: .tvgId)
+        // Keep using banner_url on outbound payloads.
+        if let bannerURL {
+            var dynamic = encoder.container(keyedBy: DispatcharrDynamicCodingKey.self)
+            try dynamic.encode(bannerURL, forKey: DispatcharrDynamicCodingKey(stringValue: "banner_url")!)
+        }
     }
 }
 

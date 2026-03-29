@@ -574,4 +574,19 @@ final class NextPVRClient: ObservableObject, PVRClientProtocol {
         guard let sid else { throw NextPVRError.sessionExpired }
         return URL(string: "\(baseURL)/service?method=channel.icon&channel_id=\(channelId)&sid=\(sid)")
     }
+
+    func recordingArtworkURL(recordingId: Int, fanart: Bool) -> URL? {
+        guard !config.isDemoMode else { return nil }
+        var components = URLComponents(string: "\(baseURL)/services/service")
+        var items: [URLQueryItem] = [
+            URLQueryItem(name: "method", value: "recording.artwork"),
+            URLQueryItem(name: "recording_id", value: String(recordingId)),
+            URLQueryItem(name: "with_placeholder", value: "true")
+        ]
+        if fanart {
+            items.append(URLQueryItem(name: "fanart", value: "true"))
+        }
+        components?.queryItems = items
+        return components?.url
+    }
 }
