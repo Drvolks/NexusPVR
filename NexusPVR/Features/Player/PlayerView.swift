@@ -179,10 +179,10 @@ struct PlayerView: View {
                 .onTapGesture {
                     toggleControls()
                 }
-                .onChange(of: pixelBufferView != nil) { _, hasView in
+                .onChange(of: pixelBufferView != nil) { hasView in
                     if hasView { setupNativePiPIfNeeded() }
                 }
-                .onChange(of: isPlayerReady) { _, ready in
+                .onChange(of: isPlayerReady) { ready in
                     if ready { setupNativePiPIfNeeded() }
                 }
             #else
@@ -424,11 +424,11 @@ struct PlayerView: View {
             #endif
         }
         #if DISPATCHERPVR
-        .onChange(of: appState.currentlyPlayingChannelName) {
+        .onChange(of: appState.currentlyPlayingChannelName) { _ in
             startDispatchProfileRefreshLoop()
         }
         #endif
-        .onChange(of: duration) {
+        .onChange(of: duration) { _ in
             // Resume playback position once duration is known (playback has started)
             if !hasResumed && duration > 0 {
                 hasResumed = true
@@ -452,15 +452,15 @@ struct PlayerView: View {
                 }
             }
         }
-        .onChange(of: isPlaying) {
+        .onChange(of: isPlaying) { _ in
             if !isPlaying {
                 savePlaybackPosition()
             }
         }
-        .onChange(of: currentPosition) {
+        .onChange(of: currentPosition) { _ in
             detectBuffering()
         }
-        .onChange(of: duration) {
+        .onChange(of: duration) { _ in
             // duration keeps growing for in-progress recordings even when
             // position is frozen by cache-pause, so this fires the detection
             // when onChange(of: currentPosition) can't.
@@ -2084,7 +2084,7 @@ struct MPVContainerView: NSViewControllerRepresentable {
         } else {
             controller = MPVPlayerNSOpenGLViewController()
         }
-        controller.loadViewIfNeeded()
+        _ = controller.view
         controller.setup(errorBinding: $errorMessage, isRecordingInProgress: isRecordingInProgress)
         controller.onPositionUpdate = { position, dur in
             DispatchQueue.main.async {

@@ -161,7 +161,7 @@ struct SettingsView: View {
                     ) {
                         VStack(spacing: Theme.spacingMD) {
                             Toggle("Test Stream", isOn: $debugStreamEnabled)
-                                .onChange(of: debugStreamEnabled) { _, newValue in
+                                .onChange(of: debugStreamEnabled) { newValue in
                                     UserDefaults.standard.set(newValue, forKey: "debugStreamEnabled")
                                 }
 
@@ -169,7 +169,7 @@ struct SettingsView: View {
                                 HStack(spacing: 8) {
                                     TextField("Stream URL", text: $debugStreamURL)
                                         .autocorrectionDisabled()
-                                        .onChange(of: debugStreamURL) { _, newValue in
+                                        .onChange(of: debugStreamURL) { newValue in
                                             UserDefaults.standard.set(newValue, forKey: "debugStreamURL")
                                         }
                                 }
@@ -234,18 +234,18 @@ struct SettingsView: View {
             appState.tvosSettingsHasPopup = activeTVPopup != nil
             appState.tvosSettingsShowingEventLog = showingTVEventLog
         }
-        .onChange(of: activeTVPopup) { _, _ in
+        .onChange(of: activeTVPopup) { _ in
             appState.tvosBlocksSidebarExitCommand = activeTVPopup != nil || showingTVEventLog
             appState.tvosSettingsHasPopup = activeTVPopup != nil
         }
-        .onChange(of: showingTVEventLog) { _, _ in
+        .onChange(of: showingTVEventLog) { _ in
             appState.tvosBlocksSidebarExitCommand = activeTVPopup != nil || showingTVEventLog
             appState.tvosSettingsShowingEventLog = showingTVEventLog
         }
-        .onChange(of: appState.tvosSettingsDismissPopupRequest) { _, _ in
+        .onChange(of: appState.tvosSettingsDismissPopupRequest) { _ in
             activeTVPopup = nil
         }
-        .onChange(of: appState.tvosSettingsDismissEventLogRequest) { _, _ in
+        .onChange(of: appState.tvosSettingsDismissEventLogRequest) { _ in
             showingTVEventLog = false
         }
         .onExitCommand {
@@ -609,29 +609,29 @@ struct SettingsView: View {
         } header: {
             Text("Playback")
         }
-        .onChange(of: seekBackwardSeconds) {
+        .onChange(of: seekBackwardSeconds) { _ in
             var prefs = UserPreferences.load()
             prefs.seekBackwardSeconds = seekBackwardSeconds
             prefs.save()
         }
-        .onChange(of: seekForwardSeconds) {
+        .onChange(of: seekForwardSeconds) { _ in
             var prefs = UserPreferences.load()
             prefs.seekForwardSeconds = seekForwardSeconds
             prefs.save()
         }
-        .onChange(of: audioChannels) {
+        .onChange(of: audioChannels) { _ in
             var prefs = UserPreferences.load()
             prefs.audioChannels = audioChannels
             prefs.save()
         }
         #if os(iOS)
-        .onChange(of: iosGPUAPI) {
+        .onChange(of: iosGPUAPI) { _ in
             var prefs = UserPreferences.load()
             prefs.iosGPUAPI = iosGPUAPI
             prefs.save()
         }
         #elseif os(macOS)
-        .onChange(of: macosGPUAPI) {
+        .onChange(of: macosGPUAPI) { _ in
             var prefs = UserPreferences.load()
             prefs.macosGPUAPI = macosGPUAPI
             prefs.save()
@@ -654,19 +654,18 @@ struct SettingsView: View {
     private var debugStreamSection: some View {
         Section {
             Toggle("Test Stream Override", isOn: $debugStreamEnabled)
-                .onChange(of: debugStreamEnabled) { _, newValue in
+                .onChange(of: debugStreamEnabled) { newValue in
                     UserDefaults.standard.set(newValue, forKey: "debugStreamEnabled")
                 }
 
             if debugStreamEnabled {
                 TextField("Stream URL", text: $debugStreamURL)
-                    .textContentType(.URL)
-                    .autocorrectionDisabled()
+                                        .autocorrectionDisabled()
                     #if os(iOS)
                     .keyboardType(.URL)
                     .textInputAutocapitalization(.never)
                     #endif
-                    .onChange(of: debugStreamURL) { _, newValue in
+                    .onChange(of: debugStreamURL) { newValue in
                         UserDefaults.standard.set(newValue, forKey: "debugStreamURL")
                     }
 

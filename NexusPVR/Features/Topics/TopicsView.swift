@@ -63,73 +63,16 @@ struct TopicsView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                #if os(macOS)
-                if !viewModel.keywords.isEmpty {
-                    HStack {
-                        Picker("Topic", selection: $selectedKeyword) {
-                            ForEach(viewModel.keywords, id: \.self) { keyword in
-                                Text(keyword).tag(keyword)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .accessibilityIdentifier("keyword-tabs")
-                        .onChange(of: selectedKeyword) {
-                            Task { appState.selectedTopicKeyword = selectedKeyword }
-                        }
-
-                        Spacer()
-                        Button {
-                            appState.showingKeywordsEditor = true
-                        } label: {
-                            Image(systemName: "pencil")
-                        }
-                        .accessibilityIdentifier("edit-keywords-button")
-                    }
-                    .padding(.horizontal)
-                    .padding(.vertical, Theme.spacingSM)
-                    .background(Theme.surface)
-                }
-                #endif
-
-                // Content
-                Group {
-                    contentView
-                }
+        Group {
+            #if os(tvOS)
+            NavigationView {
+                topicsContent
             }
-            .accessibilityIdentifier("topics-view")
-            #if os(iOS)
-            .sidebarMenuToolbar()
-            .navigationTitle(appState.selectedTopicKeyword.isEmpty ? "Topics" : appState.selectedTopicKeyword)
-            .navigationBarTitleDisplayMode(.inline)
+            #else
+            NavigationStack {
+                topicsContent
+            }
             #endif
-            .sheet(item: $selectedProgramDetail) { detail in
-                ProgramDetailView(
-                    program: detail.program,
-                    channel: detail.channel,
-                    initialRecordingId: detail.recordingId,
-                    initialCompletedRecording: detail.completedRecording,
-                    onRecordingChanged: {
-                        refreshTrigger = UUID()
-                    }
-                )
-                .environmentObject(client)
-                .environmentObject(appState)
-            }
-            .onChange(of: viewModel.keywords) {
-                #if os(tvOS)
-                appState.topicKeywords = viewModel.keywords
-                if !appState.showingKeywordsEditor {
-                    if appState.selectedTopicKeyword.isEmpty || !viewModel.keywords.contains(appState.selectedTopicKeyword) {
-                        appState.selectedTopicKeyword = viewModel.keywords.first ?? ""
-                    }
-                }
-                #else
-                syncTopicSelection(with: viewModel.keywords)
-                #endif
-            }
         }
         #if os(tvOS)
         .background(.ultraThinMaterial)
@@ -146,7 +89,7 @@ struct TopicsView: View {
                 }
                 .frame(minWidth: 500, minHeight: 400)
         }
-        .onChange(of: appState.showingCalendar) {
+        .onChange(of: appState.showingCalendar) { _ in
             if appState.showingCalendar {
                 viewModel.epgCache = epgCache
                 viewModel.client = client
@@ -189,13 +132,13 @@ struct TopicsView: View {
         }
         #endif
         #if !os(tvOS)
-        .onChange(of: appState.selectedTopicKeyword) {
+        .onChange(of: appState.selectedTopicKeyword) { _ in
             if selectedKeyword != appState.selectedTopicKeyword {
                 selectedKeyword = appState.selectedTopicKeyword
             }
         }
         #endif
-        .onChange(of: scenePhase) {
+        .onChange(of: scenePhase) { _ in
             if scenePhase == .active {
                 Task {
                     await viewModel.loadData()
@@ -214,13 +157,83 @@ struct TopicsView: View {
             }
         }
         #if os(iOS)
-        .onChange(of: appState.selectedTab) {
+        .onChange(of: appState.selectedTab) { _ in
             guard appState.selectedTab == .topics else { return }
             let hasValidSelection = !appState.selectedTopicKeyword.isEmpty &&
                 viewModel.keywords.contains(appState.selectedTopicKeyword)
             syncTopicSelection(with: viewModel.keywords, preferFirst: !hasValidSelection)
         }
         #endif
+    }
+
+    @ViewBuilder
+    private var topicsContent: some View {
+        VStack(spacing: 0) {
+            #if os(macOS)
+            if !viewModel.keywords.isEmpty {
+                HStack {
+                    Picker("Topic", selection: $selectedKeyword) {
+                        ForEach(viewModel.keywords, id: \.self) { keyword in
+                            Text(keyword).tag(keyword)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .accessibilityIdentifier("keyword-tabs")
+                    .onChange(of: selectedKeyword) { _ in
+                        Task { appState.selectedTopicKeyword = selectedKeyword }
+                    }
+
+                    Spacer()
+                    Button {
+                        appState.showingKeywordsEditor = true
+                    } label: {
+                        Image(systemName: "pencil")
+                    }
+                    .accessibilityIdentifier("edit-keywords-button")
+                }
+                .padding(.horizontal)
+                .padding(.vertical, Theme.spacingSM)
+                .background(Theme.surface)
+            }
+            #endif
+
+            // Content
+            Group {
+                contentView
+            }
+            .accessibilityIdentifier("topics-view")
+            #if os(iOS)
+            .sidebarMenuToolbar()
+            .navigationTitle(appState.selectedTopicKeyword.isEmpty ? "Topics" : appState.selectedTopicKeyword)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .sheet(item: $selectedProgramDetail) { detail in
+                ProgramDetailView(
+                    program: detail.program,
+                    channel: detail.channel,
+                    initialRecordingId: detail.recordingId,
+                    initialCompletedRecording: detail.completedRecording,
+                    onRecordingChanged: {
+                        refreshTrigger = UUID()
+                    }
+                )
+                .environmentObject(client)
+                .environmentObject(appState)
+            }
+            .onChange(of: viewModel.keywords) { _ in
+                #if os(tvOS)
+                appState.topicKeywords = viewModel.keywords
+                if !appState.showingKeywordsEditor {
+                    if appState.selectedTopicKeyword.isEmpty || !viewModel.keywords.contains(appState.selectedTopicKeyword) {
+                        appState.selectedTopicKeyword = viewModel.keywords.first ?? ""
+                    }
+                }
+                #else
+                syncTopicSelection(with: viewModel.keywords)
+                #endif
+            }
+        }
     }
 
     @ViewBuilder
@@ -468,7 +481,22 @@ private struct TVManageDeleteFocusWrapper<Content: View>: View {
             .shadow(color: isFocused ? Theme.accent.opacity(0.2) : .clear, radius: 6, x: 0, y: 1)
             .scaleEffect(isFocused ? 1.01 : 1.0)
             .animation(.easeInOut(duration: 0.14), value: isFocused)
-            .focusEffectDisabled()
+            .modifier(TVFocusEffectDisabledCompat())
+    }
+}
+
+private struct TVFocusEffectDisabledCompat: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        #if os(tvOS)
+        if #available(tvOS 17.0, *) {
+            content.focusEffectDisabled()
+        } else {
+            content
+        }
+        #else
+        content
+        #endif
     }
 }
 

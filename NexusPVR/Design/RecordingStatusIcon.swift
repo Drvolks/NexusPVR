@@ -32,7 +32,7 @@ struct RecordingStatusIcon: View {
                     .frame(width: size, height: size)
                 Image(systemName: sport?.sfSymbol ?? "play.fill")
                     .font(.system(size: size * 0.38))
-                    .foregroundStyle(Theme.accent)
+                    .foregroundColor(Theme.accent)
             }
         } else {
             let color = recording.recordingStatus.statusColor
@@ -42,7 +42,7 @@ struct RecordingStatusIcon: View {
                     .frame(width: size, height: size)
                 Image(systemName: sport?.sfSymbol ?? recording.recordingStatus.statusIcon)
                     .font(.system(size: size * 0.38))
-                    .foregroundStyle(color)
+                    .foregroundColor(color)
             }
         }
     }

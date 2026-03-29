@@ -132,10 +132,10 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
                 // No URL provided — show static fallback instead of an infinite spinner
                 Image(systemName: "tv")
                     .font(.title2)
-                    .foregroundStyle(.secondary)
+                    .foregroundColor(.secondary)
             }
         }
-        .onChange(of: url) { _, newURL in
+        .onChange(of: url) { newURL in
             // Row views are reused (especially on tvOS). Reset state when URL changes
             // so logos don't stick from the previous channel.
             loadedImage = nil

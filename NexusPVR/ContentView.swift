@@ -99,13 +99,13 @@ struct ContentView: View {
             }
         }
         #if os(tvOS)
-        .onChange(of: discovery.discoveredServers) { _, servers in
+        .onChange(of: discovery.discoveredServers) { servers in
             if let first = servers.first, focusedServerId == nil {
                 focusedServerId = first.id
             }
         }
         #endif
-        .onChange(of: client.isConfigured) { _, isConfigured in
+        .onChange(of: client.isConfigured) { isConfigured in
             Task {
                 if isConfigured {
                     discovery.stopScan()

@@ -183,9 +183,11 @@ struct TopicProgramRow: View {
         .padding(.vertical, Theme.spacingSM)
         .contentShape(Rectangle())
         .accessibilityIdentifier("topic-program-\(program.id)")
+        #if !os(tvOS)
         .onTapGesture {
             onShowDetails?(vm.existingRecordingId, vm.existingRecording)
         }
+        #endif
         .task {
             if appState.userLevel >= 1 {
                 await vm.checkIfScheduled(using: client)
@@ -222,7 +224,18 @@ private struct TVTopicFocusWrapper<Content: View>: View {
             .shadow(color: isFocused ? .black.opacity(0.28) : .clear, radius: 7, x: 0, y: 2)
             .scaleEffect(isFocused ? 1.01 : 1.0)
             .animation(.easeInOut(duration: 0.14), value: isFocused)
-            .focusEffectDisabled()
+            .modifier(TVFocusEffectDisabledCompat())
+    }
+}
+
+private struct TVFocusEffectDisabledCompat: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(tvOS 17.0, *) {
+            content.focusEffectDisabled()
+        } else {
+            content
+        }
     }
 }
 
@@ -370,8 +383,7 @@ struct TopicProgramRowTV: View {
                                 Text(actionLabel)
                             }
                         }
-                        .font(.callout)
-                        .fontWeight(.medium)
+                        .font(.system(size: 16, weight: .medium))
                         .foregroundStyle(actionColor.opacity(0.95))
                         .padding(.horizontal, Theme.spacingLG)
                         .padding(.vertical, Theme.spacingMD)
@@ -385,12 +397,9 @@ struct TopicProgramRowTV: View {
                                 Spacer()
                                 Theme.success
                                     .frame(width: 8, height: 24)
-                                    .clipShape(UnevenRoundedRectangle(
-                                        topLeadingRadius: 0,
-                                        bottomLeadingRadius: 4,
-                                        bottomTrailingRadius: 0,
-                                        topTrailingRadius: 10
-                                    ))
+                                    .clipShape(
+                                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                    )
                             }
                             Spacer()
                         }

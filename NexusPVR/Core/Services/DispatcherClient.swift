@@ -213,7 +213,8 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
                         durationMs: ms, responseSize: data.count,
                         errorDetail: "Transient HTTP \(status ?? -1), retrying \(attempt)/\(Self.maxAttempts)"
                     ))
-                    try? await Task.sleep(for: .seconds(retryDelay(for: attempt)))
+                    let retryDelayNs = UInt64(retryDelay(for: attempt) * 1_000_000_000)
+                    try? await Task.sleep(nanoseconds: retryDelayNs)
                     continue
                 }
 
@@ -238,7 +239,8 @@ final class DispatcherClient: ObservableObject, PVRClientProtocol {
                 ))
 
                 if willRetry {
-                    try? await Task.sleep(for: .seconds(retryDelay(for: attempt)))
+                    let retryDelayNs = UInt64(retryDelay(for: attempt) * 1_000_000_000)
+                    try? await Task.sleep(nanoseconds: retryDelayNs)
                     continue
                 }
 

@@ -227,7 +227,7 @@ struct CalendarView: View {
             }
             #if os(iOS)
             .presentationDetents([.large])
-            .presentationSizing(.page)
+            .modifier(IOSCalendarPresentationSizingCompat())
             #endif
         }
         .task {
@@ -650,6 +650,19 @@ struct CalendarView: View {
         }
     }
 }
+
+#if os(iOS)
+private struct IOSCalendarPresentationSizingCompat: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.presentationSizing(.page)
+        } else {
+            content
+        }
+    }
+}
+#endif
 
 /// Standalone calendar tab for macOS sidebar — loads its own topic data
 struct CalendarTabView: View {
