@@ -227,7 +227,7 @@ struct RecordingRow: View {
 // MARK: - tvOS Version
 
 #if os(tvOS)
-private struct TVRecordingSubtleButtonStyle: ButtonStyle {
+struct TVRecordingSubtleButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         TVRecordingFocusWrapper {
             configuration.label
@@ -265,9 +265,22 @@ struct RecordingRowTV: View {
     let onPlay: () -> Void
     let onShowDetails: () -> Void
     let onDelete: () -> Void
+    var showSeriesMeta: Bool = false
     var durationMismatch: (expected: Int, detected: Int)?
     var durationVerified: Bool = false
     var durationUnverifiable: Bool = false
+    private static let seriesDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "MMM d, yyyy"
+        return formatter
+    }()
+    private static let seriesTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
 
     private var watchProgress: Double? {
         guard let position = recording.playbackPosition,
@@ -318,9 +331,24 @@ struct RecordingRowTV: View {
         return start.formatted(date: .omitted, time: .shortened)
     }
 
+    private var seriesDateTimeRangeText: String {
+        guard let start = recording.startDate else { return "No schedule" }
+        let dateText = Self.seriesDateFormatter.string(from: start)
+        let startText = Self.seriesTimeFormatter.string(from: start)
+        if let end = recording.endDate {
+            let endText = Self.seriesTimeFormatter.string(from: end)
+            return "\(dateText) - \(startText) - \(endText)"
+        }
+        return "\(dateText) - \(startText)"
+    }
+
     private var rightCellBackground: Color {
         if isFocused { return Theme.guideNowPlaying.opacity(0.9) }
         return Theme.guideNowPlaying
+    }
+
+    private var rowHeight: CGFloat {
+        showSeriesMeta ? Theme.cellHeight + 44 : Theme.cellHeight
     }
 
     private var scheduledDetailText: String? {
@@ -359,6 +387,16 @@ struct RecordingRowTV: View {
         return nil
     }
 
+    private var seriesDescriptionText: String? {
+        guard showSeriesMeta,
+              let desc = recording.desc?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !desc.isEmpty else { return nil }
+        if let scheduled = scheduledDetailText, scheduled == desc {
+            return nil
+        }
+        return desc
+    }
+
     var body: some View {
         Button {
             if recording.recordingStatus.isPlayable {
@@ -391,7 +429,7 @@ struct RecordingRowTV: View {
                     }
                 }
                 .padding(.horizontal, Theme.spacingMD)
-                .frame(width: Theme.channelColumnWidth, height: Theme.cellHeight)
+                .frame(width: Theme.channelColumnWidth, height: rowHeight)
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
                         .stroke(isFocused ? Theme.accent.opacity(0.35) : Color.clear, lineWidth: 1)
@@ -408,7 +446,7 @@ struct RecordingRowTV: View {
                                 .foregroundStyle(.white.opacity(isFocused ? 1.0 : 0.95))
                                 .lineLimit(1)
 
-                            Text(timeRangeText)
+                            Text(showSeriesMeta ? seriesDateTimeRangeText : timeRangeText)
                                 .font(.system(size: 24, weight: .medium))
                                 .foregroundStyle(.white.opacity(isFocused ? 0.82 : 0.72))
                                 .lineLimit(1)
@@ -418,6 +456,13 @@ struct RecordingRowTV: View {
                                     .font(.system(size: 17))
                                     .foregroundStyle(.white.opacity(isFocused ? 0.76 : 0.64))
                                     .lineLimit(1)
+                            }
+
+                            if let desc = seriesDescriptionText {
+                                Text(desc)
+                                    .font(.system(size: 16))
+                                    .foregroundStyle(.white.opacity(isFocused ? 0.74 : 0.62))
+                                    .lineLimit(2)
                             }
 
                             if let warning = tvDurationWarningText {
@@ -480,7 +525,7 @@ struct RecordingRowTV: View {
                         }
                     }
                 }
-                .frame(height: Theme.cellHeight)
+                .frame(height: rowHeight)
                 .background(RoundedRectangle(cornerRadius: 12).fill(rightCellBackground))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)

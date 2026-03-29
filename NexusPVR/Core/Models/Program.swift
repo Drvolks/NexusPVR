@@ -7,6 +7,13 @@
 
 import Foundation
 
+private struct DynamicCodingKey: CodingKey {
+    var stringValue: String
+    var intValue: Int? { nil }
+    init?(intValue: Int) { return nil }
+    init?(stringValue: String) { self.stringValue = stringValue }
+}
+
 // MARK: - Series Info
 
 nonisolated struct SeriesInfo: Hashable, Sendable {
@@ -68,6 +75,7 @@ nonisolated struct Program: Identifiable, Decodable, Hashable, Sendable {
     let channelId: Int?
     let season: Int?
     let episode: Int?
+    let bannerURL: String?
 
     var startDate: Date {
         Date(timeIntervalSince1970: TimeInterval(start))
@@ -133,7 +141,7 @@ nonisolated struct Program: Identifiable, Decodable, Hashable, Sendable {
         case episode
     }
 
-    init(id: Int, name: String, subtitle: String?, desc: String?, start: Int, end: Int, genres: [String]?, channelId: Int?, season: Int? = nil, episode: Int? = nil) {
+    init(id: Int, name: String, subtitle: String?, desc: String?, start: Int, end: Int, genres: [String]?, channelId: Int?, season: Int? = nil, episode: Int? = nil, bannerURL: String? = nil) {
         self.id = id
         self.name = name
         self.subtitle = subtitle
@@ -144,6 +152,7 @@ nonisolated struct Program: Identifiable, Decodable, Hashable, Sendable {
         self.channelId = channelId
         self.season = season
         self.episode = episode
+        self.bannerURL = bannerURL
     }
 
     init(from decoder: Decoder) throws {
@@ -196,6 +205,27 @@ nonisolated struct Program: Identifiable, Decodable, Hashable, Sendable {
 
         season = try container.decodeIfPresent(Int.self, forKey: .season)
         episode = try container.decodeIfPresent(Int.self, forKey: .episode)
+
+        let dynamic = try decoder.container(keyedBy: DynamicCodingKey.self)
+        bannerURL = Program.decodeFirstString(
+            from: dynamic,
+            keys: [
+                "banner", "banner_url", "series_banner", "series_image",
+                "poster", "poster_url", "artwork", "artwork_url",
+                "image", "image_url", "thumbnail", "thumbnail_url"
+            ]
+        )
+    }
+
+    private static func decodeFirstString(from container: KeyedDecodingContainer<DynamicCodingKey>, keys: [String]) -> String? {
+        for key in keys {
+            guard let codingKey = DynamicCodingKey(stringValue: key) else { continue }
+            if let value = try? container.decodeIfPresent(String.self, forKey: codingKey),
+               !value.isEmpty {
+                return value
+            }
+        }
+        return nil
     }
 }
 

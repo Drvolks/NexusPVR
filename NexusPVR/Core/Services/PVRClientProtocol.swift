@@ -57,4 +57,5 @@ protocol PVRClientProtocol: ObservableObject {
     func recordingStreamURL(recordingId: Int) async throws -> URL
     func streamAuthHeaders() -> [String: String]
     func channelIconURL(channelId: Int) throws -> URL?
+    func recordingArtworkURL(recordingId: Int, fanart: Bool) -> URL?
 }

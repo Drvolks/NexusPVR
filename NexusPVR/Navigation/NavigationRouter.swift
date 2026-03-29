@@ -7,6 +7,8 @@
 
 import SwiftUI
 
+private let maxSeriesSidebarItems = 5
+
 // MARK: - Sidebar Focus Environment Key
 
 #if os(tvOS)
@@ -101,7 +103,7 @@ struct NavigationRouter: View {
         .task {
             if appState.userLevel >= 1 {
                 #if !TOPSHELF_EXTENSION
-                await appState.refreshRecordingsActivity(client: client)
+                await appState.refreshRecordingsSidebarData(client: client)
                 appState.startRecordingsActivityPolling(client: client)
                 #endif
                 #if DISPATCHERPVR
@@ -114,6 +116,8 @@ struct NavigationRouter: View {
                 #if !TOPSHELF_EXTENSION
                 appState.stopRecordingsActivityPolling()
                 appState.activeRecordingCount = 0
+                appState.recordingsSeriesItems = []
+                appState.recordingsSeriesIsLoading = false
                 #endif
                 #if DISPATCHERPVR
                 appState.stopStreamCountPolling()
@@ -123,7 +127,7 @@ struct NavigationRouter: View {
                 return
             }
             #if !TOPSHELF_EXTENSION
-            Task { await appState.refreshRecordingsActivity(client: client) }
+            Task { await appState.refreshRecordingsSidebarData(client: client) }
             appState.startRecordingsActivityPolling(client: client)
             #endif
             #if DISPATCHERPVR
@@ -140,7 +144,7 @@ struct NavigationRouter: View {
         }
         #if !TOPSHELF_EXTENSION
         .onReceive(NotificationCenter.default.publisher(for: .recordingsDidChange)) { _ in
-            Task { await appState.refreshRecordingsActivity(client: client) }
+            Task { await appState.refreshRecordingsSidebarData(client: client) }
         }
         #endif
     }
@@ -166,7 +170,7 @@ struct IOSNavigation: View {
     @FocusState private var isSearchFocused: Bool
 
     private var sidebarWidth: CGFloat {
-        260 + Self.windowSafeArea.leading
+        320 + Self.windowSafeArea.leading
     }
 
     var body: some View {
@@ -525,10 +529,20 @@ struct IOSNavigation: View {
 
                             // Sub-items
                             if appState.recordingsHasActive {
-                                sidebarSubRow(label: "Active", filter: .recording)
+                                sidebarSubRow(label: "Active (\(appState.activeRecordingCount))", filter: .recording)
                             }
                             sidebarSubRow(label: "Completed", filter: .completed)
                             sidebarSubRow(label: "Scheduled", filter: .scheduled)
+                            if appState.recordingsSeriesIsLoading && appState.recordingsSeriesItems.isEmpty {
+                                sidebarStaticSubRow(label: "Loading series")
+                            } else {
+                                ForEach(Array(appState.recordingsSeriesItems.prefix(maxSeriesSidebarItems))) { series in
+                                    sidebarSeriesSubRow(series)
+                                }
+                                if appState.recordingsSeriesItems.count > maxSeriesSidebarItems {
+                                    sidebarShowMoreSubRow()
+                                }
+                            }
                         } else if tab == .topics {
                             // Topics header — opens keywords editor as full view
                             Button {
@@ -603,7 +617,10 @@ struct IOSNavigation: View {
     }
 
     private func sidebarSubRow(label: String, filter: RecordingsFilter) -> some View {
-        let isSelected = appState.selectedTab == .recordings && appState.recordingsFilter == filter
+        let isSelected = appState.selectedTab == .recordings &&
+            !appState.hasSelectedRecordingsSeries &&
+            !appState.showingRecordingsSeriesList &&
+            appState.recordingsFilter == filter
         return Button {
             appState.setRecordingsFilter(filter, userInitiated: true)
             appState.selectedTab = .recordings
@@ -616,14 +633,6 @@ struct IOSNavigation: View {
                 Text(label)
                     .font(.subheadline)
                 Spacer()
-                if filter == .recording && appState.activeRecordingCount > 0 {
-                    Text("(\(appState.activeRecordingCount))")
-                        .font(.caption)
-                        .foregroundStyle(Theme.textTertiary)
-                    Circle()
-                        .fill(Theme.recording)
-                        .frame(width: 8, height: 8)
-                }
             }
             .foregroundStyle(isSelected ? Theme.accent : Theme.textSecondary)
             .padding(.horizontal, Theme.spacingLG)
@@ -635,6 +644,79 @@ struct IOSNavigation: View {
             .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
         }
         .accessibilityIdentifier("recordings-filter-\(filter.rawValue)")
+    }
+
+    private func sidebarSeriesSubRow(_ series: RecordingsSeriesItem) -> some View {
+        let isSelected = appState.selectedTab == .recordings && appState.selectedRecordingsSeriesName == series.name
+        return Button {
+            appState.selectRecordingsSeries(named: series.name, userInitiated: true)
+            appState.selectedTab = .recordings
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                isSidebarOpen = false
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Color.clear.frame(width: 28)
+                Text("\(series.name) (\(series.count))")
+                    .font(.subheadline)
+                    .lineLimit(1)
+                Spacer()
+            }
+            .foregroundStyle(isSelected ? Theme.accent : Theme.textSecondary)
+            .padding(.horizontal, Theme.spacingLG)
+            .padding(.leading, Theme.spacingSM)
+            .padding(.vertical, 10)
+            .background(
+                isSelected ? Theme.accent.opacity(0.12) : Color.clear
+            )
+            .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
+        }
+        .accessibilityIdentifier("recordings-series-\(series.name)")
+    }
+
+    private func sidebarShowMoreSubRow() -> some View {
+        let selectedSeriesIsHidden = appState.hasSelectedRecordingsSeries &&
+            !appState.recordingsSeriesItems.prefix(maxSeriesSidebarItems).contains {
+                $0.name == appState.selectedRecordingsSeriesName
+            }
+        let isSelected = appState.selectedTab == .recordings &&
+            (appState.showingRecordingsSeriesList || selectedSeriesIsHidden)
+        return Button {
+            appState.showRecordingsSeriesMenu(userInitiated: true)
+            appState.selectedTab = .recordings
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                isSidebarOpen = false
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Color.clear.frame(width: 28)
+                Text("Show More")
+                    .font(.subheadline)
+                Spacer()
+            }
+            .foregroundStyle(isSelected ? Theme.accent : Theme.textSecondary)
+            .padding(.horizontal, Theme.spacingLG)
+            .padding(.leading, Theme.spacingSM)
+            .padding(.vertical, 10)
+            .background(
+                isSelected ? Theme.accent.opacity(0.12) : Color.clear
+            )
+            .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
+        }
+        .accessibilityIdentifier("recordings-series-show-more")
+    }
+
+    private func sidebarStaticSubRow(label: String) -> some View {
+        HStack(spacing: 12) {
+            Color.clear.frame(width: 28)
+            Text(label)
+                .font(.subheadline)
+                .foregroundStyle(Theme.textTertiary)
+            Spacer()
+        }
+        .padding(.horizontal, Theme.spacingLG)
+        .padding(.leading, Theme.spacingSM)
+        .padding(.vertical, 10)
     }
 
     private func sidebarTopicSubRow(keyword: String, count: Int?) -> some View {
@@ -946,6 +1028,17 @@ struct TVOSNavigation: View {
     private func preferredSidebarFocusItem() -> TVSidebarItem {
         switch appState.selectedTab {
         case .recordings:
+            if appState.showingRecordingsSeriesList {
+                return .recordingsSeriesMore
+            }
+            if appState.hasSelectedRecordingsSeries {
+                if !appState.recordingsSeriesItems.prefix(maxSeriesSidebarItems).contains(where: {
+                    $0.name == appState.selectedRecordingsSeriesName
+                }) {
+                    return .recordingsSeriesMore
+                }
+                return .recordingsSeries(appState.selectedRecordingsSeriesName)
+            }
             // Recordings is rendered as a section (no focusable .tab row), so target a sub-item.
             if appState.recordingsFilter == .recording && !appState.recordingsHasActive {
                 return .recordingsFilter(.completed)
@@ -985,30 +1078,55 @@ struct TVOSNavigation: View {
                             } content: {
                                 if appState.recordingsHasActive {
                                     tvOSSidebarSubRow(
-                                        label: "Active",
+                                        label: "Active (\(appState.activeRecordingCount))",
                                         item: .recordingsFilter(.recording),
-                                        isSelected: appState.selectedTab == .recordings && appState.recordingsFilter == .recording
+                                        isSelected: appState.selectedTab == .recordings &&
+                                            !appState.hasSelectedRecordingsSeries &&
+                                            !appState.showingRecordingsSeriesList &&
+                                            appState.recordingsFilter == .recording
                                     ) {
-                                        if appState.activeRecordingCount > 0 {
-                                            Text("\(appState.activeRecordingCount)")
-                                                .font(.system(size: 20, weight: .medium))
-                                                .foregroundStyle(Theme.textTertiary)
-                                            Circle()
-                                                .fill(Theme.recording)
-                                                .frame(width: 8, height: 8)
-                                        }
+                                        EmptyView()
                                     }
                                 }
                                 tvOSSidebarSubRow(
                                     label: "Completed",
                                     item: .recordingsFilter(.completed),
-                                    isSelected: appState.selectedTab == .recordings && appState.recordingsFilter == .completed
+                                    isSelected: appState.selectedTab == .recordings &&
+                                        !appState.hasSelectedRecordingsSeries &&
+                                        !appState.showingRecordingsSeriesList &&
+                                        appState.recordingsFilter == .completed
                                 ) { EmptyView() }
                                 tvOSSidebarSubRow(
                                     label: "Scheduled",
                                     item: .recordingsFilter(.scheduled),
-                                    isSelected: appState.selectedTab == .recordings && appState.recordingsFilter == .scheduled
+                                    isSelected: appState.selectedTab == .recordings &&
+                                        !appState.hasSelectedRecordingsSeries &&
+                                        !appState.showingRecordingsSeriesList &&
+                                        appState.recordingsFilter == .scheduled
                                 ) { EmptyView() }
+                                if appState.recordingsSeriesIsLoading && appState.recordingsSeriesItems.isEmpty {
+                                    tvOSSidebarStaticSubRow(label: "Loading series")
+                                } else {
+                                    ForEach(Array(appState.recordingsSeriesItems.prefix(maxSeriesSidebarItems))) { series in
+                                        tvOSSidebarSubRow(
+                                            label: "\(series.name) (\(series.count))",
+                                            item: .recordingsSeries(series.name),
+                                            isSelected: appState.selectedTab == .recordings && appState.selectedRecordingsSeriesName == series.name
+                                        ) { EmptyView() }
+                                    }
+                                    if appState.recordingsSeriesItems.count > maxSeriesSidebarItems {
+                                        let selectedSeriesIsHidden = appState.hasSelectedRecordingsSeries &&
+                                            !appState.recordingsSeriesItems.prefix(maxSeriesSidebarItems).contains {
+                                                $0.name == appState.selectedRecordingsSeriesName
+                                            }
+                                        tvOSSidebarSubRow(
+                                            label: "Show More",
+                                            item: .recordingsSeriesMore,
+                                            isSelected: appState.selectedTab == .recordings &&
+                                                (appState.showingRecordingsSeriesList || selectedSeriesIsHidden)
+                                        ) { EmptyView() }
+                                    }
+                                }
                             }
                         } else if tab == .topics {
                             tvOSSidebarSection(icon: tab.icon, label: tab.label) {
@@ -1138,6 +1256,12 @@ struct TVOSNavigation: View {
             case .recordingsFilter(let filter):
                 appState.setRecordingsFilter(filter, userInitiated: true)
                 appState.selectedTab = .recordings
+            case .recordingsSeries(let seriesName):
+                appState.selectRecordingsSeries(named: seriesName, userInitiated: true)
+                appState.selectedTab = .recordings
+            case .recordingsSeriesMore:
+                appState.showRecordingsSeriesMenu(userInitiated: true)
+                appState.selectedTab = .recordings
             case .topicKeyword(let keyword):
                 appState.showingKeywordsEditor = false
                 appState.selectedTopicKeyword = keyword
@@ -1160,17 +1284,35 @@ struct TVOSNavigation: View {
                 Text(label)
                     .font(.subheadline)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .allowsTightening(true)
+                    .layoutPriority(1)
 
                 Spacer()
                 badge()
             }
-            .padding(.trailing, Theme.spacingSM)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 6)
             .contentShape(Rectangle())
         }
         .buttonStyle(.card)
-        .padding(.leading, 48) // inset from parent rows
+        .padding(.leading, 16) // inset from parent rows
         .focused($focusedItem, equals: item)
+    }
+
+    private func tvOSSidebarStaticSubRow(label: String) -> some View {
+        HStack(spacing: 10) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Color.clear)
+                .frame(width: 3, height: 18)
+            Text(label)
+                .font(.subheadline)
+                .foregroundStyle(Theme.textTertiary)
+                .lineLimit(1)
+            Spacer()
+        }
+        .padding(.vertical, 6)
+        .padding(.leading, 16)
     }
 
     @ViewBuilder
@@ -1203,6 +1345,8 @@ struct TVOSNavigation: View {
 enum TVSidebarItem: Hashable {
     case tab(Tab)
     case recordingsFilter(RecordingsFilter)
+    case recordingsSeries(String)
+    case recordingsSeriesMore
     case topicKeyword(String)
     case topicManage
 }
