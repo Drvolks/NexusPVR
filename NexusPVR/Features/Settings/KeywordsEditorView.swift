@@ -123,7 +123,7 @@ struct KeywordsEditorView: View {
             #endif
         }
         .background(Theme.background)
-        .onChange(of: preferences.keywords) {
+        .onChange(of: preferences.keywords) { _ in
             appState.topicKeywords = preferences.keywords
         }
     }

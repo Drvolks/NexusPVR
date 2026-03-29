@@ -100,7 +100,7 @@ struct ProgramDetailView: View {
         #endif
         #if os(iOS)
         .presentationDetents([.large])
-        .presentationSizing(.page)
+        .modifier(IOSPresentationSizingCompat())
         #endif
         .task {
             await checkIfScheduled()
@@ -661,6 +661,19 @@ struct ProgramDetailView: View {
         }
     }
 }
+
+#if os(iOS)
+private struct IOSPresentationSizingCompat: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.presentationSizing(.page)
+        } else {
+            content
+        }
+    }
+}
+#endif
 
 #if os(tvOS)
 private struct TVProgramPopupButtonStyle: ButtonStyle {

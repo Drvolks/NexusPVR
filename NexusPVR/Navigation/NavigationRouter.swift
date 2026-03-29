@@ -111,7 +111,7 @@ struct NavigationRouter: View {
                 #endif
             }
         }
-        .onChange(of: appState.userLevel) { _, level in
+        .onChange(of: appState.userLevel) { level in
             guard level >= 1 else {
                 #if !TOPSHELF_EXTENSION
                 appState.stopRecordingsActivityPolling()
@@ -349,7 +349,7 @@ struct IOSNavigation: View {
                 Task { await computeTopicMatchCounts() }
             }
         }
-        .onChange(of: searchText) { oldValue, newValue in
+        .onChange(of: searchText) { newValue in
             searchDebounceTask?.cancel()
             if appState.selectedTab == .search {
                 if newValue.isEmpty {
@@ -1479,7 +1479,7 @@ struct MacOSNavigation: View {
                 }
             }
         }
-        .onChange(of: searchText) { oldValue, newValue in
+        .onChange(of: searchText) { newValue in
             searchDebounceTask?.cancel()
             if newValue.count < 2 {
                 showSearchDropdown = false
@@ -1512,7 +1512,7 @@ struct MacOSNavigation: View {
                 }
             }
         }
-        .onChange(of: appState.selectedTab) {
+        .onChange(of: appState.selectedTab) { _ in
             withAnimation(.easeInOut(duration: 0.2)) {
                 showSearchDropdown = false
             }

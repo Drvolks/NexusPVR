@@ -69,7 +69,7 @@ struct SearchView: View {
                 viewModel.search()
             }
         }
-        .onChange(of: appState.searchQuery) {
+        .onChange(of: appState.searchQuery) { _ in
             Task {
                 viewModel.searchText = appState.searchQuery
                 if !appState.searchQuery.isEmpty {

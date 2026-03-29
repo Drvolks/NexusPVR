@@ -115,12 +115,11 @@ struct ServerConfigView: View {
 
                         VStack(spacing: Theme.spacingMD) {
                             TextField("Host (e.g. 192.168.1.100)", text: $config.host)
-                                .textContentType(.URL)
-                                .autocorrectionDisabled()
+                                                                .autocorrectionDisabled()
 
                             TextField("Port (default: \(config.useHTTPS ? "443" : "80"))", text: $portString)
                                 .keyboardType(.numberPad)
-                                .onChange(of: portString) { _, newValue in
+                                .onChange(of: portString) { newValue in
                                     config.port = Int(newValue)
                                 }
 
@@ -265,8 +264,7 @@ struct ServerConfigView: View {
                                     .foregroundStyle(Theme.textSecondary)
                                     .frame(width: 60, alignment: .trailing)
                                 TextField("192.168.1.100", text: $config.host)
-                                    .textContentType(.URL)
-                                    .textFieldStyle(.roundedBorder)
+                                                                        .textFieldStyle(.roundedBorder)
                             }
 
                             HStack {
@@ -277,7 +275,7 @@ struct ServerConfigView: View {
                                 TextField(config.useHTTPS ? "443" : "80", text: $portString)
                                     .textFieldStyle(.roundedBorder)
                                     .frame(width: 80)
-                                    .onChange(of: portString) { _, newValue in
+                                    .onChange(of: portString) { newValue in
                                         config.port = Int(newValue)
                                     }
                                 Spacer()
@@ -409,8 +407,7 @@ struct ServerConfigView: View {
         Section {
             LabeledContent("Host") {
                 TextField("192.168.1.100", text: $config.host)
-                    .textContentType(.URL)
-                    .keyboardType(.URL)
+                                        .keyboardType(.URL)
                     .autocapitalization(.none)
             }
 
@@ -418,7 +415,7 @@ struct ServerConfigView: View {
                 TextField(config.useHTTPS ? "443" : "80", text: $portString)
                     .multilineTextAlignment(.trailing)
                     .keyboardType(.numberPad)
-                    .onChange(of: portString) { _, newValue in
+                    .onChange(of: portString) { newValue in
                         config.port = Int(newValue)
                     }
             }
