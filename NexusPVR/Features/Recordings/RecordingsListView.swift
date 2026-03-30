@@ -61,6 +61,8 @@ private struct RecordingsListContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     #if os(tvOS)
     @Environment(\.requestSidebarFocus) private var requestSidebarFocus
+    @FocusState private var focusedRecordingID: Int?
+    @FocusState private var focusedSeriesName: String?
     #endif
 
     private var recordingsNavigationTitle: String {
@@ -327,6 +329,7 @@ private struct RecordingsListContentView: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .tvOSFocusableEmptyState()
     }
 
     private func emptyMessage(for filter: RecordingsFilter) -> String {
@@ -437,13 +440,40 @@ private struct RecordingsListContentView: View {
     private func recordingsList(_ vm: RecordingsViewModel) -> some View {
         #if os(tvOS)
         let channelIdByName = buildChannelIdByNameMap(from: vm.standaloneRecordings)
+        let recordingIDs = vm.standaloneRecordings.map(\.id)
         return ScrollView {
             LazyVStack(spacing: Theme.spacingMD) {
                 ForEach(vm.standaloneRecordings) { recording in
-                    tvOSRecordingRow(recording, channelIdByName: channelIdByName)
+                    tvOSRecordingRow(
+                        recording,
+                        channelIdByName: channelIdByName,
+                        showSeriesMeta: recording.seriesInfo != nil
+                    )
+                    .focused($focusedRecordingID, equals: recording.id)
                 }
             }
             .padding()
+        }
+        .onAppear {
+            guard !appState.showingRecordingsSeriesList, !appState.hasSelectedRecordingsSeries else { return }
+            guard let firstID = recordingIDs.first else { return }
+            if focusedRecordingID == nil || !recordingIDs.contains(focusedRecordingID ?? -1) {
+                DispatchQueue.main.async {
+                    focusedRecordingID = firstID
+                }
+            }
+        }
+        .onChange(of: recordingIDs) { ids in
+            guard !appState.showingRecordingsSeriesList, !appState.hasSelectedRecordingsSeries else { return }
+            guard let firstID = ids.first else {
+                focusedRecordingID = nil
+                return
+            }
+            if !ids.contains(focusedRecordingID ?? -1) {
+                DispatchQueue.main.async {
+                    focusedRecordingID = firstID
+                }
+            }
         }
         .onExitCommand {
             requestSidebarFocus()
@@ -483,6 +513,23 @@ private struct RecordingsListContentView: View {
         let channelIdByName = buildChannelIdByNameMap(from: recordings)
         return ScrollView {
             LazyVStack(alignment: .leading, spacing: Theme.spacingMD) {
+                Button {
+                    appState.showRecordingsSeriesMenu(userInitiated: true)
+                } label: {
+                    HStack(spacing: Theme.spacingSM) {
+                        Image(systemName: "chevron.left")
+                        Text("Back to Series")
+                        Spacer()
+                    }
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .padding(.horizontal, Theme.spacingMD)
+                    .padding(.vertical, Theme.spacingSM)
+                    .background(Theme.surface.opacity(0.35))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
+                }
+                .buttonStyle(TVRecordingSubtleButtonStyle())
+
                 if let summary {
                     let inlineActiveCount = min(3, summary.active.count)
                     let inlineCompletedCount = min(3 - inlineActiveCount, summary.completed.count)
@@ -535,6 +582,21 @@ private struct RecordingsListContentView: View {
         .background(seriesFanartBackgroundTV(resolvedBannerURLString))
         #else
         return List {
+            Button {
+                appState.showRecordingsSeriesMenu(userInitiated: true)
+            } label: {
+                HStack(spacing: Theme.spacingSM) {
+                    Image(systemName: "chevron.left")
+                        .foregroundStyle(Theme.accent)
+                    Text("Back to Series")
+                        .foregroundStyle(Theme.textPrimary)
+                    Spacer()
+                }
+                .font(.headline)
+            }
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+
             if let summary {
                 if resolvedLeftArtworkURLString != nil {
                     let maxInlineRows = horizontalSizeClass == .compact ? 1 : 3
@@ -986,21 +1048,22 @@ private struct RecordingsListContentView: View {
     }
     #endif
 
+    @ViewBuilder
     private func seriesIndexList(_ vm: RecordingsViewModel) -> some View {
         #if os(tvOS)
-        return ScrollView {
+        let seriesNames = vm.recordingsSeriesSummaries.map(\.name)
+        ScrollView {
             LazyVStack(spacing: Theme.spacingMD) {
                 ForEach(vm.recordingsSeriesSummaries) { summary in
                     Button {
                         appState.selectRecordingsSeries(named: summary.name, userInitiated: true)
                     } label: {
                         HStack(spacing: Theme.spacingMD) {
-                            Image(systemName: "arrow.2.squarepath")
-                                .foregroundStyle(Theme.accent)
+                            seriesListArtwork(summary: summary, width: 84, height: 126)
                             Text(summary.name)
                                 .foregroundStyle(Theme.textPrimary)
                             Spacer()
-                            Text("(\(summary.totalCount))")
+                            Text("(\(summary.unwatchedCount))")
                                 .foregroundStyle(Theme.textSecondary)
                         }
                         .font(.title3.weight(.semibold))
@@ -1009,44 +1072,149 @@ private struct RecordingsListContentView: View {
                         .background(Theme.surface)
                         .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
                     }
-                    .buttonStyle(.card)
+                    .buttonStyle(TVRecordingSubtleButtonStyle())
+                    .focused($focusedSeriesName, equals: summary.name)
                 }
             }
             .padding()
         }
+        .onAppear {
+            guard appState.showingRecordingsSeriesList else { return }
+            guard let firstName = seriesNames.first else { return }
+            if focusedSeriesName == nil || !seriesNames.contains(focusedSeriesName ?? "") {
+                DispatchQueue.main.async {
+                    focusedSeriesName = firstName
+                }
+            }
+        }
+        .onChange(of: seriesNames) { names in
+            guard appState.showingRecordingsSeriesList else { return }
+            guard let firstName = names.first else {
+                focusedSeriesName = nil
+                return
+            }
+            if !names.contains(focusedSeriesName ?? "") {
+                DispatchQueue.main.async {
+                    focusedSeriesName = firstName
+                }
+            }
+        }
         #else
-        return List {
+        #if os(iOS)
+        let columns = horizontalSizeClass == .regular
+            ? [
+                GridItem(.flexible(minimum: 320), spacing: Theme.spacingMD),
+                GridItem(.flexible(minimum: 320), spacing: Theme.spacingMD)
+            ]
+            : [
+                GridItem(.flexible(minimum: 280), spacing: Theme.spacingMD)
+            ]
+        ScrollView {
+            LazyVGrid(columns: columns, spacing: Theme.spacingMD) {
+                ForEach(vm.recordingsSeriesSummaries) { summary in
+                    Button {
+                        appState.selectRecordingsSeries(named: summary.name, userInitiated: true)
+                    } label: {
+                        seriesGridCard(summary: summary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, Theme.spacingLG)
+            .padding(.top, Theme.spacingMD)
+            .padding(.bottom, 120)
+        }
+        .refreshable {
+            await reloadRecordings()
+        }
+        #else
+        List {
             ForEach(vm.recordingsSeriesSummaries) { summary in
                 Button {
                     appState.selectRecordingsSeries(named: summary.name, userInitiated: true)
                 } label: {
                     HStack(spacing: Theme.spacingSM) {
-                        Image(systemName: "arrow.2.squarepath")
-                            .foregroundStyle(Theme.accent)
+                        seriesListArtwork(summary: summary, width: 42, height: 64)
                         Text(summary.name)
                             .foregroundStyle(Theme.textPrimary)
                         Spacer()
-                        Text("(\(summary.totalCount))")
+                        Text("(\(summary.unwatchedCount))")
                             .foregroundStyle(Theme.textSecondary)
                     }
                     .font(.headline)
                 }
                 .listRowBackground(Theme.surface)
             }
-
-            #if os(iOS)
-            Color.clear
-                .frame(height: 96)
-                .listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
-            #endif
         }
         .listStyle(.plain)
         .refreshable {
             await reloadRecordings()
         }
         #endif
+        #endif
+    }
+
+    @ViewBuilder
+    private func seriesGridCard(summary: RecordingsSeriesSummary) -> some View {
+        HStack(alignment: .center, spacing: Theme.spacingMD) {
+            seriesListArtwork(summary: summary, width: 86, height: 128)
+
+            VStack(alignment: .leading, spacing: Theme.spacingXS) {
+                Text(summary.name)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+
+                Text("Unwatched episodes: \(summary.unwatchedCount)")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.textSecondary)
+            }
+
+            Spacer(minLength: Theme.spacingSM)
+        }
+        .padding(Theme.spacingMD)
+        .frame(maxWidth: .infinity, minHeight: 148, alignment: .leading)
+        .background(Theme.surface.opacity(0.88))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusMD))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.cornerRadiusMD)
+                .stroke(Theme.surfaceHighlight, lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private func seriesListArtwork(summary: RecordingsSeriesSummary, width: CGFloat, height: CGFloat) -> some View {
+        let representativeRecordingId = summary.active.first?.id ?? summary.completed.first?.id ?? summary.scheduled.first?.id
+        let artworkURLString =
+            representativeRecordingId.flatMap { client.recordingArtworkURL(recordingId: $0, fanart: false)?.absoluteString } ??
+            summary.bannerURL
+
+        if let artworkURLString, let artworkURL = URL(string: artworkURLString) {
+            CachedAsyncImage(url: artworkURL) { image in
+                image
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } placeholder: {
+                ZStack {
+                    Theme.surfaceHighlight
+                    ProgressView()
+                        .tint(Theme.accent)
+                }
+            }
+            .frame(width: width, height: height)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.cornerRadiusSM)
+                    .stroke(Theme.surfaceHighlight, lineWidth: 1)
+            )
+        } else {
+            Image(systemName: "arrow.2.squarepath")
+                .foregroundStyle(Theme.accent)
+                .frame(width: width, height: height)
+                .background(Theme.surfaceHighlight)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
+        }
     }
 
     #if os(tvOS)
@@ -1122,11 +1290,15 @@ private struct RecordingsListContentView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Theme.spacingXL)
+        .tvOSFocusableEmptyState()
     }
     #else
     private func iOSRecordingRow(_ recording: Recording) -> some View {
         RecordingRow(
             recording: recording,
+            showSeriesMeta: recording.seriesInfo != nil,
+            showSeriesDescriptionOneLine: recording.seriesInfo != nil,
+            hideSeriesChannelName: recording.seriesInfo != nil,
             durationMismatch: viewModel.durationMismatches[recording.id],
             durationVerified: viewModel.durationVerified.contains(recording.id),
             durationUnverifiable: viewModel.durationUnverifiable.contains(recording.id)
@@ -1277,6 +1449,7 @@ private struct RecordingsListContentView: View {
         .padding(.vertical, Theme.spacingXL)
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
+        .tvOSFocusableEmptyState()
     }
     #endif
 

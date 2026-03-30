@@ -17,6 +17,7 @@ struct TopicsView: View {
     @State private var selectedKeyword: String = ""
     @Environment(\.scenePhase) private var scenePhase
     #if os(tvOS)
+    @Environment(\.requestSidebarFocus) private var requestSidebarFocus
     @State private var newKeyword = ""
     #endif
 
@@ -313,6 +314,12 @@ struct TopicsView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .tvOSFocusableEmptyState()
+        #if os(tvOS)
+        .onExitCommand {
+            requestSidebarFocus()
+        }
+        #endif
     }
 
     private var programsList: some View {

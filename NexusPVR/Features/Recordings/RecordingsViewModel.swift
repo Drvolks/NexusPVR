@@ -33,6 +33,7 @@ struct RecordingsSeriesSummary: Identifiable {
 
     var id: String { name }
     var totalCount: Int { active.count + completed.count + scheduled.count }
+    var unwatchedCount: Int { completed.filter { !$0.isWatched }.count }
 }
 
 @MainActor
@@ -77,14 +78,9 @@ final class RecordingsViewModel: ObservableObject {
         }
     }
 
-    /// Recordings that are NOT part of a series (standalone)
+    /// Recordings shown in the main list for the active filter.
     var standaloneRecordings: [Recording] {
-        switch filter {
-        case .recording:
-            return filteredRecordings
-        case .completed, .scheduled:
-            return filteredRecordings.filter { $0.seriesInfo == nil }
-        }
+        filteredRecordings
     }
 
     /// Series groups for the current filter, sorted by series name

@@ -131,9 +131,44 @@ private func durationUnverifiableLabel() -> some View {
 
 struct RecordingRow: View {
     let recording: Recording
+    var showSeriesMeta: Bool = false
+    var showSeriesDescriptionOneLine: Bool = false
+    var hideSeriesChannelName: Bool = false
     var durationMismatch: (expected: Int, detected: Int)?
     var durationVerified: Bool = false
     var durationUnverifiable: Bool = false
+    
+    private var usesUnifiedMetadataLayout: Bool {
+        recording.recordingStatus.isScheduled || recording.recordingStatus.isCompleted
+    }
+
+    private var cleanedEpisodeTitle: String? {
+        guard let subtitle = recording.subtitle?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !subtitle.isEmpty else { return nil }
+        let cleaned = SeriesInfo.stripPattern(from: subtitle).trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? nil : cleaned
+    }
+
+    private var primaryTitleText: String {
+        if let episode = cleanedEpisodeTitle {
+            return "\(recording.cleanName) - \(episode)"
+        }
+        return recording.cleanName
+    }
+
+    private var broadcastDateTimeText: String? {
+        guard let start = recording.startDate else { return nil }
+        if let end = recording.endDate {
+            return "\(start.formatted(date: .abbreviated, time: .shortened)) – \(end.formatted(date: .omitted, time: .shortened))"
+        }
+        return start.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    private var oneLineDescriptionText: String? {
+        guard let desc = recording.desc?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !desc.isEmpty else { return nil }
+        return desc
+    }
 
     private func recordingProgress(at date: Date) -> Double? {
         guard recording.recordingStatus == .recording,
@@ -151,50 +186,135 @@ struct RecordingRow: View {
 
             // Content area
             VStack(alignment: .leading, spacing: Theme.spacingXS) {
-                // Row 1: Program title
-                HStack(alignment: .top, spacing: 6) {
-                    Text(recording.cleanName)
-                        .font(.headline)
-                        .foregroundStyle(Theme.textPrimary)
-                        .lineLimit(2)
-                    Spacer()
-                    if recording.isNew { NewBadge() }
-                }
+                if usesUnifiedMetadataLayout {
+                    // Row 1: SxxExx Program - Episode
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        if showSeriesMeta, let series = recording.seriesInfo {
+                            Text(series.shortDisplayString)
+                                .font(.headline.weight(.semibold))
+                                .foregroundStyle(Theme.accent)
+                                .lineLimit(1)
+                        }
 
-                // Row 2: Channel name | File size
-                HStack {
-                    if let channel = recording.channel {
-                        Text(channel)
-                            .font(.subheadline)
-                            .foregroundStyle(Theme.textSecondary)
+                        Text(primaryTitleText)
+                            .font(.headline)
+                            .foregroundStyle(Theme.textPrimary)
                             .lineLimit(1)
+                        Spacer()
+                        if recording.isNew { NewBadge() }
                     }
-                    Spacer()
-                    if let size = recording.fileSizeFormatted {
-                        Text(size)
-                            .font(.subheadline)
-                            .foregroundStyle(Theme.textSecondary)
-                    }
-                }
 
-                // Row 3: Date + time range | Duration
-                HStack {
-                    if let start = recording.startDate {
-                        if let end = recording.endDate {
-                            Text("\(start.formatted(date: .abbreviated, time: .shortened)) – \(end.formatted(date: .omitted, time: .shortened))")
+                    // Row 2: Date/time | Duration (right unchanged)
+                    HStack {
+                        if let dateTime = broadcastDateTimeText {
+                            Text(dateTime)
                                 .font(.caption)
                                 .foregroundStyle(Theme.textTertiary)
-                        } else {
-                            Text(start.formatted(date: .abbreviated, time: .shortened))
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        if let duration = recording.durationMinutes {
+                            Text("\(duration) min")
                                 .font(.caption)
-                                .foregroundStyle(Theme.textTertiary)
+                                .foregroundStyle(durationVerified ? Theme.success : Theme.textTertiary)
                         }
                     }
-                    Spacer()
-                    if let duration = recording.durationMinutes {
-                        Text("\(duration) min")
-                            .font(.caption)
-                            .foregroundStyle(durationVerified ? Theme.success : Theme.textTertiary)
+
+                    // Row 3: Description one-liner | Size (right unchanged)
+                    HStack(alignment: .firstTextBaseline, spacing: Theme.spacingSM) {
+                        if let desc = oneLineDescriptionText {
+                            Text(desc)
+                                .font(.subheadline)
+                                .foregroundStyle(Theme.textSecondary)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        if let size = recording.fileSizeFormatted {
+                            Text(size)
+                                .font(.subheadline)
+                                .foregroundStyle(Theme.textSecondary)
+                                .lineLimit(1)
+                        }
+                    }
+                } else {
+                    // Row 1: Program title
+                    HStack(alignment: .top, spacing: 6) {
+                        if showSeriesMeta, let series = recording.seriesInfo {
+                            Text(series.shortDisplayString)
+                                .font(.headline.weight(.semibold))
+                                .foregroundStyle(Theme.accent)
+                                .lineLimit(1)
+                        }
+
+                        Text(recording.cleanName)
+                            .font(.headline)
+                            .foregroundStyle(Theme.textPrimary)
+                            .lineLimit(2)
+                        Spacer()
+                        if recording.isNew { NewBadge() }
+                    }
+
+                    if showSeriesDescriptionOneLine,
+                       showSeriesMeta,
+                       let desc = recording.desc?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !desc.isEmpty {
+                        HStack(alignment: .firstTextBaseline, spacing: Theme.spacingSM) {
+                            Text(desc)
+                                .font(.subheadline)
+                                .foregroundStyle(Theme.textSecondary)
+                                .lineLimit(1)
+                            Spacer()
+                            if hideSeriesChannelName,
+                               showSeriesMeta,
+                               let size = recording.fileSizeFormatted {
+                                Text(size)
+                                    .font(.subheadline)
+                                    .foregroundStyle(Theme.textSecondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+
+                    // Row 2: Channel name | File size
+                    if (recording.channel != nil && !(hideSeriesChannelName && showSeriesMeta)) ||
+                        (recording.fileSizeFormatted != nil && !(hideSeriesChannelName && showSeriesMeta)) {
+                        HStack {
+                            if !(hideSeriesChannelName && showSeriesMeta),
+                               let channel = recording.channel {
+                                Text(channel)
+                                    .font(.subheadline)
+                                    .foregroundStyle(Theme.textSecondary)
+                                    .lineLimit(1)
+                            }
+                            Spacer()
+                            if !(hideSeriesChannelName && showSeriesMeta),
+                               let size = recording.fileSizeFormatted {
+                                Text(size)
+                                    .font(.subheadline)
+                                    .foregroundStyle(Theme.textSecondary)
+                            }
+                        }
+                    }
+
+                    // Row 3: Date + time range | Duration
+                    HStack {
+                        if let start = recording.startDate {
+                            if let end = recording.endDate {
+                                Text("\(start.formatted(date: .abbreviated, time: .shortened)) – \(end.formatted(date: .omitted, time: .shortened))")
+                                    .font(.caption)
+                                    .foregroundStyle(Theme.textTertiary)
+                            } else {
+                                Text(start.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.caption)
+                                    .foregroundStyle(Theme.textTertiary)
+                            }
+                        }
+                        Spacer()
+                        if let duration = recording.durationMinutes {
+                            Text("\(duration) min")
+                                .font(.caption)
+                                .foregroundStyle(durationVerified ? Theme.success : Theme.textTertiary)
+                        }
                     }
                 }
 
@@ -282,6 +402,41 @@ struct RecordingRowTV: View {
         return formatter
     }()
 
+    private var usesUnifiedMetadataLayout: Bool {
+        recording.recordingStatus.isScheduled || recording.recordingStatus.isCompleted
+    }
+
+    private var cleanedEpisodeTitle: String? {
+        guard let subtitle = recording.subtitle?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !subtitle.isEmpty else { return nil }
+        let cleaned = SeriesInfo.stripPattern(from: subtitle).trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? nil : cleaned
+    }
+
+    private var primaryTitleText: String {
+        if let episode = cleanedEpisodeTitle {
+            return "\(recording.cleanName) - \(episode)"
+        }
+        return recording.cleanName
+    }
+
+    private var broadcastDateTimeRangeText: String {
+        guard let start = recording.startDate else { return "No schedule" }
+        let dateText = Self.seriesDateFormatter.string(from: start)
+        let startText = Self.seriesTimeFormatter.string(from: start)
+        if let end = recording.endDate {
+            let endText = Self.seriesTimeFormatter.string(from: end)
+            return "\(dateText) - \(startText) - \(endText)"
+        }
+        return "\(dateText) - \(startText)"
+    }
+
+    private var oneLineDescriptionText: String? {
+        guard let desc = recording.desc?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !desc.isEmpty else { return nil }
+        return desc
+    }
+
     private var watchProgress: Double? {
         guard let position = recording.playbackPosition,
               let duration = recording.duration,
@@ -347,8 +502,18 @@ struct RecordingRowTV: View {
         return Theme.guideNowPlaying
     }
 
+    private var channelCellBackground: Color {
+        usesUnifiedMetadataLayout ? Theme.surfaceElevated.opacity(0.9) : Color.clear
+    }
+
     private var rowHeight: CGFloat {
-        showSeriesMeta ? Theme.cellHeight + 44 : Theme.cellHeight
+        if usesUnifiedMetadataLayout, oneLineDescriptionText != nil {
+            return Theme.cellHeight + 14
+        }
+        if showSeriesMeta, seriesDescriptionText != nil {
+            return Theme.cellHeight + 20
+        }
+        return Theme.cellHeight
     }
 
     private var scheduledDetailText: String? {
@@ -430,9 +595,16 @@ struct RecordingRowTV: View {
                 }
                 .padding(.horizontal, Theme.spacingMD)
                 .frame(width: Theme.channelColumnWidth, height: rowHeight)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(channelCellBackground)
+                )
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(isFocused ? Theme.accent.opacity(0.35) : Color.clear, lineWidth: 1)
+                        .stroke(
+                            isFocused ? Theme.accent.opacity(0.35) : Theme.surfaceHighlight.opacity(0.55),
+                            lineWidth: 1
+                        )
                 )
 
                 // Program cell (Guide-like right side)
@@ -441,28 +613,68 @@ struct RecordingRowTV: View {
                         RecordingStatusIcon(recording: recording, size: 54)
 
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(recording.cleanName)
-                                .font(.system(size: 20, weight: .semibold))
-                                .foregroundStyle(.white.opacity(isFocused ? 1.0 : 0.95))
-                                .lineLimit(1)
+                            if usesUnifiedMetadataLayout {
+                                // Line 1: SxxExx Program - Episode
+                                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                    if showSeriesMeta, let series = recording.seriesInfo {
+                                        Text(series.shortDisplayString)
+                                            .font(.system(size: 20, weight: .semibold))
+                                            .foregroundStyle(Theme.accent.opacity(isFocused ? 0.98 : 0.9))
+                                            .lineLimit(1)
+                                    }
 
-                            Text(showSeriesMeta ? seriesDateTimeRangeText : timeRangeText)
-                                .font(.system(size: 24, weight: .medium))
-                                .foregroundStyle(.white.opacity(isFocused ? 0.82 : 0.72))
-                                .lineLimit(1)
+                                    Text(primaryTitleText)
+                                        .font(.system(size: 20, weight: .semibold))
+                                        .foregroundStyle(Theme.textPrimary.opacity(isFocused ? 1.0 : 0.95))
+                                        .lineLimit(1)
+                                }
 
-                            if let detail = scheduledDetailText {
-                                Text(detail)
-                                    .font(.system(size: 17))
-                                    .foregroundStyle(.white.opacity(isFocused ? 0.76 : 0.64))
+                                // Line 2: Broadcast date and time
+                                Text(broadcastDateTimeRangeText)
+                                    .font(.system(size: 24, weight: .medium))
+                                    .foregroundStyle(Theme.textSecondary.opacity(isFocused ? 0.88 : 0.76))
                                     .lineLimit(1)
-                            }
 
-                            if let desc = seriesDescriptionText {
-                                Text(desc)
-                                    .font(.system(size: 16))
-                                    .foregroundStyle(.white.opacity(isFocused ? 0.74 : 0.62))
-                                    .lineLimit(2)
+                                // Line 3: Description one-liner
+                                if let desc = oneLineDescriptionText {
+                                    Text(desc)
+                                        .font(.system(size: 17))
+                                        .foregroundStyle(Theme.textSecondary.opacity(isFocused ? 0.84 : 0.72))
+                                        .lineLimit(1)
+                                }
+                            } else {
+                                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                    if showSeriesMeta, let series = recording.seriesInfo {
+                                        Text(series.shortDisplayString)
+                                            .font(.system(size: 20, weight: .semibold))
+                                            .foregroundStyle(Theme.accent.opacity(isFocused ? 0.98 : 0.9))
+                                            .lineLimit(1)
+                                    }
+
+                                    Text(recording.cleanName)
+                                        .font(.system(size: 20, weight: .semibold))
+                                        .foregroundStyle(Theme.textPrimary.opacity(isFocused ? 1.0 : 0.95))
+                                        .lineLimit(1)
+                                }
+
+                                Text(showSeriesMeta ? seriesDateTimeRangeText : timeRangeText)
+                                    .font(.system(size: 24, weight: .medium))
+                                    .foregroundStyle(Theme.textSecondary.opacity(isFocused ? 0.88 : 0.76))
+                                    .lineLimit(1)
+
+                                if let detail = scheduledDetailText {
+                                    Text(detail)
+                                        .font(.system(size: 17))
+                                        .foregroundStyle(Theme.textSecondary.opacity(isFocused ? 0.84 : 0.72))
+                                        .lineLimit(1)
+                                }
+
+                                if let desc = seriesDescriptionText {
+                                    Text(desc)
+                                        .font(.system(size: 16))
+                                        .foregroundStyle(Theme.textTertiary.opacity(isFocused ? 0.9 : 0.78))
+                                        .lineLimit(2)
+                                }
                             }
 
                             if let warning = tvDurationWarningText {
@@ -491,17 +703,25 @@ struct RecordingRowTV: View {
                             if !recording.recordingStatus.isCompleted {
                                 Text(actionLabel)
                                     .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(isFocused ? .white.opacity(0.86) : recording.recordingStatus.statusColor.opacity(0.9))
+                                    .foregroundStyle(
+                                        isFocused
+                                            ? Theme.textPrimary.opacity(0.92)
+                                            : recording.recordingStatus.statusColor.opacity(0.9)
+                                    )
                             }
                             if let size = recording.fileSizeFormatted {
                                 Text(size)
                                     .font(.caption)
-                                    .foregroundStyle(.white.opacity(isFocused ? 0.6 : 0.48))
+                                    .foregroundStyle(Theme.textTertiary.opacity(isFocused ? 0.75 : 0.62))
                             }
                             if let duration = recording.durationMinutes {
                                 Text("\(duration) min")
                                     .font(.caption)
-                                    .foregroundStyle(durationVerified ? Theme.success.opacity(isFocused ? 0.9 : 0.75) : .white.opacity(isFocused ? 0.58 : 0.45))
+                                    .foregroundStyle(
+                                        durationVerified
+                                            ? Theme.success.opacity(isFocused ? 0.9 : 0.75)
+                                            : Theme.textTertiary.opacity(isFocused ? 0.72 : 0.58)
+                                    )
                             }
                         }
                     }

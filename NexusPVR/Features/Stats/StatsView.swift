@@ -184,6 +184,7 @@ struct StatsView: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, minHeight: 200)
+        .tvOSFocusableEmptyState()
     }
 }
 

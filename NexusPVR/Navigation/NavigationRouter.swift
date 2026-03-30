@@ -533,16 +533,7 @@ struct IOSNavigation: View {
                             }
                             sidebarSubRow(label: "Completed", filter: .completed)
                             sidebarSubRow(label: "Scheduled", filter: .scheduled)
-                            if appState.recordingsSeriesIsLoading && appState.recordingsSeriesItems.isEmpty {
-                                sidebarStaticSubRow(label: "Loading series")
-                            } else {
-                                ForEach(Array(appState.recordingsSeriesItems.prefix(maxSeriesSidebarItems))) { series in
-                                    sidebarSeriesSubRow(series)
-                                }
-                                if appState.recordingsSeriesItems.count > maxSeriesSidebarItems {
-                                    sidebarShowMoreSubRow()
-                                }
-                            }
+                            sidebarShowMoreSubRow()
                         } else if tab == .topics {
                             // Topics header — opens keywords editor as full view
                             Button {
@@ -677,12 +668,8 @@ struct IOSNavigation: View {
     }
 
     private func sidebarShowMoreSubRow() -> some View {
-        let selectedSeriesIsHidden = appState.hasSelectedRecordingsSeries &&
-            !appState.recordingsSeriesItems.prefix(maxSeriesSidebarItems).contains {
-                $0.name == appState.selectedRecordingsSeriesName
-            }
         let isSelected = appState.selectedTab == .recordings &&
-            (appState.showingRecordingsSeriesList || selectedSeriesIsHidden)
+            (appState.showingRecordingsSeriesList || appState.hasSelectedRecordingsSeries)
         return Button {
             appState.showRecordingsSeriesMenu(userInitiated: true)
             appState.selectedTab = .recordings
@@ -692,7 +679,7 @@ struct IOSNavigation: View {
         } label: {
             HStack(spacing: 12) {
                 Color.clear.frame(width: 28)
-                Text("Show More")
+                Text("Series")
                     .font(.subheadline)
                 Spacer()
             }
@@ -705,7 +692,7 @@ struct IOSNavigation: View {
             )
             .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadiusSM))
         }
-        .accessibilityIdentifier("recordings-series-show-more")
+        .accessibilityIdentifier("recordings-series-menu")
     }
 
     private func sidebarStaticSubRow(label: String) -> some View {
@@ -1106,30 +1093,12 @@ struct TVOSNavigation: View {
                                         !appState.showingRecordingsSeriesList &&
                                         appState.recordingsFilter == .scheduled
                                 ) { EmptyView() }
-                                if appState.recordingsSeriesIsLoading && appState.recordingsSeriesItems.isEmpty {
-                                    tvOSSidebarStaticSubRow(label: "Loading series")
-                                } else {
-                                    ForEach(Array(appState.recordingsSeriesItems.prefix(maxSeriesSidebarItems))) { series in
-                                        tvOSSidebarSubRow(
-                                            label: "\(series.name) (\(series.count))",
-                                            item: .recordingsSeries(series.name),
-                                            isSelected: appState.selectedTab == .recordings && appState.selectedRecordingsSeriesName == series.name,
-                                            maxLines: 2
-                                        ) { EmptyView() }
-                                    }
-                                    if appState.recordingsSeriesItems.count > maxSeriesSidebarItems {
-                                        let selectedSeriesIsHidden = appState.hasSelectedRecordingsSeries &&
-                                            !appState.recordingsSeriesItems.prefix(maxSeriesSidebarItems).contains {
-                                                $0.name == appState.selectedRecordingsSeriesName
-                                            }
-                                        tvOSSidebarSubRow(
-                                            label: "Show More",
-                                            item: .recordingsSeriesMore,
-                                            isSelected: appState.selectedTab == .recordings &&
-                                                (appState.showingRecordingsSeriesList || selectedSeriesIsHidden)
-                                        ) { EmptyView() }
-                                    }
-                                }
+                                tvOSSidebarSubRow(
+                                    label: "Series",
+                                    item: .recordingsSeriesMore,
+                                    isSelected: appState.selectedTab == .recordings &&
+                                        (appState.showingRecordingsSeriesList || appState.hasSelectedRecordingsSeries)
+                                ) { EmptyView() }
                             }
                         } else if tab == .topics {
                             tvOSSidebarSection(icon: tab.icon, label: tab.label) {

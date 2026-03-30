@@ -10,6 +10,9 @@ import SwiftUI
 struct LiveTVView: View {
     @EnvironmentObject private var client: PVRClient
     @EnvironmentObject private var appState: AppState
+    #if os(tvOS)
+    @Environment(\.requestSidebarFocus) private var requestSidebarFocus
+    #endif
     @State private var viewModel: LiveTVViewModel?
     @State private var playError: String?
 
@@ -118,6 +121,12 @@ struct LiveTVView: View {
                 .foregroundStyle(Theme.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .tvOSFocusableEmptyState()
+        #if os(tvOS)
+        .onExitCommand {
+            requestSidebarFocus()
+        }
+        #endif
     }
 
     private func channelGrid(_ vm: LiveTVViewModel) -> some View {

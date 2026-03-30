@@ -22,6 +22,9 @@ struct GuideView: View {
     @EnvironmentObject private var client: PVRClient
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var epgCache: EPGCache
+    #if os(tvOS)
+    @Environment(\.requestSidebarFocus) private var requestSidebarFocus
+    #endif
     #if os(iOS)
     @EnvironmentObject var viewModel: GuideViewModel
     #else
@@ -517,6 +520,12 @@ struct GuideView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .tvOSFocusableEmptyState()
+        #if os(tvOS)
+        .onExitCommand {
+            requestSidebarFocus()
+        }
+        #endif
     }
 
     @State private var currentTimelineHour: Date?
@@ -903,8 +912,16 @@ struct GuideView: View {
         }
         .padding(.leading, 40)
         .padding(.trailing, 10)
-        .frame(width: channelWidth, height: rowHeight)
-        .background(.ultraThinMaterial)
+        .frame(width: channelWidth, height: rowHeight - 10)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Theme.surfaceElevated.opacity(0.92))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(isSelected ? Theme.accent.opacity(0.6) : Theme.surfaceHighlight.opacity(0.55), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
     private func tvOSProgramCell(program: Program, isFocused: Bool, gridWidth: CGFloat, pxPerMinute: CGFloat) -> some View {
@@ -1475,7 +1492,14 @@ struct GuideView: View {
         }
         .padding(Theme.spacingSM)
         .frame(width: channelWidth, height: rowHeight)
-        .background(Theme.channelColumnBackground)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Theme.surfaceElevated.opacity(0.9))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Theme.surfaceHighlight.opacity(0.55), lineWidth: 1)
+        )
         #else
         // iOS/macOS: tappable to play live
         Button {

@@ -116,6 +116,7 @@ struct SearchView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .tvOSFocusableEmptyState()
     }
 
     private var loadingView: some View {
@@ -161,6 +162,7 @@ struct SearchView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .tvOSFocusableEmptyState()
     }
 
     private var resultsList: some View {

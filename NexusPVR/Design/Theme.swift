@@ -417,7 +417,30 @@ extension View {
     func cardStyle(isSelected: Bool = false) -> some View {
         modifier(CardStyle(isSelected: isSelected))
     }
+
+    @ViewBuilder
+    func tvOSFocusableEmptyState() -> some View {
+        #if os(tvOS)
+        modifier(TVOSFocusableEmptyStateModifier())
+        #else
+        self
+        #endif
+    }
 }
+
+#if os(tvOS)
+private struct TVOSFocusableEmptyStateModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        Button(action: {}) {
+            content
+                .contentShape(Rectangle())
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        }
+        .buttonStyle(.plain)
+        .focusable(true)
+    }
+}
+#endif
 
 // MARK: - Typography
 
