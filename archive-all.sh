@@ -30,6 +30,9 @@ AUTH_FLAGS=(-allowProvisioningUpdates \
   -authenticationKeyID "$KEY_ID" \
   -authenticationKeyIssuerID "$ISSUER_ID")
 
+EXPORT_RETRY_MAX_ATTEMPTS="${EXPORT_RETRY_MAX_ATTEMPTS:-4}"
+EXPORT_RETRY_BASE_DELAY_SECONDS="${EXPORT_RETRY_BASE_DELAY_SECONDS:-15}"
+
 rm -rf "$EXPORT_DIR"
 
 # --- Determine build number from git commit count ---
@@ -37,6 +40,29 @@ rm -rf "$EXPORT_DIR"
 cd "$SCRIPT_DIR"
 BUILD_NUMBER=$(git rev-list HEAD --count)
 echo "=== Build number (git commit count): $BUILD_NUMBER ==="
+
+retry_export_archive() {
+  local attempt=1
+  local max_attempts="$1"
+  shift
+
+  while [ "$attempt" -le "$max_attempts" ]; do
+    echo "=== Export attempt $attempt/$max_attempts ==="
+    if xcodebuild -exportArchive "$@"; then
+      return 0
+    fi
+
+    if [ "$attempt" -eq "$max_attempts" ]; then
+      echo "ERROR: Export failed after $max_attempts attempts."
+      return 1
+    fi
+
+    local sleep_seconds=$((EXPORT_RETRY_BASE_DELAY_SECONDS * attempt))
+    echo "Export failed (likely transient). Retrying in ${sleep_seconds}s..."
+    sleep "$sleep_seconds"
+    attempt=$((attempt + 1))
+  done
+}
 
 # --- Archive ---
 
@@ -79,7 +105,7 @@ for SCHEME in "${SCHEMES[@]}"; do
   for PLATFORM in "${PLATFORMS[@]}"; do
     echo "=== Exporting $SCHEME ($PLATFORM) ==="
     mkdir -p "$EXPORT_DIR/$SCHEME/$PLATFORM"
-    xcodebuild -exportArchive \
+    retry_export_archive "$EXPORT_RETRY_MAX_ATTEMPTS" \
       -archivePath "$ARCHIVE_DIR/$SCHEME-$PLATFORM.xcarchive" \
       -exportOptionsPlist "$EXPORT_PLIST" \
       -exportPath "$EXPORT_DIR/$SCHEME/$PLATFORM" \
@@ -116,7 +142,24 @@ done
 
 TAG="build-$BUILD_NUMBER"
 echo "=== Tagging commit as $TAG ==="
-git tag "$TAG"
-git push origin "$TAG"
+if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+  EXISTING_TAG_COMMIT=$(git rev-list -n 1 "$TAG")
+  CURRENT_COMMIT=$(git rev-parse HEAD)
+  if [ "$EXISTING_TAG_COMMIT" = "$CURRENT_COMMIT" ]; then
+    echo "Tag $TAG already exists on current commit; skipping tag creation."
+  else
+    echo "ERROR: Tag $TAG already exists on a different commit ($EXISTING_TAG_COMMIT)."
+    echo "Refusing to retag. Create a new commit or choose another tag."
+    exit 1
+  fi
+else
+  git tag "$TAG"
+fi
+
+if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+  echo "Tag $TAG already exists on origin; skipping push."
+else
+  git push origin "$TAG"
+fi
 
 echo "=== All schemes and platforms archived and uploaded to TestFlight ==="
