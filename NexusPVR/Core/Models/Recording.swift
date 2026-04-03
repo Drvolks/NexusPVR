@@ -14,38 +14,6 @@ private struct DynamicRecordingCodingKey: CodingKey {
     init?(stringValue: String) { self.stringValue = stringValue }
 }
 
-nonisolated enum RecordingStatus: String, Codable {
-    case pending = "pending"
-    case recording = "recording"
-    case ready = "ready"
-    case failed = "failed"
-    case conflict = "conflict"
-    case deleted = "deleted"
-
-    var displayName: String {
-        switch self {
-        case .pending: return "Scheduled"
-        case .recording: return "Recording"
-        case .ready: return "Completed"
-        case .failed: return "Failed"
-        case .conflict: return "Conflict"
-        case .deleted: return "Deleted"
-        }
-    }
-
-    var isCompleted: Bool {
-        self == .ready
-    }
-
-    var isPlayable: Bool {
-        self == .ready || self == .recording
-    }
-
-    var isScheduled: Bool {
-        self == .pending
-    }
-}
-
 nonisolated struct Recording: Identifiable, Codable, Hashable {
     let id: Int
     let name: String
@@ -253,49 +221,6 @@ nonisolated struct Recording: Identifiable, Codable, Hashable {
         }
         return nil
     }
-}
-
-nonisolated struct RecordingListResponse: Codable {
-    let recordings: [Recording]?
-}
-
-nonisolated struct RecurringRecording: Identifiable, Decodable {
-    let id: Int
-    let name: String
-    let channelID: Int?
-    let channel: String?
-    let enabled: Bool?
-
-    enum CodingKeys: String, CodingKey {
-        case id, name, channelID, channel, enabled
-        case epgTitle
-    }
-
-    init(id: Int, name: String, channelID: Int?, channel: String?, enabled: Bool?) {
-        self.id = id
-        self.name = name
-        self.channelID = channelID
-        self.channel = channel
-        self.enabled = enabled
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(Int.self, forKey: .id)
-        // Try epgTitle first, then name
-        if let title = try? container.decode(String.self, forKey: .epgTitle) {
-            name = title
-        } else {
-            name = try container.decode(String.self, forKey: .name)
-        }
-        channelID = try container.decodeIfPresent(Int.self, forKey: .channelID)
-        channel = try container.decodeIfPresent(String.self, forKey: .channel)
-        enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled)
-    }
-}
-
-nonisolated struct RecurringRecordingListResponse: Decodable {
-    let recurrings: [RecurringRecording]?
 }
 
 extension Recording {

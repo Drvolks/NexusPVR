@@ -45,11 +45,6 @@ nonisolated protocol BrandConfig {
     static var guideNowPlaying: Color { get }
 }
 
-nonisolated enum AuthType {
-    case pin
-    case usernamePassword
-}
-
 #if DISPATCHERPVR
 typealias Brand = DispatcherPVRBrand
 #if !TOPSHELF_EXTENSION

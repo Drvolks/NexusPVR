@@ -7,11 +7,6 @@
 
 import Foundation
 
-nonisolated struct WatchedChannel: Codable, Equatable {
-    let channelId: Int
-    let channelName: String
-}
-
 nonisolated struct WatchHistory: Codable {
     var recentChannels: [WatchedChannel] = []
 

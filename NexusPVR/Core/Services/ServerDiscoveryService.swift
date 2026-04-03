@@ -9,19 +9,6 @@ import Combine
 import CryptoKit
 import Foundation
 
-nonisolated struct DiscoveredServer: Identifiable, Equatable {
-    let id: String // IP address
-    let host: String
-    let port: Int
-    let serverName: String
-    let requiresAuth: Bool // true if provided PIN/credentials don't work
-}
-
-nonisolated struct HostProbeResult: Equatable {
-    let port: Int
-    let useHTTPS: Bool
-}
-
 @MainActor
 class ServerDiscoveryService: ObservableObject {
     @Published var discoveredServers: [DiscoveredServer] = []

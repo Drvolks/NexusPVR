@@ -49,18 +49,3 @@ nonisolated struct Channel: Identifiable, Decodable, Hashable, Sendable {
         URL(string: "\(baseURL)/service?method=channel.icon&channel_id=\(id)")
     }
 }
-
-nonisolated struct ChannelProfile: Identifiable, Decodable, Sendable {
-    let id: Int
-    let name: String
-    let channels: [Int]
-}
-
-nonisolated struct ChannelGroup: Identifiable, Decodable, Sendable {
-    let id: Int
-    let name: String
-}
-
-nonisolated struct ChannelListResponse: Decodable {
-    let channels: [Channel]?
-}

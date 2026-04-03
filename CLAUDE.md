@@ -52,6 +52,9 @@ NexusPVR/
 
 ## Key Patterns
 
+### Swift
+All struct and enum are in their own swift file.
+
 ### Environment Objects
 - `NextPVRClient` - API client, injected via `.environmentObject()`
 - `AppState` - Global state for playback, navigation

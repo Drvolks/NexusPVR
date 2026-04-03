@@ -9,33 +9,6 @@ import SwiftUI
 import Combine
 import AVFoundation
 
-enum RecordingsFilter: String, Identifiable {
-    case completed = "Completed"
-    case recording = "Recording"
-    case scheduled = "Scheduled"
-
-    var id: String { rawValue }
-}
-
-struct SeriesGroup: Identifiable {
-    let seriesName: String
-    let recordings: [Recording]
-
-    var id: String { seriesName }
-}
-
-struct RecordingsSeriesSummary: Identifiable {
-    let name: String
-    let active: [Recording]
-    let completed: [Recording]
-    let scheduled: [Recording]
-    let bannerURL: String?
-
-    var id: String { name }
-    var totalCount: Int { active.count + completed.count + scheduled.count }
-    var unwatchedCount: Int { completed.filter { !$0.isWatched }.count }
-}
-
 @MainActor
 final class RecordingsViewModel: ObservableObject {
     @Published var completedRecordings: [Recording] = []
