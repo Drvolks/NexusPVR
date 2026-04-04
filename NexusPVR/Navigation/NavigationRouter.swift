@@ -917,15 +917,18 @@ struct TVOSNavigation: View {
     @State private var sidebarEnabled = true
     @FocusState private var focusedItem: TVSidebarItem?
 
-    private let sidebarWidth: CGFloat = 280
+    private let sidebarWidth: CGFloat = 440
 
     var body: some View {
         HStack(spacing: 0) {
-            // Persistent left sidebar — collapses to icons when content has focus
-            tvOSSidebar
-                .frame(width: sidebarWidth)
-                .disabled(!sidebarEnabled)
-                .focusSection()
+            // Persistent left sidebar — hidden when content has focus
+            if sidebarEnabled {
+                tvOSSidebar
+                    .frame(width: sidebarWidth)
+                    .disabled(!sidebarEnabled)
+                    .focusSection()
+                    .transition(.move(edge: .leading))
+            }
 
             // Main content
             Group {
@@ -949,6 +952,7 @@ struct TVOSNavigation: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .environment(\.requestSidebarFocus, focusSidebar)
         }
+        .animation(.easeInOut(duration: 0.25), value: sidebarEnabled)
         .background(.ultraThinMaterial)
         .onExitCommand {
             if appState.selectedTab == .settings {
@@ -1165,15 +1169,15 @@ struct TVOSNavigation: View {
                 // Selected indicator
                 RoundedRectangle(cornerRadius: 2)
                     .fill(isSelected ? Theme.accent : Color.clear)
-                    .frame(width: 4, height: 24)
+                    .frame(width: 4, height: 28)
 
                 Image(systemName: icon)
-                    .font(.headline)
-                    .frame(width: 30, alignment: .center)
+                    .font(.title3)
+                    .frame(width: 44, alignment: .center)
                     .foregroundStyle(isSelected ? Theme.accent : .secondary)
 
                 Text(label)
-                    .font(.headline)
+                    .font(.title3)
                     .lineLimit(1)
 
                 Spacer()
@@ -1194,14 +1198,18 @@ struct TVOSNavigation: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Section header — plain HStack, no .card wrapper
+            // Section header — plain HStack, aligned with sidebar rows
             HStack(spacing: 14) {
+                // Spacer matching the selected indicator width
+                Color.clear
+                    .frame(width: 4, height: 1)
+
                 Image(systemName: icon)
-                    .font(.headline)
-                    .frame(width: 30, alignment: .center)
+                    .font(.title3)
+                    .frame(width: 44, alignment: .center)
 
                 Text(label.uppercased())
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.system(size: 26, weight: .semibold))
 
                 badge()
             }
@@ -1252,10 +1260,10 @@ struct TVOSNavigation: View {
                 // Selected indicator
                 RoundedRectangle(cornerRadius: 2)
                     .fill(isSelected ? Theme.accent : Color.clear)
-                    .frame(width: 3, height: 18)
+                    .frame(width: 3, height: 22)
 
                 Text(label)
-                    .font(.subheadline)
+                    .font(.title3)
                     .lineLimit(maxLines)
                     .minimumScaleFactor(0.8)
                     .allowsTightening(true)
@@ -1271,7 +1279,7 @@ struct TVOSNavigation: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.card)
-        .padding(.leading, 16) // inset from parent rows
+        .padding(.leading, 62) // align with parent row text
         .focused($focusedItem, equals: item)
     }
 
@@ -1279,15 +1287,15 @@ struct TVOSNavigation: View {
         HStack(spacing: 10) {
             RoundedRectangle(cornerRadius: 2)
                 .fill(Color.clear)
-                .frame(width: 3, height: 18)
+                .frame(width: 3, height: 22)
             Text(label)
-                .font(.subheadline)
+                .font(.title3)
                 .foregroundStyle(Theme.textTertiary)
                 .lineLimit(1)
             Spacer()
         }
         .padding(.vertical, 6)
-        .padding(.leading, 16)
+        .padding(.leading, 62)
     }
 
     @ViewBuilder
