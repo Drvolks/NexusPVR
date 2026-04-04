@@ -4147,6 +4147,14 @@ class MPVPlayerMetalView: UIView {
         isUserInteractionEnabled = true
         autoresizingMask = [.flexibleWidth, .flexibleHeight]
         updateDrawableSize()
+
+        #if os(tvOS)
+        for direction: UISwipeGestureRecognizer.Direction in [.left, .right, .up, .down] {
+            let swipe = UISwipeGestureRecognizer(target: self, action: #selector(handleSwipe(_:)))
+            swipe.direction = direction
+            addGestureRecognizer(swipe)
+        }
+        #endif
     }
 
     override func layoutSubviews() {
@@ -4270,6 +4278,25 @@ class MPVPlayerMetalView: UIView {
         seekDirection = 0
     }
 
+    @objc private func handleSwipe(_ gesture: UISwipeGestureRecognizer) {
+        switch gesture.direction {
+        case .left:
+            if onLeftArrow?() != true {
+                onSeekBackward?()
+            }
+        case .right:
+            if onRightArrow?() != true {
+                onSeekForward?()
+            }
+        case .up:
+            onUpArrow?()
+        case .down:
+            _ = onDownArrow?()
+        default:
+            break
+        }
+    }
+
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         for press in presses {
             switch press.type {
@@ -4386,13 +4413,11 @@ class MPVPlayerPixelBufferView: UIView {
         layer.addSublayer(displayLayer)
 
         #if os(tvOS)
-        let swipeLeft = UISwipeGestureRecognizer(target: self, action: #selector(handleSwipeLeft))
-        swipeLeft.direction = .left
-        addGestureRecognizer(swipeLeft)
-
-        let swipeRight = UISwipeGestureRecognizer(target: self, action: #selector(handleSwipeRight))
-        swipeRight.direction = .right
-        addGestureRecognizer(swipeRight)
+        for direction: UISwipeGestureRecognizer.Direction in [.left, .right, .up, .down] {
+            let swipe = UISwipeGestureRecognizer(target: self, action: #selector(handleSwipe(_:)))
+            swipe.direction = direction
+            addGestureRecognizer(swipe)
+        }
         #endif
     }
 
@@ -4526,12 +4551,23 @@ class MPVPlayerPixelBufferView: UIView {
         }
     }
 
-    @objc private func handleSwipeLeft() {
-        onSeekBackward?()
-    }
-
-    @objc private func handleSwipeRight() {
-        onSeekForward?()
+    @objc private func handleSwipe(_ gesture: UISwipeGestureRecognizer) {
+        switch gesture.direction {
+        case .left:
+            if onLeftArrow?() != true {
+                onSeekBackward?()
+            }
+        case .right:
+            if onRightArrow?() != true {
+                onSeekForward?()
+            }
+        case .up:
+            onUpArrow?()
+        case .down:
+            _ = onDownArrow?()
+        default:
+            break
+        }
     }
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
@@ -4660,6 +4696,14 @@ class MPVPlayerGLView: GLKView {
         // Display link for frame sync
         displayLink = CADisplayLink(target: self, selector: #selector(updateFrame))
         displayLink?.add(to: .main, forMode: .common)
+
+        #if os(tvOS)
+        for direction: UISwipeGestureRecognizer.Direction in [.left, .right, .up, .down] {
+            let swipe = UISwipeGestureRecognizer(target: self, action: #selector(handleSwipe(_:)))
+            swipe.direction = direction
+            addGestureRecognizer(swipe)
+        }
+        #endif
     }
 
     deinit {
@@ -4812,6 +4856,25 @@ class MPVPlayerGLView: GLKView {
         seekTimer?.invalidate()
         seekTimer = nil
         seekDirection = 0
+    }
+
+    @objc private func handleSwipe(_ gesture: UISwipeGestureRecognizer) {
+        switch gesture.direction {
+        case .left:
+            if onLeftArrow?() != true {
+                onSeekBackward?()
+            }
+        case .right:
+            if onRightArrow?() != true {
+                onSeekForward?()
+            }
+        case .up:
+            onUpArrow?()
+        case .down:
+            _ = onDownArrow?()
+        default:
+            break
+        }
     }
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
