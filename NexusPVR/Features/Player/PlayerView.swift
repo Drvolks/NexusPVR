@@ -974,9 +974,13 @@ struct PlayerView: View {
     }
 
     #if os(tvOS)
+    private var hasChapters: Bool {
+        !isLiveStream && !isRecordingInProgress && duration > 0
+    }
+
     private var tvTrackCount: Int {
         switch settingsTab {
-        case .video: return 0
+        case .video: return hasChapters ? 10 : 0
         case .audio: return trackList.filter { $0.type == "audio" }.count
         case .subtitles: return trackList.filter { $0.type == "sub" }.count + 1 // +1 for "None"
         }
@@ -985,7 +989,11 @@ struct PlayerView: View {
     private func tvSelectFocusedTrack() {
         guard tvFocusedTrackIndex >= 0 else { return }
         switch settingsTab {
-        case .video: break
+        case .video:
+            if hasChapters && tvFocusedTrackIndex < 10 {
+                let chapterPosition = duration / 10.0 * Double(tvFocusedTrackIndex)
+                seekToPosition(chapterPosition)
+            }
         case .audio:
             let audioTracks = trackList.filter { $0.type == "audio" }
             if tvFocusedTrackIndex < audioTracks.count {
@@ -1122,6 +1130,44 @@ struct PlayerView: View {
             videoInfoRow("Renderer", rendererTag)
             if droppedFrames > 0 {
                 videoInfoRow("Dropped", "\(droppedFrames)")
+            }
+
+            if !isLiveStream && !isRecordingInProgress && duration > 0 {
+                Divider()
+                    .background(.gray.opacity(0.5))
+                    .padding(.vertical, Theme.spacingSM)
+
+                Text("Chapters")
+                    .font(.caption)
+                    .foregroundStyle(.gray)
+                    .padding(.bottom, 4)
+
+                ForEach(0..<10, id: \.self) { index in
+                    let chapterPosition = duration / 10.0 * Double(index)
+                    let isCurrentChapter = currentPosition >= chapterPosition &&
+                        (index == 9 || currentPosition < duration / 10.0 * Double(index + 1))
+                    Button {
+                        seekToPosition(chapterPosition)
+                    } label: {
+                        HStack {
+                            Text("Chapter \(index + 1)")
+                                .font(.subheadline)
+                                .foregroundStyle(.white)
+                            Spacer()
+                            Text(formatTime(chapterPosition))
+                                .font(.caption)
+                                .foregroundStyle(.gray)
+                        }
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, Theme.spacingSM)
+                        .background(
+                            tvOSFocused(index) ? Color.white.opacity(0.2) :
+                            isCurrentChapter ? Theme.accent.opacity(0.2) : Color.clear
+                        )
+                        .cornerRadius(Theme.cornerRadiusSM)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         }
     }
