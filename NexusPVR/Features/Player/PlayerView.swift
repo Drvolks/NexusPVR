@@ -1030,6 +1030,22 @@ struct PlayerView: View {
     }
     #endif
 
+    private var panelLabelFont: Font {
+        #if os(tvOS)
+        .headline
+        #else
+        .caption
+        #endif
+    }
+
+    private var panelTextFont: Font {
+        #if os(tvOS)
+        .headline
+        #else
+        .subheadline
+        #endif
+    }
+
     private func dismissSettingsPanel() {
         withAnimation(.easeInOut(duration: 0.25)) {
             showSettingsPanel = false
@@ -1086,9 +1102,9 @@ struct PlayerView: View {
                     VStack(spacing: 4) {
                         HStack(spacing: 4) {
                             Image(systemName: tab.icon)
-                                .font(.caption)
+                                .font(panelLabelFont)
                             Text(tab.rawValue)
-                                .font(.caption)
+                                .font(panelLabelFont)
                                 .fontWeight(.semibold)
                         }
                         .foregroundStyle(settingsTab == tab ? Theme.accent : .white.opacity(0.6))
@@ -1138,7 +1154,7 @@ struct PlayerView: View {
                     .padding(.vertical, Theme.spacingSM)
 
                 Text("Chapters")
-                    .font(.caption)
+                    .font(panelLabelFont)
                     .foregroundStyle(.gray)
                     .padding(.bottom, 4)
 
@@ -1151,11 +1167,11 @@ struct PlayerView: View {
                     } label: {
                         HStack {
                             Text("Chapter \(index + 1)")
-                                .font(.subheadline)
+                                .font(panelTextFont)
                                 .foregroundStyle(.white)
                             Spacer()
                             Text(formatTime(chapterPosition))
-                                .font(.caption)
+                                .font(panelLabelFont)
                                 .foregroundStyle(.gray)
                         }
                         .padding(.vertical, 6)
@@ -1179,15 +1195,15 @@ struct PlayerView: View {
             if let audio = audioChannelLayout {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Current Audio")
-                        .font(.caption)
+                        .font(panelLabelFont)
                         .foregroundStyle(.gray)
                     if let selectedTrack = audioTracks.first(where: { $0.isSelected }) {
                         Text(selectedTrack.audioDetail)
-                            .font(.subheadline)
+                            .font(panelTextFont)
                             .foregroundStyle(.white)
                     } else {
                         Text(audio)
-                            .font(.subheadline)
+                            .font(panelTextFont)
                             .foregroundStyle(.white)
                     }
                 }
@@ -1196,12 +1212,12 @@ struct PlayerView: View {
 
             if audioTracks.isEmpty {
                 Text("No audio tracks available")
-                    .font(.subheadline)
+                    .font(panelTextFont)
                     .foregroundStyle(.gray)
                     .padding(.vertical, Theme.spacingMD)
             } else {
                 Text("Audio Tracks")
-                    .font(.caption)
+                    .font(panelLabelFont)
                     .foregroundStyle(.gray)
                     .padding(.bottom, 4)
 
@@ -1220,7 +1236,7 @@ struct PlayerView: View {
         let noneSelected = !subtitleTracks.contains(where: { $0.isSelected })
         return VStack(alignment: .leading, spacing: 0) {
             Text("Subtitle Tracks")
-                .font(.caption)
+                .font(panelLabelFont)
                 .foregroundStyle(.gray)
                 .padding(.bottom, 4)
 
@@ -1237,7 +1253,7 @@ struct PlayerView: View {
             } label: {
                 HStack {
                     Text("None")
-                        .font(.subheadline)
+                        .font(panelTextFont)
                         .foregroundStyle(.white)
                     Spacer()
                     if noneSelected {
@@ -1255,7 +1271,7 @@ struct PlayerView: View {
 
             if subtitleTracks.isEmpty {
                 Text("No subtitle tracks available")
-                    .font(.subheadline)
+                    .font(panelTextFont)
                     .foregroundStyle(.gray)
                     .padding(.vertical, Theme.spacingMD)
                     .padding(.horizontal, Theme.spacingMD)
@@ -1289,11 +1305,11 @@ struct PlayerView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(track.displayName)
-                        .font(.subheadline)
+                        .font(panelTextFont)
                         .foregroundStyle(.white)
                     if !track.audioDetail.isEmpty {
                         Text(track.audioDetail)
-                            .font(.caption)
+                            .font(panelLabelFont)
                             .foregroundStyle(.gray)
                     }
                 }
@@ -1326,10 +1342,10 @@ struct PlayerView: View {
         #if os(tvOS)
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
-                .font(.caption)
+                .font(.body)
                 .foregroundStyle(.gray)
             Text(value)
-                .font(.body)
+                .font(.headline)
                 .fontWeight(.medium)
                 .foregroundStyle(.white)
         }
